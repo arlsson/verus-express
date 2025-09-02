@@ -1,0 +1,99 @@
+<!-- 
+  WelcomeScreen Component for Verus Express Wallet
+  Two-section layout: text content (top) and action buttons (bottom) with clean divider
+  Features minimal design, reusable HelpLink component, and centered action section
+-->
+
+<script lang="ts">
+  import { Button } from '$lib/components/ui/button';
+  import HelpSidebar from '$lib/components/common/HelpSidebar.svelte';
+  import HelpLink from '$lib/components/common/HelpLink.svelte';
+
+  function handleCreateWallet() {
+    console.info('[WALLET] Create new wallet flow initiated');
+    // TODO: Navigate to wallet creation flow
+  }
+
+  function handleImportWallet() {
+    console.info('[WALLET] Import existing wallet flow initiated');
+    // TODO: Navigate to wallet import flow
+  }
+
+  let showWalletHelp = $state(false);
+
+  const walletHelpContent = {
+    sections: [
+      {
+        text: "A wallet is like a secure digital keychain that only you control."
+      },
+      {
+        heading: "Your Private Keys",
+        text: "These prove you own your money and identity. No one else can access them."
+      },
+      {
+        heading: "Complete Control",
+        text: "Send money globally, verify identity online - all without asking permission."
+      }
+    ]
+  };
+</script>
+
+<main class="bg-background relative flex min-h-screen flex-col overflow-hidden">
+  <!-- Simple light gray background -->
+  <div class="absolute inset-0 bg-[#fbfbfb] dark:bg-[#111111]"></div>
+  
+  <!-- Text Section -->
+  <div class="relative z-10 flex flex-1 items-center justify-center p-4">
+    <div class="mx-auto max-w-xl text-left">
+      <div class="space-y-4">
+        <h1 class="text-foreground leading-14 text-5xl tracking-tight font-bold">
+          Your Digital Identity<br/>& Money, Unified
+        </h1>
+        <p class="text-muted-foreground text-lg max-w-[400px]">
+          Manage your identity, money, and online access from a place you own.
+        </p>
+        <HelpLink 
+          text="What's a wallet?"
+          onclick={() => showWalletHelp = true}
+        />
+      </div>
+    </div>
+  </div>
+
+ 
+
+  <!-- Action Section -->
+  <div class="relative z-10 flex items-center justify-center py-12 bg-muted/10 border-t border-black/10 dark:border-white/20">
+    <div class="flex flex-col items-center space-y-6 text-center">
+      <div class="flex flex-col space-y-4">
+        <Button
+          variant="default"
+          onclick={handleCreateWallet}
+          class="w-64 flex"
+        >
+          Let's Get You Started
+        </Button>
+
+        <Button
+          variant="secondary"
+          onclick={handleImportWallet}
+          class="w-64 flex"
+        >
+          I Already Have a Wallet
+        </Button>
+      </div>
+
+      <!-- Confidence Builder -->
+      <div class="text-muted-foreground text-xs">
+        Fully self-sovereign • Your keys, your coins
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Help Sidebar -->
+<HelpSidebar 
+  bind:isOpen={showWalletHelp}
+  title="What's a Wallet?"
+  content={walletHelpContent}
+/>
