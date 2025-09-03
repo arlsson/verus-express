@@ -51,9 +51,9 @@
             Your Digital Identity<br/>& Money, Unified
           </h1>
           <img 
-            src="/icons/verus-express-icons.webp" 
+            src="/icons/verus-express-icons2.webp" 
             alt="Verus Express" 
-            class="absolute -left-16 top-1/2 h-[90px] w-auto -translate-y-1/2 icon-glow"
+            class="absolute -left-20 top-[44px] h-[70px] w-auto -translate-y-1/2 icon-glow"
           />
         </div>
         <p class="text-muted-foreground text-lg max-w-[400px]">
@@ -78,7 +78,7 @@
           onclick={handleCreateWallet}
           class="w-64 flex"
         >
-          Let's Get You Started
+          Let's get you started
         </Button>
 
         <Button
@@ -86,7 +86,7 @@
           onclick={handleImportWallet}
           class="w-64 flex"
         >
-          I Already Have a Wallet
+          I already have a wallet
         </Button>
       </div>
 
