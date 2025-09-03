@@ -46,11 +46,18 @@
   <div class="relative z-10 flex flex-1 items-center justify-center p-4">
     <div class="mx-auto max-w-xl text-left">
       <div class="space-y-4">
-        <h1 class="text-foreground leading-14 text-5xl tracking-tight font-bold">
-          Your Digital Identity<br/>& Money, Unified
-        </h1>
+        <div class="relative">
+          <h1 class="text-foreground leading-14 text-5xl tracking-tight font-bold">
+            Your Digital Identity<br/>& Money, Unified
+          </h1>
+          <img 
+            src="/icons/verus-express-icons.webp" 
+            alt="Verus Express" 
+            class="absolute -left-16 top-1/2 h-[90px] w-auto -translate-y-1/2 icon-glow"
+          />
+        </div>
         <p class="text-muted-foreground text-lg max-w-[400px]">
-          Manage your identity, money, and online access from a place you own.
+          Manage your digital identity and money from one place you own. Your keys, your identity, your control.
         </p>
         <HelpLink 
           text="What's a wallet?"
@@ -97,3 +104,13 @@
   title="What's a Wallet?"
   content={walletHelpContent}
 />
+
+<style>
+  .icon-glow {
+    filter: drop-shadow(0 0 20px #A8C4FE) drop-shadow(0 0 40px #A8C4FE40) drop-shadow(0 0 60px #A8C4FE20);
+  }
+  
+  :global(.dark) .icon-glow {
+    filter: drop-shadow(0 0 20px #00329A) drop-shadow(0 0 40px #00329A40) drop-shadow(0 0 60px #00329A20);
+  }
+</style>
