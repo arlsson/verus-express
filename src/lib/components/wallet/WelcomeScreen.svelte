@@ -8,10 +8,11 @@
   import { Button } from '$lib/components/ui/button';
   import HelpSidebar from '$lib/components/common/HelpSidebar.svelte';
   import HelpLink from '$lib/components/common/HelpLink.svelte';
+  import WalletCreation from '$lib/components/flows/WalletCreation/WalletCreation.svelte';
 
   function handleCreateWallet() {
     console.info('[WALLET] Create new wallet flow initiated');
-    // TODO: Navigate to wallet creation flow
+    showCreateWallet = true;
   }
 
   function handleImportWallet() {
@@ -20,6 +21,7 @@
   }
 
   let showWalletHelp = $state(false);
+  let showCreateWallet = $state(false);
 
   const walletHelpContent = {
     sections: [
@@ -53,7 +55,7 @@
           <img 
             src="/icons/verus-express-icons2.webp" 
             alt="Verus Express" 
-            class="absolute -left-20 top-[44px] h-[70px] w-auto -translate-y-1/2 icon-glow"
+            class="absolute -left-24 top-[43px] h-[70px] w-auto -translate-y-1/2 icon-glow"
           />
         </div>
         <p class="text-muted-foreground text-lg max-w-[400px]">
@@ -75,6 +77,7 @@
       <div class="flex flex-col space-y-4">
         <Button
           variant="default"
+          size="lg"
           onclick={handleCreateWallet}
           class="w-64 flex"
         >
@@ -83,6 +86,7 @@
 
         <Button
           variant="secondary"
+          size="lg"
           onclick={handleImportWallet}
           class="w-64 flex"
         >
@@ -104,6 +108,17 @@
   title="What's a Wallet?"
   content={walletHelpContent}
 />
+
+<!-- Wallet Creation Flow -->
+{#if showCreateWallet}
+  <div class="fixed inset-0 z-50">
+    <WalletCreation 
+      onGoHome={() => {
+        showCreateWallet = false;
+      }}
+    />
+  </div>
+{/if}
 
 <style>
   .icon-glow {
