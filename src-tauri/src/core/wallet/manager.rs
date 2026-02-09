@@ -122,7 +122,7 @@ impl WalletManager {
         Ok(metadata_path.exists())
     }
     
-    fn get_metadata_path(&self, wallet_name: &str) -> Result<PathBuf, WalletError> {
+    pub fn get_metadata_path(&self, wallet_name: &str) -> Result<PathBuf, WalletError> {
         Ok(self.data_directory.join(format!("{}_metadata.json", wallet_name)))
     }
     

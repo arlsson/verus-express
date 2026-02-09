@@ -1,7 +1,7 @@
 <!-- 
   Component: StepLayout
   Purpose: Reusable 2-column layout with sticky bottom action for wallet creation steps
-  Last Updated: Created for DRY layout architecture
+  Last Updated: Fixed overflow issues with min-h-0 to ensure bottom action button is always visible
   Security: No sensitive data - pure layout component
 -->
 
@@ -15,9 +15,9 @@
   </div>
   
   <!-- Right Column + Bottom: Flexible with sticky bottom -->
-  <div class="flex-1 flex flex-col">
+  <div class="flex-1 flex flex-col min-h-0">
     <!-- Right Column: User Interactions (scrollable if needed) -->
-    <div class="flex-1 flex items-center justify-center p-6 overflow-y-auto">
+    <div class="flex-1 flex items-center justify-center p-6 overflow-y-auto min-h-0">
       <slot name="right" />
     </div>
     

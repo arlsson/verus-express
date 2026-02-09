@@ -1,7 +1,5 @@
 // 
-// Command module re-exports
+// Command module organization
 // Last Updated: Created for wallet creation flow implementation
 
 pub mod wallet;
-
-pub use wallet::*;

@@ -1,9 +1,10 @@
 // 
 // Wallet type definitions
 // Security: Contains only non-sensitive metadata, never private keys
-// Last Updated: Created for wallet creation flow implementation
+// Last Updated: Added DerivedKeys, AccountRecord, and AddressResponse types for Module 1 & 2 integration
 
 use serde::{Deserialize, Serialize};
+use zeroize::ZeroizeOnDrop;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct WalletMetadata {
@@ -42,6 +43,33 @@ pub struct GenerateMnemonicRequest {
 #[derive(Serialize, Deserialize)]
 pub struct MnemonicResult {
     pub seed_phrase: String,
+}
+
+/// Derived cryptographic keys for a wallet account
+/// Security: Implements ZeroizeOnDrop to ensure keys are cleared from memory
+#[derive(Clone, ZeroizeOnDrop)]
+pub struct DerivedKeys {
+    pub wif: String,
+    pub address: String,
+    pub pub_hex: String,
+    pub eth_private_key: String,
+    pub eth_address: String,
+}
+
+/// Account metadata record stored in filesystem
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AccountRecord {
+    pub id: String,
+    pub account_hash: String,
+    pub key_derivation_version: u8,
+    pub created_at: u64,
+}
+
+/// Response containing derived addresses
+#[derive(Serialize, Deserialize)]
+pub struct AddressResponse {
+    pub vrsc_address: String,
+    pub eth_address: String,
 }
 
 impl WalletMetadata {

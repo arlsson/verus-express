@@ -50,7 +50,7 @@
       <div class="space-y-4">
         <div class="relative">
           <h1 class="text-foreground leading-14 text-5xl tracking-tight font-bold">
-            Your Digital Identity<br/>& Money, Unified
+            Your access to <br/>the new internet.
           </h1>
           <img 
             src="/icons/verus-express-icons2.webp" 
@@ -58,9 +58,7 @@
             class="absolute -left-24 top-[43px] h-[70px] w-auto -translate-y-1/2 icon-glow"
           />
         </div>
-        <p class="text-muted-foreground text-lg max-w-[400px]">
-          Manage your digital identity and money from one place you own. Your keys, your identity, your control.
-        </p>
+        
         <HelpLink 
           text="What's a wallet?"
           onclick={() => showWalletHelp = true}

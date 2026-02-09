@@ -1,18 +1,34 @@
 <!-- 
   Component: NameStep
-  Purpose: Content-only for wallet naming step (right side content)
-  Last Updated: Fixed centering and picker functionality
-  Security: No sensitive data - only wallet customization
+  Purpose: Content-only for wallet naming step (right side content).
+  Last Updated: Explicitly typed picker items in template.
+  Security: No sensitive data - only wallet customization.
 -->
 
 <script lang="ts">
   import { Button } from '$lib/components/ui/button';
   
+  type WalletData = {
+    name: string;
+    emoji: string;
+    color: string;
+    password: string;
+  };
+
+  type ColorOption = {
+    name: string;
+    class: string;
+  };
+
   // Props
   let { 
     walletData = { name: '', emoji: '💰', color: 'blue', password: '' },
-    onUpdate = (data: object) => {},
+    onUpdate = (_data: Partial<WalletData>) => {},
     errorMessage = ''
+  }: {
+    walletData: WalletData;
+    onUpdate: (data: Partial<WalletData>) => void;
+    errorMessage: string;
   } = $props();
   
   // Local state
@@ -26,13 +42,13 @@
   const invalidCharsMessage = 'Name cannot contain special characters: / \\ : * ? " < > |';
   
   // Better emoji options (money, crypto, identity themed)
-  const emojiOptions = [
+  const emojiOptions: string[] = [
     '💰', '💎', '🪙', '🔐', '⚡', '🔥', 
     '🚀', '🌟', '🛡️', '🔑', '👑', '⭐'
   ];
   
   // Extended color palette (grouped by color family)
-  const colorOptions = [
+  const colorOptions: ColorOption[] = [
     // Blues
     { name: 'blue', class: 'bg-blue-500 dark:bg-blue-600' },
     { name: 'indigo', class: 'bg-indigo-500 dark:bg-indigo-600' },
@@ -79,12 +95,13 @@
       </div>
       
       <!-- Small Picker Controls -->
-      <div class="absolute right-24 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+      <div class="absolute right-20 top-1/2 -translate-y-1/2 flex flex-col gap-2">
         <!-- Emoji Picker -->
         <button
           onclick={() => { showEmojiPicker = !showEmojiPicker; showColorPicker = false; }}
           class="w-8 h-8 rounded-full bg-background border-2 border-border hover:border-primary hover:scale-105 transition-all flex items-center justify-center shadow-md"
           title="Change emoji"
+          aria-label="Change emoji"
         >
           <span class="text-sm" role="img">{walletData.emoji}</span>
         </button>
@@ -94,6 +111,7 @@
           onclick={() => { showColorPicker = !showColorPicker; showEmojiPicker = false; }}
           class="w-8 h-8 rounded-full bg-background border-2 border-border hover:border-primary hover:scale-105 transition-all flex items-center justify-center shadow-md"
           title="Change color"
+          aria-label="Change color"
         >
           <div class="{selectedColorClass} w-4 h-4 rounded-full"></div>
         </button>
@@ -107,7 +125,7 @@
         value={walletData.name}
         oninput={(e) => onUpdate({ name: (e.target as HTMLInputElement).value })}
         placeholder="Choose a name"
-        class="w-full text-2xl font-bold text-center bg-background/60 border-2 border-border rounded-2xl px-8 py-6 
+        class="w-full text-2xl font-bold text-center bg-background/60 border-2 border-border rounded-2xl px-4 py-4 
                focus:border-primary focus:bg-background focus:shadow-lg transition-all outline-none
                placeholder:text-muted-foreground/40 {hasInvalidChars ? 'text-destructive border-destructive' : 'text-card-foreground'}"
         autocomplete="off"
@@ -122,9 +140,9 @@
       <div class="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
         <p class="text-xs text-destructive">{invalidCharsMessage}</p>
       </div>
-    {:else if walletData.name.length > 50}
+    {:else if walletData.name.length > 16}
       <div class="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-        <p class="text-xs text-destructive">Name must be 50 characters or less</p>
+        <p class="text-xs text-destructive">Name must be 16 characters or less</p>
       </div>
     {/if}
     
@@ -139,16 +157,41 @@
 
 <!-- Fixed Overlay Pickers -->
 {#if showEmojiPicker}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/20" onclick={() => showEmojiPicker = false}>
-    <div class="bg-background border border-border rounded-2xl p-4 shadow-2xl" onclick={(e) => e.stopPropagation()}>
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
+    role="button"
+    tabindex="0"
+    aria-label="Close emoji picker"
+    onclick={(event) => {
+      if (event.currentTarget === event.target) {
+        showEmojiPicker = false;
+      }
+    }}
+    onkeydown={(event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showEmojiPicker = false;
+      }
+      if (event.key === 'Escape') {
+        showEmojiPicker = false;
+      }
+    }}
+  >
+    <div
+      class="bg-background border border-border rounded-2xl p-4 shadow-2xl"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Emoji picker"
+    >
       <div class="grid grid-cols-6 gap-3">
         {#each emojiOptions as emoji}
+          {@const emojiValue = emoji as string}
           <button
-            onclick={() => { onUpdate({ emoji }); showEmojiPicker = false; }}
+            onclick={() => { onUpdate({ emoji: emojiValue }); showEmojiPicker = false; }}
             class="w-14 h-14 rounded-xl hover:bg-muted transition-colors flex items-center justify-center
-                   {emoji === walletData.emoji ? 'bg-primary/10 ring-2 ring-primary' : ''}"
+                   {emojiValue === walletData.emoji ? 'bg-primary/10 ring-2 ring-primary' : ''}"
           >
-            <span class="text-2xl" role="img">{emoji}</span>
+            <span class="text-2xl" role="img">{emojiValue}</span>
           </button>
         {/each}
       </div>
@@ -157,17 +200,43 @@
 {/if}
 
 {#if showColorPicker}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/20" onclick={() => showColorPicker = false}>
-    <div class="bg-background border border-border rounded-2xl p-4 shadow-2xl" onclick={(e) => e.stopPropagation()}>
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
+    role="button"
+    tabindex="0"
+    aria-label="Close color picker"
+    onclick={(event) => {
+      if (event.currentTarget === event.target) {
+        showColorPicker = false;
+      }
+    }}
+    onkeydown={(event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showColorPicker = false;
+      }
+      if (event.key === 'Escape') {
+        showColorPicker = false;
+      }
+    }}
+  >
+    <div
+      class="bg-background border border-border rounded-2xl p-4 shadow-2xl"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Color picker"
+    >
       <div class="grid grid-cols-10 gap-2">
         {#each colorOptions as color}
+          {@const colorOption = color as ColorOption}
           <button
-            onclick={() => { onUpdate({ color: color.name }); showColorPicker = false; }}
+            onclick={() => { onUpdate({ color: colorOption.name }); showColorPicker = false; }}
             class="w-8 h-8 rounded-full hover:scale-110 transition-all duration-200 
-                   {color.name === walletData.color ? 'ring-2 ring-white scale-110' : ''}"
-            title={color.name}
+                   {colorOption.name === walletData.color ? 'ring-2 ring-white scale-110' : ''}"
+            title={colorOption.name}
+            aria-label={`Select ${colorOption.name} color`}
           >
-            <div class="{color.class} w-full h-full rounded-full shadow-lg"></div>
+            <div class="{colorOption.class} w-full h-full rounded-full shadow-lg"></div>
           </button>
         {/each}
       </div>

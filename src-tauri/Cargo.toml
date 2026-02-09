@@ -28,8 +28,13 @@ rand = "0.8"                # Cryptographically secure random number generation
 hex = "0.4"                 # Hex encoding/decoding
 bitcoin = "0.31"            # Bitcoin key derivation
 k256 = "0.13"               # Ethereum secp256k1 cryptography
-zeroize = "1.6"             # Secure memory clearing
+secp256k1 = { version = "0.29", features = ["rand"] }  # secp256k1 for Verus key derivation
+tiny-keccak = { version = "2.0", features = ["keccak"] }  # Keccak256 for ETH addresses
+ripemd = "0.1"              # RIPEMD160 for hash160
+bs58 = { version = "0.5", features = ["check"] }  # Base58 encoding with checksum
+zeroize = { version = "1.6", features = ["derive"] }  # Secure memory clearing
 sha2 = "0.10"               # SHA-256 hashing for passwords
 thiserror = "1.0"           # Structured error handling
 tokio = { version = "1.0", features = ["full"] }  # Async runtime
+uuid = { version = "1.11", features = ["v4", "serde"] }  # UUID generation for account IDs
 

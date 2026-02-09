@@ -1,7 +1,7 @@
 <!-- 
   Component: PasswordStep
   Purpose: Complete password step with 2-column layout + bottom action
-  Last Updated: Created for wallet encryption password
+  Last Updated: Added Verus-Mobile password strength validation with 5-bar indicator
   Security: Handles wallet password - cleared after use
 -->
 
@@ -9,6 +9,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { invoke } from '@tauri-apps/api/core';
+  import { scorePassword, getPasswordStrength, MIN_PASS_SCORE } from '$lib/utils/auth/scorePassword';
   
   // Props
   let { 
@@ -16,7 +17,8 @@
     onUpdate = (data: object) => {},
     onNext = () => {},
     seedPhrase = '',
-    onWalletCreated = () => {}
+    onWalletCreated = () => {},
+    onCanCreateChanged = (canCreate: boolean) => {} // NEW: callback for parent component
   } = $props();
   
   // Local state
@@ -24,10 +26,28 @@
   let isLoading = $state(false);
   let errorMessage = $state('');
   
-  // Password validation
+  // Password strength tracking
+  let passwordScore = $state(0);
+  let passwordStrength = $derived(getPasswordStrength(passwordScore));
+  
+  // Update score when password changes
+  $effect(() => {
+    if (!walletData.password) {
+      passwordScore = 0;
+    } else {
+      passwordScore = scorePassword(walletData.password);
+    }
+  });
+  
+  // Password validation with strength requirements
   const passwordsMatch = $derived(walletData.password === confirmPassword && walletData.password !== '');
-  const passwordValid = $derived(walletData.password.length >= 8);
+  const passwordValid = $derived(passwordScore >= MIN_PASS_SCORE);
   const canCreateWallet = $derived(passwordValid && passwordsMatch);
+  
+  // Notify parent component of validation state
+  $effect(() => {
+    onCanCreateChanged(canCreateWallet);
+  });
   
   async function createWallet() {
     if (!canCreateWallet) return;
@@ -61,7 +81,7 @@
 <!-- Content only for password step -->
 <div class="space-y-5 max-w-sm mx-auto">
   
-  <!-- Password Input -->
+  <!-- Password Input with Strength Indicator -->
   <div class="space-y-2">
     <label for="wallet-password" class="text-sm font-medium text-card-foreground">
       Choose Password
@@ -73,10 +93,56 @@
       oninput={(e) => onUpdate({ password: (e.target as HTMLInputElement).value })}
       placeholder="Enter password"
       autocomplete="new-password"
+      class={walletData.password && !passwordValid ? 'border-destructive' : ''}
     />
+    
+    <!-- Strength Bars (5 bars) -->
+    {#if walletData.password}
+      <div class="flex gap-1 h-1.5">
+        {#each Array(5) as _, i}
+          {@const isActive = i < passwordStrength.level}
+          {@const barColor = isActive 
+            ? passwordStrength.color === 'destructive' 
+              ? 'bg-destructive' 
+              : passwordStrength.color === 'blue-500'
+              ? 'bg-blue-500'
+              : passwordStrength.color === 'primary'
+              ? 'bg-primary'
+              : passwordStrength.color === 'green-500'
+              ? 'bg-green-500 dark:bg-green-600'
+              : 'bg-muted'
+            : 'bg-muted'}
+          <div 
+            class="flex-1 rounded-full transition-colors {barColor}"
+          ></div>
+        {/each}
+      </div>
+      
+      <!-- Strength Label -->
+      {@const labelColor = passwordStrength.color === 'destructive' 
+        ? 'text-destructive' 
+        : passwordStrength.color === 'blue-500'
+        ? 'text-blue-500'
+        : passwordStrength.color === 'primary'
+        ? 'text-primary'
+        : passwordStrength.color === 'green-500'
+        ? 'text-green-500 dark:text-green-400'
+        : 'text-muted-foreground'}
+      <p class="text-xs {labelColor}">
+        Strength: {passwordStrength.label}
+      </p>
+    {/if}
+    
     <p class="text-xs text-muted-foreground">
-      Minimum 8 characters
+      Minimum 7 characters with good variety (letters, numbers, symbols)
     </p>
+    
+    <!-- Password Strength Error -->
+    {#if walletData.password && !passwordValid}
+      <div class="bg-destructive/10 border border-destructive/20 rounded-lg p-2">
+        <p class="text-xs text-destructive">Please enter a stronger password</p>
+      </div>
+    {/if}
   </div>
   
   <!-- Confirm Password -->

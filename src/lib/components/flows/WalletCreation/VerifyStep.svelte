@@ -1,7 +1,7 @@
 <!-- 
   Component: VerifyStep
   Purpose: Complete verify step with 2-column layout + bottom action
-  Last Updated: Refactored from SeedVerifyStep to new layout
+  Last Updated: Added verifyWords() exposure and field completion tracking for parent component
   Security: Validates backup without storing sensitive data locally
 -->
 
@@ -14,13 +14,15 @@
     seedPhrase = '',
     verificationIndices = [],
     onVerified = () => {},
-    onSetupVerification = (indices: number[]) => {}
+    onSetupVerification = (indices: number[]) => {},
+    onFieldsChanged = (filled: boolean) => {} // NEW: callback for field completion state
   } = $props();
   
   // Local verification state
   let verificationWords = $state(['', '', '']);
   let verificationErrors = $state([false, false, false]);
   let hasAttempted = $state(false);
+  let isVerified = $state(false);
   
   // Auto-setup verification indices if not provided
   $effect(() => {
@@ -41,6 +43,12 @@
   const correctWords = $derived(verificationIndices.map(index => seedWords[index] || ''));
   const allFieldsFilled = $derived(verificationWords.every(word => word.trim() !== ''));
   
+  // Watch for field changes and notify parent
+  $effect(() => {
+    const filled = verificationWords.every(word => word.trim() !== '');
+    onFieldsChanged(filled);
+  });
+  
   function handleWordInput(index: number, event: Event) {
     const target = event.target as HTMLInputElement;
     verificationWords[index] = target.value;
@@ -51,7 +59,8 @@
     }
   }
   
-  function verifyWords() {
+  // Expose verifyWords function - returns boolean for success/failure
+  export function verifyWords(): boolean {
     hasAttempted = true;
     let hasErrors = false;
     
@@ -69,9 +78,12 @@
     
     if (!hasErrors) {
       console.info('[WALLET] Seed verification successful');
-      onVerified();
+      isVerified = true;
+      return true;
     } else {
       console.info('[WALLET] Seed verification failed');
+      isVerified = false;
+      return false;
     }
   }
 </script>

@@ -1,7 +1,8 @@
 <!-- 
-  Reusable Help Sidebar Component
-  Slides in from right with concise educational content and Discord community link
-  Uses shadcn-svelte Sheet with custom 300px width, fixed title alignment, and footer support
+  Component: HelpSidebar
+  Purpose: Shows slide-in help content with a community link.
+  Last Updated: Fixed TypeScript type error by properly typing content prop and using @const with type assertion in the each loop to help TypeScript infer the section type within snippets.
+  Security: Display-only help content, no sensitive data.
 -->
 
 <script lang="ts">
@@ -9,20 +10,26 @@
   import { Separator } from '$lib/components/ui/separator';
   import { Button } from '$lib/components/ui/button';
 
+  type HelpSection = {
+    heading?: string;
+    text: string;
+  };
+
+  interface HelpContent {
+    sections: Array<HelpSection>;
+  }
+
   let { 
     isOpen = $bindable(false),
     title,
     content 
+  }: {
+    isOpen?: boolean;
+    title: string;
+    content: HelpContent;
   } = $props();
 
-  interface HelpContent {
-    sections: Array<{
-      heading?: string;
-      text: string;
-    }>;
-  }
-
-  let { sections }: HelpContent = content;
+  const sections = $derived(content.sections);
 </script>
 
 <Sheet.Root bind:open={isOpen}>
@@ -38,15 +45,16 @@
         
         <!-- Content -->
         <div class="flex-1 space-y-4 text-left">
-          {#each sections as section}
+          {#each sections as section (section)}
+            {@const s = section as HelpSection}
             <div class="space-y-2">
-              {#if section.heading}
+              {#if s.heading}
                 <h4 class="text-card-foreground font-medium text-sm">
-                  {section.heading}
+                  {s.heading}
                 </h4>
               {/if}
               <p class="text-muted-foreground text-xs leading-relaxed">
-                {section.text}
+                {s.text}
               </p>
             </div>
           {/each}

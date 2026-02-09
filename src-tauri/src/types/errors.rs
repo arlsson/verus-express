@@ -1,7 +1,7 @@
 // 
 // Error type definitions for wallet operations
 // Security: Never expose internal implementation details to frontend
-// Last Updated: Created for wallet creation flow implementation
+// Last Updated: Added PasswordTooShort error variant for password validation
 
 use serde::Serialize;
 use thiserror::Error;
@@ -26,6 +26,9 @@ pub enum WalletError {
     
     #[error("Invalid password")]
     InvalidPassword,
+    
+    #[error("Password must be at least 7 characters")]
+    PasswordTooShort,
     
     #[error("Insufficient funds")]
     InsufficientFunds,

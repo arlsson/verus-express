@@ -1,12 +1,11 @@
 <!-- 
   Component: BackupStep
   Purpose: Complete backup step with 2-column layout + bottom action
-  Last Updated: Refactored from SeedDisplayStep to new layout
+  Last Updated: Use rune cleanup to avoid Svelte module import.
   Security: Hover-to-reveal group blur protection, clears seed on unmount
 -->
 
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { Button } from '$lib/components/ui/button';
   import BlurredSeedGrid from '$lib/components/shared/BlurredSeedGrid.svelte';
@@ -63,8 +62,10 @@
   }
   
   // Security: Clear seed phrase from memory on component destroy
-  onDestroy(() => {
-    console.info('[WALLET] Backup step destroyed, memory cleared');
+  $effect(() => {
+    return () => {
+      console.info('[WALLET] Backup step destroyed, memory cleared');
+    };
   });
 </script>
 
@@ -93,18 +94,6 @@
         />
       </div>
       
-      <!-- Security Warning -->
-      <div class="bg-destructive/10 border border-destructive/30 rounded-lg p-4 max-w-md mx-auto">
-        <div class="text-center space-y-2">
-          <h4 class="text-destructive font-semibold text-sm">⚠️ Security Warning</h4>
-          <div class="text-xs text-destructive space-y-1">
-            <p>• Write these words on paper in exact order</p>
-            <p>• Never save screenshots or digital copies</p>
-            <p>• Store your backup in a secure location</p>
-            <p>• Never share these words with anyone</p>
-          </div>
-        </div>
-      </div>
       
       <!-- Group Navigation -->
       <div class="flex gap-3 justify-center">
