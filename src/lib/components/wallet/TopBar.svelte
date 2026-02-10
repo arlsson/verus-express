@@ -1,11 +1,13 @@
-<!-- 
+<!--
   Component: TopBar
   Purpose: Top navigation bar with wallet info, settings, and lock button
-  Last Updated: Initial creation
+  Last Updated: handleLock invokes lock_wallet and navigates to /
   Security: No sensitive operations - display and navigation only
 -->
 
 <script lang="ts">
+  import { goto } from '$app/navigation';
+  import { invoke } from '@tauri-apps/api/core';
   import * as Avatar from '$lib/components/ui/avatar';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import * as Tooltip from '$lib/components/ui/tooltip';
@@ -17,6 +19,7 @@
     name: string;
     emoji: string;
     color: string;
+    network?: 'mainnet' | 'testnet';
   }
 
   let { walletData }: { walletData: WalletData } = $props();
@@ -35,9 +38,13 @@
     colorOptions.find(c => c.name === walletData.color)?.class || colorOptions[0].class
   );
 
-  function handleLock() {
-    // Placeholder for lock functionality
-    console.log('Lock wallet');
+  async function handleLock() {
+    try {
+      await invoke('lock_wallet');
+      goto('/');
+    } catch {
+      console.error('[WALLET] Lock failed');
+    }
   }
 </script>
 

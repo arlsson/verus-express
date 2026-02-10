@@ -15,24 +15,40 @@
   import Conversions from './sections/Conversions.svelte';
   import Identity from './sections/Identity.svelte';
   import AddressBook from './sections/AddressBook.svelte';
+  import { walletErrorsStore, dismissWalletError } from '$lib/stores/walletErrors.js';
 
   interface WalletData {
     name: string;
     emoji: string;
     color: string;
+    network?: 'mainnet' | 'testnet';
   }
 
   let { walletData }: { walletData: WalletData } = $props();
   let activeSection = $state('overview');
+  const walletErrors = $derived($walletErrorsStore);
+  const latestError = $derived(walletErrors.latest);
 </script>
 
 <Sidebar.Provider>
   <AppSidebar bind:activeSection />
   <Sidebar.Inset>
     <TopBar {walletData} />
+    {#if latestError}
+      <div class="mx-6 mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <div class="flex items-start justify-between gap-3">
+          <p class="break-all">{latestError}</p>
+          <button class="shrink-0 text-xs underline" onclick={dismissWalletError}>Dismiss</button>
+        </div>
+      </div>
+    {/if}
     <main class="flex-1 overflow-auto">
       {#if activeSection === 'overview'}
-        <Overview {walletData} />
+        <Overview
+          {walletData}
+          onNavigateToSend={() => (activeSection = 'send')}
+          onNavigateToReceive={() => (activeSection = 'receive')}
+        />
       {:else if activeSection === 'send'}
         <Send />
       {:else if activeSection === 'receive'}

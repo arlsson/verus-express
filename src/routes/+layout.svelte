@@ -7,12 +7,14 @@
 <script lang="ts">
   import '../app.css';
   import { ModeWatcher } from 'mode-watcher';
+  import { Toaster } from 'svelte-sonner';
   
   const { children } = $props();
 </script>
 
 <!-- Theme detection and system preference monitoring -->
 <ModeWatcher />
+<Toaster theme="system" richColors position="bottom-right" />
 
 <!-- Render page content -->
 {@render children?.()}

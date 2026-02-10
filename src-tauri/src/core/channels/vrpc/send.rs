@@ -1,0 +1,182 @@
+//
+// Module 5: VRPC send — load preflight record, sign with session WIF, broadcast. No sensitive data in logs.
+
+use std::io::Cursor;
+use std::sync::Arc;
+
+use bitcoin::consensus::{Decodable, Encodable};
+use bitcoin::hashes::Hash;
+use bitcoin::secp256k1::Secp256k1;
+use bitcoin::ScriptBuf;
+use serde_json::Value;
+use tokio::sync::Mutex;
+
+use crate::core::auth::SessionManager;
+use crate::core::channels::store::PreflightStore;
+use crate::core::channels::vrpc::preflight::VrpcPreflightPayload;
+use crate::core::channels::vrpc::provider::VrpcProviderPool;
+use crate::core::crypto::wif_encoding::{decode_wif, Network};
+use crate::types::transaction::SendResult;
+use crate::types::wallet::WalletNetwork;
+use crate::types::WalletError;
+
+const SIGHASH_ALL: u32 = 1u32;
+
+/// Sign and broadcast a VRPC preflight. Uses WIF from session; never logs hex or keys.
+pub async fn send(
+    preflight_id: &str,
+    preflight_store: &PreflightStore,
+    session_manager: &Arc<Mutex<SessionManager>>,
+    provider_pool: &VrpcProviderPool,
+) -> Result<SendResult, WalletError> {
+    let record = preflight_store
+        .get(preflight_id)
+        .ok_or(WalletError::InvalidPreflight)?;
+
+    let session = session_manager.lock().await;
+    let active_id = session
+        .active_account_id()
+        .ok_or(WalletError::WalletLocked)?;
+    if active_id.as_str() != record.account_id {
+        return Err(WalletError::InvalidPreflight);
+    }
+    let wif = session.get_wif_for_signing()?;
+    let wallet_network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+    drop(session);
+
+    let payload: VrpcPreflightPayload = serde_json::from_value(record.payload.clone())
+        .map_err(|_| WalletError::InvalidPreflight)?;
+
+    let wif_network = match wallet_network {
+        WalletNetwork::Mainnet => Network::Mainnet,
+        WalletNetwork::Testnet => Network::Testnet,
+    };
+    let priv_key = decode_wif(&wif, wif_network)?;
+    let secp = Secp256k1::new();
+    let secret_key = bitcoin::secp256k1::SecretKey::from_slice(&priv_key)
+        .map_err(|_| WalletError::OperationFailed)?;
+    let public_key = bitcoin::secp256k1::PublicKey::from_secret_key(&secp, &secret_key);
+
+    let script_pubkey = p2pkh_script(&public_key.serialize());
+
+    let tx_bytes = hex::decode(payload.hex.trim_start_matches("0x"))
+        .or_else(|_| hex::decode(&payload.hex))
+        .map_err(|_| WalletError::OperationFailed)?;
+
+    let mut cursor = Cursor::new(&tx_bytes[..]);
+    let mut tx: bitcoin::Transaction = bitcoin::Transaction::consensus_decode(&mut cursor)
+        .map_err(|_| WalletError::OperationFailed)?;
+
+    for i in 0..tx.input.len() {
+        let cache = bitcoin::sighash::SighashCache::new(&tx);
+        let sighash = cache
+            .legacy_signature_hash(i, &script_pubkey, SIGHASH_ALL)
+            .map_err(|_| WalletError::OperationFailed)?;
+        let msg = bitcoin::secp256k1::Message::from_digest(sighash.to_byte_array());
+        let sig = secp.sign_ecdsa(&msg, &secret_key);
+        let sig_der = sig.serialize_der();
+        let mut sig_bytes = sig_der.to_vec();
+        sig_bytes.push(SIGHASH_ALL as u8);
+
+        let mut script_sig = ScriptBuf::new();
+        push_slice_from_vec(&mut script_sig, &sig_bytes)?;
+        script_sig.push_slice(&public_key.serialize());
+
+        if let Some(txin) = tx.input.get_mut(i) {
+            txin.script_sig = script_sig;
+        }
+    }
+
+    let mut signed = Vec::new();
+    tx.consensus_encode(&mut signed)
+        .map_err(|_| WalletError::OperationFailed)?;
+    let signed_hex = hex::encode(&signed);
+
+    let provider = provider_pool.for_network(wallet_network);
+    let txid_value = provider.sendrawtransaction(&signed_hex).await?;
+    let txid = parse_txid_from_result(&txid_value).unwrap_or_default();
+    if txid.is_empty() {
+        return Err(WalletError::OperationFailed);
+    }
+
+    Ok(SendResult {
+        txid,
+        fee: payload.fee,
+        value: payload.value,
+        to_address: payload.to_address,
+        from_address: payload.from_address,
+    })
+}
+
+/// Push bytes from a slice onto a script. Uses fixed-size array for PushBytesBuf (bitcoin crate requires &[u8; N]).
+fn push_slice_from_vec(script: &mut ScriptBuf, bytes: &[u8]) -> Result<(), WalletError> {
+    if bytes.is_empty() || bytes.len() > 80 {
+        return Err(WalletError::OperationFailed);
+    }
+    let len = bytes.len();
+    let push = match len {
+        68 => {
+            let mut a = [0u8; 68];
+            a.copy_from_slice(bytes);
+            bitcoin::script::PushBytesBuf::from(&a)
+        }
+        69 => {
+            let mut a = [0u8; 69];
+            a.copy_from_slice(bytes);
+            bitcoin::script::PushBytesBuf::from(&a)
+        }
+        70 => {
+            let mut a = [0u8; 70];
+            a.copy_from_slice(bytes);
+            bitcoin::script::PushBytesBuf::from(&a)
+        }
+        71 => {
+            let mut a = [0u8; 71];
+            a.copy_from_slice(bytes);
+            bitcoin::script::PushBytesBuf::from(&a)
+        }
+        72 => {
+            let mut a = [0u8; 72];
+            a.copy_from_slice(bytes);
+            bitcoin::script::PushBytesBuf::from(&a)
+        }
+        73 => {
+            let mut a = [0u8; 73];
+            a.copy_from_slice(bytes);
+            bitcoin::script::PushBytesBuf::from(&a)
+        }
+        _ => return Err(WalletError::OperationFailed),
+    };
+    script.push_slice(&push);
+    Ok(())
+}
+
+fn parse_txid_from_result(v: &Value) -> Option<String> {
+    if let Some(s) = v.as_str() {
+        return Some(s.to_string());
+    }
+    v.get("txid")?.as_str().map(String::from)
+}
+
+fn p2pkh_script(pubkey: &[u8]) -> ScriptBuf {
+    use bitcoin::blockdata::opcodes::all::*;
+    use bitcoin::blockdata::script::Builder;
+    let hash = hash160(pubkey);
+    Builder::new()
+        .push_opcode(OP_DUP)
+        .push_opcode(OP_HASH160)
+        .push_slice(&hash)
+        .push_opcode(OP_EQUALVERIFY)
+        .push_opcode(OP_CHECKSIG)
+        .into_script()
+}
+
+fn hash160(data: &[u8]) -> [u8; 20] {
+    use ripemd::Digest;
+    use sha2::Sha256;
+    let sha = Sha256::digest(data);
+    let ripemd = ripemd::Ripemd160::digest(&sha);
+    let mut out = [0u8; 20];
+    out.copy_from_slice(&ripemd[..]);
+    out
+}

@@ -1,10 +1,35 @@
-// 
+//
 // Wallet type definitions
 // Security: Contains only non-sensitive metadata, never private keys
-// Last Updated: Added DerivedKeys, AccountRecord, and AddressResponse types for Module 1 & 2 integration
+// Last Updated: Added WalletListItem and ActiveWalletResponse for list/unlock and dashboard
 
 use serde::{Deserialize, Serialize};
 use zeroize::ZeroizeOnDrop;
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum WalletNetwork {
+    Mainnet,
+    Testnet,
+}
+
+impl Default for WalletNetwork {
+    fn default() -> Self {
+        WalletNetwork::Mainnet
+    }
+}
+
+fn default_wallet_network() -> WalletNetwork {
+    WalletNetwork::Mainnet
+}
+
+fn default_wallet_emoji() -> String {
+    "💰".to_string()
+}
+
+fn default_wallet_color() -> String {
+    "blue".to_string()
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct WalletMetadata {
@@ -26,6 +51,12 @@ pub struct KeyPair {
 pub struct CreateWalletRequest {
     pub wallet_name: String,
     pub seed_phrase: String,
+    #[serde(default = "default_wallet_network")]
+    pub network: WalletNetwork,
+    #[serde(default = "default_wallet_emoji")]
+    pub emoji: String,
+    #[serde(default = "default_wallet_color")]
+    pub color: String,
     // Note: No password field - will be handled separately for security
 }
 
@@ -54,6 +85,7 @@ pub struct DerivedKeys {
     pub pub_hex: String,
     pub eth_private_key: String,
     pub eth_address: String,
+    pub btc_address: String,
 }
 
 /// Account metadata record stored in filesystem
@@ -63,6 +95,12 @@ pub struct AccountRecord {
     pub account_hash: String,
     pub key_derivation_version: u8,
     pub created_at: u64,
+    #[serde(default = "default_wallet_network")]
+    pub network: WalletNetwork,
+    #[serde(default = "default_wallet_emoji")]
+    pub emoji: String,
+    #[serde(default = "default_wallet_color")]
+    pub color: String,
 }
 
 /// Response containing derived addresses
@@ -70,6 +108,26 @@ pub struct AccountRecord {
 pub struct AddressResponse {
     pub vrsc_address: String,
     pub eth_address: String,
+    pub btc_address: String,
+}
+
+/// List item for wallet selection (unlock screen)
+#[derive(Serialize, Deserialize, Clone)]
+pub struct WalletListItem {
+    pub account_id: String,
+    pub wallet_name: String,
+    pub network: WalletNetwork,
+    pub emoji: String,
+    pub color: String,
+}
+
+/// Active wallet display info for dashboard
+#[derive(Serialize, Deserialize)]
+pub struct ActiveWalletResponse {
+    pub wallet_name: String,
+    pub network: WalletNetwork,
+    pub emoji: String,
+    pub color: String,
 }
 
 impl WalletMetadata {
@@ -81,7 +139,11 @@ impl WalletMetadata {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
-            coin_types: vec!["verus".to_string()],
+            coin_types: vec![
+                "verus".to_string(),
+                "ethereum".to_string(),
+                "bitcoin".to_string(),
+            ],
             version: 1,
         }
     }
@@ -94,18 +156,21 @@ impl CreateWalletRequest {
         if name.is_empty() || name.len() > 50 {
             return Err(crate::types::errors::WalletError::InvalidWalletName);
         }
-        
+
         // Check for filesystem-unsafe characters
-        if name.chars().any(|c| matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')) {
+        if name
+            .chars()
+            .any(|c| matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        {
             return Err(crate::types::errors::WalletError::InvalidWalletName);
         }
-        
+
         // Validate seed phrase format (basic check)
         let words: Vec<&str> = self.seed_phrase.split_whitespace().collect();
         if words.len() != 24 {
             return Err(crate::types::errors::WalletError::InvalidSeedPhrase);
         }
-        
+
         Ok(())
     }
 }

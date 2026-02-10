@@ -10,7 +10,7 @@
   
   // Props
   let { 
-    walletData = { name: '', emoji: '💰', color: 'blue', password: '' },
+    walletData = { name: '', emoji: '💰', color: 'blue', password: '', network: 'mainnet' },
     onFinish = () => {}
   } = $props();
   
@@ -47,6 +47,10 @@
         {walletData.name}
       </span>
     </div>
+  </div>
+
+  <div class="text-xs text-muted-foreground">
+    Network: {walletData.network === 'testnet' ? 'Testnet' : 'Mainnet'}
   </div>
   
   <!-- Success Details -->

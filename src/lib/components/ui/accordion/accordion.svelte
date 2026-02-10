@@ -1,0 +1,20 @@
+<!--
+  Root wrapper for bits-ui Accordion. Adds optional class; type and value passed through.
+-->
+<script lang="ts">
+	import { Accordion as AccordionPrimitive } from 'bits-ui';
+	import { cn } from '$lib/utils.js';
+
+	let {
+		ref = $bindable(null),
+		class: className,
+		...restProps
+	}: AccordionPrimitive.RootProps = $props();
+</script>
+
+<AccordionPrimitive.Root
+	bind:ref
+	data-slot="accordion-root"
+	class={cn('w-full space-y-2', className)}
+	{...restProps}
+/>

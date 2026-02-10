@@ -12,7 +12,7 @@
   
   // Props
   let { 
-    walletData = { name: '', emoji: '💰', color: 'blue', password: '' },
+    walletData = { name: '', emoji: '💰', color: 'blue', password: '', network: 'mainnet' },
     seedPhrase = '',
     onSeedGenerated = (seed: string) => {},
     onNext = () => {}
@@ -83,6 +83,9 @@
       <div class="text-center space-y-2">
         <h3 class="text-card-foreground font-semibold">{groupLabel}</h3>
         <p class="text-muted-foreground text-sm">Wallet: {walletData.name}</p>
+        <p class="text-muted-foreground text-xs">
+          Network: {walletData.network === 'testnet' ? 'Testnet' : 'Mainnet'}
+        </p>
       </div>
       
       <!-- Seed Words Grid with Group Blur Protection -->

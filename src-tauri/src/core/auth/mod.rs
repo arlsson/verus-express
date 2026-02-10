@@ -1,4 +1,4 @@
-// 
+//
 // Authentication and session management module
 // Security: Handles secure seed storage and session lifecycle with zeroization
 // Last Updated: Created for Module 1 integration

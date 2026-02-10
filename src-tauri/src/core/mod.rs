@@ -1,10 +1,16 @@
-// 
+//
 // Core business logic modules
-// Last Updated: Added auth and crypto modules for Module 1 & 2 integration
+// Last Updated: Module 7 update engine; polling and Tauri events for balances/transactions
 
-pub mod wallet;
 pub mod auth;
+pub mod channels;
+pub mod coins;
 pub mod crypto;
+pub mod updates;
+pub mod wallet;
 
-pub use wallet::WalletManager;
 pub use auth::{SessionManager, StrongholdStore};
+pub use channels::{route_preflight, route_send, PreflightStore, WalletChannel};
+pub use coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
+pub use updates::UpdateEngine;
+pub use wallet::WalletManager;

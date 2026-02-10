@@ -13,6 +13,7 @@
     emoji: string;
     color: string;
     password: string;
+    network: 'mainnet' | 'testnet';
   };
 
   type ColorOption = {
@@ -22,7 +23,7 @@
 
   // Props
   let { 
-    walletData = { name: '', emoji: '💰', color: 'blue', password: '' },
+    walletData = { name: '', emoji: '💰', color: 'blue', password: '', network: 'mainnet' },
     onUpdate = (_data: Partial<WalletData>) => {},
     errorMessage = ''
   }: {
@@ -134,7 +135,41 @@
         autocapitalize="off"
       />
     </div>
-    
+
+    <!-- Network Selection -->
+    <div class="space-y-3">
+      <p class="text-sm font-medium text-card-foreground">Network</p>
+      <div class="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onclick={() => onUpdate({ network: 'mainnet' })}
+          class="rounded-xl border px-4 py-3 text-left transition-all
+            {walletData.network === 'mainnet'
+              ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+              : 'border-border bg-background hover:border-primary/40'}"
+        >
+          <p class="text-sm font-semibold text-card-foreground">Mainnet</p>
+          <p class="text-xs text-muted-foreground mt-1">Real assets and live network</p>
+        </button>
+        <button
+          type="button"
+          onclick={() => onUpdate({ network: 'testnet' })}
+          class="rounded-xl border px-4 py-3 text-left transition-all
+            {walletData.network === 'testnet'
+              ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+              : 'border-border bg-background hover:border-primary/40'}"
+        >
+          <p class="text-sm font-semibold text-card-foreground">Testnet</p>
+          <p class="text-xs text-muted-foreground mt-1">Testing only, no real value</p>
+        </button>
+      </div>
+      {#if walletData.network === 'testnet'}
+        <p class="text-xs text-amber-700 dark:text-amber-400">
+          Testnet funds are only for testing and experimentation.
+        </p>
+      {/if}
+    </div>
+
     <!-- Validation Messages -->
     {#if hasInvalidChars}
       <div class="bg-destructive/10 border border-destructive/20 rounded-lg p-3">

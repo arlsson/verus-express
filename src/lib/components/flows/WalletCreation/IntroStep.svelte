@@ -17,7 +17,7 @@
         <div class="w-5 h-5 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
           1
         </div>
-        <p class="text-sm text-card-foreground">Choose your wallet name</p>
+        <p class="text-sm text-card-foreground">Choose your wallet name and network</p>
       </div>
       
       <div class="flex items-start gap-3">

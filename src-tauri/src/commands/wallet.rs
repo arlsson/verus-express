@@ -1,19 +1,27 @@
-// 
+//
 // Tauri command handlers for wallet operations
 // Security: Thin wrappers that validate inputs and delegate to core logic
-// Last Updated: Added password minimum length validation (7 characters) matching Verus-Mobile
+// Last Updated: Module 10 — unlock/session and update-engine start are decoupled
 
-use tauri::{State, AppHandle};
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
+use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 use uuid::Uuid;
-use sha2::{Sha256, Digest};
-use crate::core::wallet::WalletManager;
+
 use crate::core::auth::SessionManager;
-use crate::types::{WalletError, CreateWalletRequest, CreateWalletResult, GenerateMnemonicRequest, MnemonicResult, AccountRecord, AddressResponse};
+use crate::core::channels::btc::BtcProviderPool;
+use crate::core::channels::vrpc::VrpcProviderPool;
+use crate::core::coins::CoinRegistry;
+use crate::core::wallet::WalletManager;
+use crate::core::{PreflightStore, UpdateEngine};
+use crate::types::{
+    AccountRecord, ActiveWalletResponse, AddressResponse, CreateWalletRequest, CreateWalletResult,
+    GenerateMnemonicRequest, MnemonicResult, WalletError, WalletListItem,
+};
 
 /// Generate a new BIP39 mnemonic phrase
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn generate_mnemonic(
     request: GenerateMnemonicRequest,
     wallet_manager: State<'_, WalletManager>,
@@ -22,19 +30,22 @@ pub async fn generate_mnemonic(
     if request.word_count != 24 {
         return Err(WalletError::InvalidSeedPhrase);
     }
-    
-    println!("[WALLET] Generate mnemonic requested: {} words", request.word_count);
-    
+
+    println!(
+        "[WALLET] Generate mnemonic requested: {} words",
+        request.word_count
+    );
+
     // Delegate to core logic
     let seed_phrase = wallet_manager.generate_mnemonic(request.word_count).await?;
-    
+
     println!("[WALLET] Mnemonic generation completed");
-    
+
     Ok(MnemonicResult { seed_phrase })
 }
 
 /// Validate a BIP39 mnemonic phrase
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn validate_mnemonic(
     seed_phrase: String,
     wallet_manager: State<'_, WalletManager>,
@@ -43,19 +54,19 @@ pub async fn validate_mnemonic(
     if seed_phrase.trim().is_empty() {
         return Ok(false);
     }
-    
+
     println!("[WALLET] Mnemonic validation requested");
-    
+
     // Delegate to core logic
     let is_valid = wallet_manager.validate_mnemonic(&seed_phrase).await?;
-    
+
     println!("[WALLET] Mnemonic validation completed: {}", is_valid);
-    
+
     Ok(is_valid)
 }
 
 /// Create a new wallet with Stronghold encryption
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn create_wallet(
     request: CreateWalletRequest,
     password: String,
@@ -65,28 +76,35 @@ pub async fn create_wallet(
 ) -> Result<CreateWalletResult, WalletError> {
     // Validate inputs
     request.validate()?;
-    
+
     if password.trim().is_empty() {
         return Err(WalletError::InvalidPassword);
     }
-    
+
     if password.len() < 7 {
         return Err(WalletError::PasswordTooShort);
     }
-    
+
     println!("[WALLET] Create wallet requested: {}", request.wallet_name);
-    
+
+    if wallet_manager.wallet_exists(&request.wallet_name).await? {
+        return Err(WalletError::WalletExists);
+    }
+
     // Generate account ID
     let account_id = Uuid::new_v4().to_string();
-    
+
     // Store seed in Stronghold
     let session = session_manager.lock().await;
-    session.stronghold_store().store_seed(&account_id, &request.seed_phrase, &password, &app_handle).await?;
+    session
+        .stronghold_store()
+        .store_seed(&account_id, &request.seed_phrase, &password, &app_handle)
+        .await?;
     drop(session);
-    
+
     // Create account hash
     let account_hash = hash_account_id(&account_id);
-    
+
     // Create metadata record
     let account = AccountRecord {
         id: account_id.clone(),
@@ -96,76 +114,150 @@ pub async fn create_wallet(
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs(),
+        network: request.network,
+        emoji: request.emoji,
+        color: request.color,
     };
-    
+
     // Save metadata to file (using WalletManager's existing method)
     let metadata_path = wallet_manager.get_metadata_path(&request.wallet_name)?;
     let metadata_json = serde_json::to_string_pretty(&account)?;
     std::fs::write(metadata_path, metadata_json).map_err(|_| WalletError::OperationFailed)?;
-    
+
     println!("[WALLET] Wallet created successfully: {}", account_id);
-    
+
     Ok(CreateWalletResult {
         wallet_id: account_id,
         success: true,
     })
 }
 
-/// Unlock wallet with password
-#[tauri::command]
+/// Unlock wallet with password.
+#[tauri::command(rename_all = "snake_case")]
 pub async fn unlock_wallet(
     account_id: String,
     password: String,
+    wallet_manager: State<'_, WalletManager>,
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     app_handle: AppHandle,
 ) -> Result<(), WalletError> {
     println!("[WALLET] Unlock wallet requested");
-    
+
+    let wallet = wallet_manager
+        .get_wallet_by_account_id(&account_id)
+        .await?
+        .ok_or(WalletError::OperationFailed)?;
+
     let mut session = session_manager.lock().await;
-    session.unlock(account_id, password, &app_handle).await?;
-    
+    if let Err(err) = session
+        .unlock(account_id, password, wallet.network, &app_handle)
+        .await
+    {
+        println!("[WALLET] Unlock failed: {:?}", err);
+        return Err(err);
+    }
+    drop(session);
+
     println!("[WALLET] Wallet unlocked successfully");
     Ok(())
 }
 
-/// Lock wallet and zeroize keys
-#[tauri::command]
+/// Start update engine polling after frontend event listeners are registered.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn start_update_engine(
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+    coin_registry: State<'_, Arc<CoinRegistry>>,
+    vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
+    btc_provider_pool: State<'_, Arc<BtcProviderPool>>,
+    update_engine: State<'_, Arc<UpdateEngine>>,
+    app_handle: AppHandle,
+) -> Result<(), WalletError> {
+    let session = session_manager.lock().await;
+    if !session.is_unlocked() {
+        return Err(WalletError::WalletLocked);
+    }
+    drop(session);
+
+    update_engine
+        .start(
+            app_handle,
+            session_manager.inner().clone(),
+            coin_registry.inner().clone(),
+            vrpc_provider_pool.inner().clone(),
+            btc_provider_pool.inner().clone(),
+        )
+        .await;
+
+    Ok(())
+}
+
+/// Lock wallet and zeroize keys. Stops update engine, clears preflight store.
+#[tauri::command(rename_all = "snake_case")]
 pub async fn lock_wallet(
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+    preflight_store: State<'_, PreflightStore>,
+    update_engine: State<'_, Arc<UpdateEngine>>,
 ) -> Result<(), WalletError> {
     println!("[WALLET] Lock wallet requested");
-    
+
+    update_engine.stop().await;
+
     let mut session = session_manager.lock().await;
     session.lock();
-    
+    preflight_store.clear();
+
     println!("[WALLET] Wallet locked successfully");
     Ok(())
 }
 
 /// Get derived addresses for active account
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_addresses(
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
 ) -> Result<AddressResponse, WalletError> {
     println!("[WALLET] Get addresses requested");
-    
+
     let session = session_manager.lock().await;
-    let (vrsc_address, eth_address) = session.get_addresses()?;
-    
+    let (vrsc_address, eth_address, btc_address) = session.get_addresses()?;
+
     println!("[WALLET] Addresses retrieved");
     Ok(AddressResponse {
         vrsc_address,
         eth_address,
+        btc_address,
     })
 }
 
 /// Check if wallet is unlocked
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn is_unlocked(
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
 ) -> Result<bool, WalletError> {
     let session = session_manager.lock().await;
     Ok(session.is_unlocked())
+}
+
+/// Get active wallet display info for dashboard (when unlocked)
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_active_wallet(
+    wallet_manager: State<'_, WalletManager>,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<Option<ActiveWalletResponse>, WalletError> {
+    let session = session_manager.lock().await;
+    let account_id = match session.active_account_id() {
+        Some(id) => id.clone(),
+        None => return Ok(None),
+    };
+    drop(session);
+
+    let wallet_name = wallet_manager.get_wallet_by_account_id(&account_id).await?;
+
+    Ok(wallet_name.map(|w| ActiveWalletResponse {
+        wallet_name: w.wallet_name,
+        network: w.network,
+        emoji: w.emoji,
+        color: w.color,
+    }))
 }
 
 /// Hash account ID for metadata record
@@ -175,16 +267,16 @@ fn hash_account_id(account_id: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
-/// List available wallets
-#[tauri::command]
+/// List available wallets (account_id + wallet_name for unlock flow)
+#[tauri::command(rename_all = "snake_case")]
 pub async fn list_wallets(
     wallet_manager: State<'_, WalletManager>,
-) -> Result<Vec<String>, WalletError> {
+) -> Result<Vec<WalletListItem>, WalletError> {
     println!("[WALLET] List wallets requested");
-    
+
     let wallets = wallet_manager.list_wallets().await?;
-    
+
     println!("[WALLET] Found {} wallets", wallets.len());
-    
+
     Ok(wallets)
 }

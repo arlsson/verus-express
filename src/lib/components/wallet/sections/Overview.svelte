@@ -1,8 +1,8 @@
-<!-- 
+<!--
   Component: Overview
-  Purpose: Wallet overview section with balance card, quick actions, and transaction history
-  Last Updated: Initial creation
-  Security: No sensitive operations - display only (balance is placeholder)
+  Purpose: Wallet overview with balance card (from store), quick actions, and transaction history
+  Last Updated: Module 9 — balanceStore, transactionStore, coinsStore; navigate to Send/Receive
+  Security: No sensitive operations - display only
 -->
 
 <script lang="ts">
@@ -12,16 +12,28 @@
   import SendIcon from '@lucide/svelte/icons/send';
   import DownloadIcon from '@lucide/svelte/icons/download';
   import ArrowDownUpIcon from '@lucide/svelte/icons/arrow-down-up';
+  import { balanceStore } from '$lib/stores/balances.js';
+  import { transactionStore, getTransactions } from '$lib/stores/transactions.js';
+  import { coinsStore } from '$lib/stores/coins.js';
+  import { walletChannelsStore } from '$lib/stores/walletChannels.js';
 
   interface WalletData {
     name: string;
     emoji: string;
     color: string;
+    network?: 'mainnet' | 'testnet';
   }
 
-  let { walletData }: { walletData: WalletData } = $props();
+  let {
+    walletData,
+    onNavigateToSend = () => {},
+    onNavigateToReceive = () => {}
+  }: {
+    walletData: WalletData;
+    onNavigateToSend?: () => void;
+    onNavigateToReceive?: () => void;
+  } = $props();
 
-  // Color class lookup (matching CompleteStep pattern)
   const colorOptions = [
     { name: 'blue', class: 'bg-blue-100 dark:bg-blue-900' },
     { name: 'green', class: 'bg-green-100 dark:bg-green-900' },
@@ -32,18 +44,35 @@
   ];
 
   const colorClass = $derived(
-    colorOptions.find(c => c.name === walletData.color)?.class || colorOptions[0].class
+    colorOptions.find((c) => c.name === walletData.color)?.class ?? colorOptions[0].class
   );
 
-  function handleSend() {
-    // Placeholder for send functionality
-    console.log('Send clicked');
-  }
-
-  function handleReceive() {
-    // Placeholder for receive functionality
-    console.log('Receive clicked');
-  }
+  const coins = $derived($coinsStore);
+  const walletChannels = $derived($walletChannelsStore);
+  const primaryChannel = $derived(walletChannels.primaryChannelId);
+  const hasPrimaryChannel = $derived(Boolean(primaryChannel));
+  const balances = $derived($balanceStore);
+  const transactions = $derived($transactionStore);
+  const balance = $derived(
+    primaryChannel ? balances[primaryChannel] : null
+  );
+  const hasBalanceSnapshot = $derived(
+    primaryChannel ? Object.prototype.hasOwnProperty.call(balances, primaryChannel) : false
+  );
+  const totalBalanceText = $derived(hasBalanceSnapshot ? balance?.total ?? '0.00' : '—');
+  const availableBalanceText = $derived(hasBalanceSnapshot ? balance?.confirmed ?? '0.00' : '—');
+  const pendingBalanceText = $derived(hasBalanceSnapshot ? balance?.pending ?? '0.00' : '—');
+  const primaryCoinId = $derived(
+    primaryChannel
+      ? Object.entries(walletChannels.byCoinId).find(([, channel]) => channel === primaryChannel)?.[0] ?? null
+      : null
+  );
+  const primaryTicker = $derived(
+    primaryCoinId ? coins.find((c) => c.id === primaryCoinId)?.displayTicker ?? 'VRSC' : 'VRSC'
+  );
+  const recentTxs = $derived(
+    primaryChannel ? getTransactions(primaryChannel, transactions) : []
+  );
 </script>
 
 <div class="flex flex-col gap-6 p-6">
@@ -63,24 +92,40 @@
       </Card.Title>
     </Card.Header>
     <Card.Content>
-      <div class="space-y-2">
-        <div class="text-4xl font-bold">0.00 VRSC</div>
-        <div class="flex gap-4 text-sm text-muted-foreground">
-          <span>Available: <span class="text-foreground font-medium">0.00 VRSC</span></span>
-          <span>•</span>
-          <span>Pending: <span class="text-foreground font-medium">0.00 VRSC</span></span>
+      {#if hasPrimaryChannel}
+        <div class="space-y-2">
+          <div class="text-4xl font-bold">
+            {totalBalanceText} {primaryTicker}
+          </div>
+          <div class="flex gap-4 text-sm text-muted-foreground">
+            <span
+              >Available: <span class="text-foreground font-medium"
+                >{availableBalanceText} {primaryTicker}</span
+              ></span
+            >
+            <span>•</span>
+            <span
+              >Pending: <span class="text-foreground font-medium"
+                >{pendingBalanceText} {primaryTicker}</span
+              ></span
+            >
+          </div>
         </div>
-      </div>
+      {:else}
+        <p class="text-sm text-muted-foreground">
+          No active channel resolved yet. Reopen the wallet to refresh channels.
+        </p>
+      {/if}
     </Card.Content>
   </Card.Root>
 
   <!-- Quick Actions -->
   <div class="flex gap-4">
-    <Button class="flex-1" size="lg" onclick={handleSend}>
+    <Button class="flex-1" size="lg" onclick={onNavigateToSend}>
       <SendIcon class="h-4 w-4 mr-2" />
       Send
     </Button>
-    <Button variant="outline" class="flex-1" size="lg" onclick={handleReceive}>
+    <Button variant="outline" class="flex-1" size="lg" onclick={onNavigateToReceive}>
       <DownloadIcon class="h-4 w-4 mr-2" />
       Receive
     </Button>
@@ -93,15 +138,35 @@
       <Card.Description>Your latest wallet activity</Card.Description>
     </Card.Header>
     <Card.Content>
-      <div class="flex flex-col items-center justify-center py-12 text-center">
-        <div class="rounded-full bg-muted p-3 mb-4">
-          <ArrowDownUpIcon class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p class="text-muted-foreground text-sm">No transactions yet</p>
-        <p class="text-xs text-muted-foreground mt-1">
-          Transactions will appear here once you send or receive VRSC
+      {#if !hasPrimaryChannel}
+        <p class="text-muted-foreground text-sm">
+          No active channel available yet.
         </p>
-      </div>
+      {:else if recentTxs.length === 0}
+        <div class="flex flex-col items-center justify-center py-12 text-center">
+          <div class="rounded-full bg-muted p-3 mb-4">
+            <ArrowDownUpIcon class="h-6 w-6 text-muted-foreground" />
+          </div>
+          <p class="text-muted-foreground text-sm">No transactions yet</p>
+          <p class="text-xs text-muted-foreground mt-1">
+            Transactions will appear here once you send or receive {primaryTicker}
+          </p>
+        </div>
+      {:else}
+        <ul class="divide-y divide-border">
+          {#each recentTxs.slice(0, 10) as tx (tx.txid)}
+            <li class="py-3 first:pt-0">
+              <div class="flex justify-between text-sm">
+                <span class="font-mono text-muted-foreground truncate max-w-[12ch]">{tx.txid}</span>
+                <span class="text-foreground font-medium">{tx.amount} {primaryTicker}</span>
+              </div>
+              <div class="text-xs text-muted-foreground">
+                {tx.pending ? 'Pending' : `${tx.confirmations} confirmations`}
+              </div>
+            </li>
+          {/each}
+        </ul>
+      {/if}
     </Card.Content>
   </Card.Root>
 </div>

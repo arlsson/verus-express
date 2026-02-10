@@ -1,16 +1,204 @@
-<!-- 
+<!--
   Component: Send
-  Purpose: Placeholder for Send section
-  Last Updated: Initial creation
-  Security: No sensitive operations - placeholder only
+  Purpose: Send flow — form -> preflight -> confirm -> send (preflight_id only). Uses txMachine.
+  Last Updated: Module 9 — txService, txMachine, PreflightResult display
+  Security: No tx hex or signing data; send by preflight_id only
 -->
 
 <script lang="ts">
+  import { useMachine } from '@xstate/svelte';
+  import { txMachine } from '$lib/machines/txMachine.js';
+  import { coinsStore } from '$lib/stores/coins.js';
+  import { transactionStore } from '$lib/stores/transactions.js';
+  import { walletChannelsStore } from '$lib/stores/walletChannels.js';
+  import { channelIdForCoin } from '$lib/utils/channelId.js';
+  import * as walletService from '$lib/services/walletService.js';
+  import * as Card from '$lib/components/ui/card';
+  import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import SendIcon from '@lucide/svelte/icons/send';
+  import type { PreflightParams } from '$lib/types/wallet.js';
+
+  const { snapshot: txSnapshot, send } = useMachine(txMachine);
+  const coins = $derived($coinsStore);
+
+  const sendableCoins = $derived(
+    coins.filter((c) => c.compatibleChannels.includes('vrpc') || c.compatibleChannels.includes('btc'))
+  );
+
+  let selectedCoinId = $state('VRSC');
+  let toAddress = $state('');
+  let amount = $state('');
+  let memo = $state('');
+
+  $effect(() => {
+    if (sendableCoins.length === 0) return;
+    if (!sendableCoins.some((c) => c.id === selectedCoinId)) {
+      selectedCoinId = sendableCoins[0].id;
+    }
+  });
+
+  const selectedCoin = $derived(sendableCoins.find((c) => c.id === selectedCoinId) ?? sendableCoins[0]);
+  const walletChannels = $derived($walletChannelsStore);
+  const channelId = $derived(
+    selectedCoin
+      ? walletChannels.byCoinId[selectedCoin.id] ??
+          channelIdForCoin(selectedCoin, walletChannels.vrpcAddress ?? undefined)
+      : null
+  );
+
+  const value = $derived($txSnapshot?.value);
+  const context = $derived($txSnapshot?.context ?? null);
+  const preflightResult = $derived(context?.preflightResult ?? null);
+  const sendResult = $derived(context?.sendResult ?? null);
+  const error = $derived(context?.error ?? null);
+
+  function handleSubmit() {
+    if (!channelId || !toAddress.trim() || !amount.trim()) return;
+    const params: PreflightParams = {
+      coinId: selectedCoin!.id,
+      channelId,
+      toAddress: toAddress.trim(),
+      amount: amount.trim(),
+      memo: memo.trim() || undefined
+    };
+    send({ type: 'SUBMIT_FORM', params });
+  }
+
+  function handleConfirm() {
+    send({ type: 'CONFIRM' });
+  }
+
+  function handleReset() {
+    send({ type: 'RESET' });
+    toAddress = '';
+    amount = '';
+    memo = '';
+  }
+
+  async function refreshTxHistory() {
+    if (!channelId) return;
+    try {
+      const txs = await walletService.getTransactionHistory(channelId);
+      transactionStore.update((m) => ({ ...m, [channelId]: txs }));
+    } catch {
+      // ignore
+    }
+  }
 </script>
 
-<div class="flex flex-col items-center justify-center h-full py-12">
-  <SendIcon class="h-12 w-12 text-muted-foreground mb-4" />
-  <h2 class="text-2xl font-semibold mb-2">Send</h2>
-  <p class="text-muted-foreground">Coming soon</p>
+<div class="flex flex-col gap-6 p-6 max-w-lg mx-auto">
+  {#if value === 'idle' || value === 'preflighting'}
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Send</Card.Title>
+        <Card.Description>Enter recipient and amount</Card.Description>
+      </Card.Header>
+      <Card.Content class="space-y-4">
+        <div>
+          <label for="send-coin" class="text-sm font-medium mb-2 block">Coin</label>
+          <select
+            id="send-coin"
+            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            bind:value={selectedCoinId}
+            disabled={value === 'preflighting'}
+          >
+            {#each sendableCoins as coin}
+              <option value={coin.id}>{coin.displayTicker} - {coin.displayName}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
+          <label for="send-to" class="text-sm font-medium mb-2 block">To address</label>
+          <Input
+            id="send-to"
+            type="text"
+            placeholder="Address"
+            bind:value={toAddress}
+            disabled={value === 'preflighting'}
+          />
+        </div>
+        <div>
+          <label for="send-amount" class="text-sm font-medium mb-2 block">Amount</label>
+          <Input
+            id="send-amount"
+            type="text"
+            placeholder="0.00"
+            bind:value={amount}
+            disabled={value === 'preflighting'}
+          />
+        </div>
+        <div>
+          <label for="send-memo" class="text-sm font-medium mb-2 block">Memo (optional)</label>
+          <Input id="send-memo" type="text" placeholder="Memo" bind:value={memo} disabled={value === 'preflighting'} />
+        </div>
+        {#if value === 'preflighting'}
+          <p class="text-sm text-muted-foreground">Preparing transaction…</p>
+        {/if}
+        <Button class="w-full" onclick={handleSubmit} disabled={!toAddress.trim() || !amount.trim() || value === 'preflighting'}>
+          <SendIcon class="h-4 w-4 mr-2" />
+          Continue
+        </Button>
+      </Card.Content>
+    </Card.Root>
+  {:else if value === 'confirming' && preflightResult}
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Confirm send</Card.Title>
+        <Card.Description>Review before sending</Card.Description>
+      </Card.Header>
+      <Card.Content class="space-y-3">
+        <div class="text-sm">
+          <p><span class="text-muted-foreground">To:</span> {preflightResult.toAddress}</p>
+          <p><span class="text-muted-foreground">Amount:</span> {preflightResult.value}</p>
+          <p><span class="text-muted-foreground">Fee:</span> {preflightResult.fee} {preflightResult.feeCurrency}</p>
+          {#if preflightResult.feeTakenMessage}
+            <p class="text-muted-foreground text-xs">{preflightResult.feeTakenMessage}</p>
+          {/if}
+          {#each preflightResult.warnings as w}
+            <p class="text-amber-600 dark:text-amber-400 text-xs">{w.message}</p>
+          {/each}
+        </div>
+        <div class="flex gap-2">
+          <Button variant="outline" class="flex-1" onclick={() => send({ type: 'RESET' })}>Back</Button>
+          <Button class="flex-1" onclick={handleConfirm}>Confirm</Button>
+        </div>
+      </Card.Content>
+    </Card.Root>
+  {:else if value === 'sending'}
+    <Card.Root>
+      <Card.Content class="py-8 text-center">
+        <p class="text-muted-foreground">Sending transaction…</p>
+      </Card.Content>
+    </Card.Root>
+  {:else if value === 'success' && sendResult}
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Sent</Card.Title>
+        <Card.Description>Transaction broadcast</Card.Description>
+      </Card.Header>
+      <Card.Content class="space-y-3">
+        <p class="text-sm font-mono break-all">{sendResult.txid}</p>
+        <p class="text-sm text-muted-foreground">
+          {sendResult.value} sent to {sendResult.toAddress}
+        </p>
+        <Button class="w-full" onclick={() => { handleReset(); refreshTxHistory(); }}>Done</Button>
+      </Card.Content>
+    </Card.Root>
+  {:else if value === 'error'}
+    <Card.Root>
+      <Card.Content class="py-6">
+        <p class="text-destructive mb-4">{error}</p>
+        <Button onclick={handleReset}>Try again</Button>
+      </Card.Content>
+    </Card.Root>
+  {:else}
+    <Card.Root>
+      <Card.Content class="py-8 text-center">
+        <SendIcon class="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+        <h2 class="text-xl font-semibold mb-2">Send</h2>
+        <p class="text-muted-foreground text-sm">Select a coin and enter recipient and amount.</p>
+      </Card.Content>
+    </Card.Root>
+  {/if}
 </div>

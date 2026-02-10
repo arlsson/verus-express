@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { HTMLInputAttributes, HTMLInputTypeAttribute } from "svelte/elements";
+	import EyeIcon from "@lucide/svelte/icons/eye";
+	import EyeOffIcon from "@lucide/svelte/icons/eye-off";
 	import { cn, type WithElementRef } from "$lib/utils.js";
 
 	type InputType = Exclude<HTMLInputTypeAttribute, "file">;
@@ -18,6 +20,8 @@
 		"data-slot": dataSlot = "input",
 		...restProps
 	}: Props = $props();
+
+	let showPassword = $state(false);
 </script>
 
 {#if type === "file"}
@@ -25,8 +29,8 @@
 		bind:this={ref}
 		data-slot={dataSlot}
 		class={cn(
-			"selection:bg-primary dark:bg-input/30 selection:text-primary-foreground border-input ring-offset-background placeholder:text-muted-foreground flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 pt-1.5 text-sm font-medium shadow-xs transition-[color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50",
-			"focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+			"selection:bg-primary selection:text-primary-foreground ring-offset-background placeholder:text-muted-foreground flex h-11 w-full min-w-0 rounded-md border border-transparent bg-transparent px-3 pt-1.5 text-sm font-medium shadow-none transition-[border-color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50",
+			"focus-visible:border-ring/70 focus-visible:ring-ring/50 focus-visible:ring-[3px]",
 			"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
 			className
 		)}
@@ -36,17 +40,37 @@
 		{...restProps}
 	/>
 {:else}
-	<input
-		bind:this={ref}
-		data-slot={dataSlot}
-		class={cn(
-			"border-input bg-background selection:bg-primary dark:bg-input/30 selection:text-primary-foreground ring-offset-background placeholder:text-muted-foreground flex h-9 w-full min-w-0 rounded-md border px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-			"focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-			"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
-			className
-		)}
-		{type}
-		bind:value
-		{...restProps}
-	/>
+	<div class="relative w-full">
+		<input
+			bind:this={ref}
+			data-slot={dataSlot}
+			class={cn(
+				"bg-background/90 dark:bg-input/20 selection:bg-primary selection:text-primary-foreground ring-offset-background placeholder:text-muted-foreground flex h-11 w-full min-w-0 rounded-md border border-transparent px-4 py-2 text-base shadow-none transition-[border-color,box-shadow,background-color] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+				"focus-visible:border-ring/70 focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+				"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+				type === "password" && "pe-11",
+				className
+			)}
+			type={type === "password" && showPassword ? "text" : type}
+			bind:value
+			{...restProps}
+		/>
+		{#if type === "password"}
+			<button
+				type="button"
+				aria-label={showPassword ? "Hide password" : "Show password"}
+				aria-pressed={showPassword}
+				class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute inset-y-0 end-0 inline-flex items-center justify-center px-3 outline-none focus-visible:ring-[2px]"
+				onclick={() => {
+					showPassword = !showPassword;
+				}}
+			>
+				{#if showPassword}
+					<EyeOffIcon class="size-4" />
+				{:else}
+					<EyeIcon class="size-4" />
+				{/if}
+			</button>
+		{/if}
+	</div>
 {/if}

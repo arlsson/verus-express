@@ -13,8 +13,17 @@
     "windows": [
       {
         "title": "lite-wallet",
-        "width": 950,
-        "height": 650
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 14,
+          "y": 16
+        },
+        "width": 1040,
+        "height": 680,
+        "minWidth": 920,
+        "minHeight": 620
       }
     ],
     "security": {

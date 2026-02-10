@@ -1,4 +1,4 @@
-// 
+//
 // Wallet domain public API
 // Last Updated: Created for wallet creation flow implementation
 

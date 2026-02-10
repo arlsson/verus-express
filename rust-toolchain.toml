@@ -1,0 +1,3 @@
+# Use stable Rust for this project. Ensures consistent builds and fixes "no default toolchain" when rustup is installed but unconfigured.
+[toolchain]
+channel = "stable"

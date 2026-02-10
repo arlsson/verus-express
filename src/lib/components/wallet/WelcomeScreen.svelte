@@ -6,8 +6,7 @@
 
 <script lang="ts">
   import { Button } from '$lib/components/ui/button';
-  import HelpSidebar from '$lib/components/common/HelpSidebar.svelte';
-  import HelpLink from '$lib/components/common/HelpLink.svelte';
+  import HelpDrawerLink from '$lib/components/common/HelpDrawerLink.svelte';
   import WalletCreation from '$lib/components/flows/WalletCreation/WalletCreation.svelte';
 
   function handleCreateWallet() {
@@ -20,7 +19,6 @@
     // TODO: Navigate to wallet import flow
   }
 
-  let showWalletHelp = $state(false);
   let showCreateWallet = $state(false);
 
   const walletHelpContent = {
@@ -59,9 +57,10 @@
           />
         </div>
         
-        <HelpLink 
-          text="What's a wallet?"
-          onclick={() => showWalletHelp = true}
+        <HelpDrawerLink
+          linkText="What's a wallet?"
+          title="What's a Wallet?"
+          content={walletHelpContent}
         />
       </div>
     </div>
@@ -99,13 +98,6 @@
     </div>
   </div>
 </main>
-
-<!-- Help Sidebar -->
-<HelpSidebar 
-  bind:isOpen={showWalletHelp}
-  title="What's a Wallet?"
-  content={walletHelpContent}
-/>
 
 <!-- Wallet Creation Flow -->
 {#if showCreateWallet}
