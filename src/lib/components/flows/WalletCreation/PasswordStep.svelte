@@ -7,6 +7,7 @@
 
 <script lang="ts">
   import { Input } from '$lib/components/ui/input';
+  import { i18nStore } from '$lib/i18n';
   import { getPasswordStrength, MIN_PASS_SCORE, scorePassword } from '$lib/utils/auth/scorePassword';
 
   type WalletData = {
@@ -31,6 +32,8 @@
     onCanCreateChanged = () => {}
   }: PasswordStepProps = $props();
   /* eslint-enable prefer-const */
+
+  const i18n = $derived($i18nStore);
 
   // Local state
   let confirmPassword = $state('');
@@ -65,14 +68,14 @@
   <!-- Password Input with Strength Indicator -->
   <div class="space-y-2">
     <label for="wallet-password" class="text-sm font-medium text-card-foreground">
-      Choose Password
+      {i18n.t('walletCreation.password.choose')}
     </label>
     <Input
       id="wallet-password"
       type="password"
       value={walletData.password}
       oninput={(e) => onUpdate({ password: (e.target as HTMLInputElement).value })}
-      placeholder="Enter password"
+      placeholder={i18n.t('walletCreation.password.placeholder')}
       autocomplete="new-password"
       class={walletData.password && !passwordValid ? 'border-destructive' : ''}
     />
@@ -108,18 +111,18 @@
               ? 'text-green-500 dark:text-green-400'
               : 'text-muted-foreground'}
       <p class="text-xs {labelColor}">
-        Strength: {passwordStrength.label}
+        {i18n.t('walletCreation.password.strength', { label: passwordStrength.label })}
       </p>
     {/if}
 
     <p class="text-xs text-muted-foreground">
-      Minimum 7 characters with good variety (letters, numbers, symbols)
+      {i18n.t('walletCreation.password.requirements')}
     </p>
 
     <!-- Password Strength Error -->
     {#if walletData.password && !passwordValid}
       <div class="bg-destructive/10 border border-destructive/20 rounded-lg p-2">
-        <p class="text-xs text-destructive">Please enter a stronger password</p>
+        <p class="text-xs text-destructive">{i18n.t('walletCreation.password.stronger')}</p>
       </div>
     {/if}
   </div>
@@ -127,7 +130,7 @@
   <!-- Confirm Password -->
   <div class="space-y-2">
     <label for="confirm-password" class="text-sm font-medium text-card-foreground">
-      Confirm Password
+      {i18n.t('walletCreation.password.confirm')}
     </label>
     <Input
       id="confirm-password"
@@ -136,20 +139,20 @@
       oninput={(e) => {
         confirmPassword = (e.target as HTMLInputElement).value;
       }}
-      placeholder="Confirm password"
+      placeholder={i18n.t('walletCreation.password.confirmPlaceholder')}
       autocomplete="new-password"
       class={confirmPassword && !passwordsMatch ? 'border-destructive' : ''}
     />
     {#if confirmPassword && !passwordsMatch}
-      <p class="text-xs text-destructive">Passwords don't match</p>
+      <p class="text-xs text-destructive">{i18n.t('walletCreation.password.mismatch')}</p>
     {/if}
   </div>
 
   <!-- Password Info -->
   <div class="bg-muted/50 border border-border rounded-lg p-3">
-    <h4 class="text-card-foreground font-semibold text-sm mb-1">Password Security</h4>
+    <h4 class="text-card-foreground font-semibold text-sm mb-1">{i18n.t('walletCreation.password.securityTitle')}</h4>
     <p class="text-xs text-muted-foreground">
-      This password encrypts your wallet on this device only. It's different from your recovery phrase.
+      {i18n.t('walletCreation.password.securityText')}
     </p>
   </div>
 </div>

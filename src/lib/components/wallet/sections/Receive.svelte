@@ -16,6 +16,7 @@
   import CheckIcon from '@lucide/svelte/icons/check';
   import { toast } from 'svelte-sonner';
   import * as walletService from '$lib/services/walletService.js';
+  import { i18nStore } from '$lib/i18n';
   import type { WalletNetwork } from '$lib/types/wallet.js';
 
   let addresses = $state<{ vrsc_address: string; eth_address: string; btc_address: string } | null>(null);
@@ -23,8 +24,17 @@
   let loading = $state(true);
   let error = $state('');
   let copied = $state<'vrsc' | 'btc' | null>(null);
-  const vrscLabel = $derived(network === 'testnet' ? 'VRSCTEST address' : 'VRSC address');
-  const btcLabel = $derived(network === 'testnet' ? 'BTCTEST address' : 'BTC address');
+  const i18n = $derived($i18nStore);
+  const vrscLabel = $derived(
+    network === 'testnet'
+      ? i18n.t('wallet.receive.vrscAddressTestnet')
+      : i18n.t('wallet.receive.vrscAddress')
+  );
+  const btcLabel = $derived(
+    network === 'testnet'
+      ? i18n.t('wallet.receive.btcAddressTestnet')
+      : i18n.t('wallet.receive.btcAddress')
+  );
 
   onMount(async () => {
     try {
@@ -36,7 +46,7 @@
         // keep default network
       }
     } catch {
-      error = 'Could not load addresses';
+      error = i18n.t('wallet.receive.errorLoad');
     } finally {
       loading = false;
     }
@@ -46,12 +56,13 @@
     try {
       await globalThis.navigator.clipboard.writeText(addr);
       copied = which;
-      toast.success('Address copied', {
-        description: `${which.toUpperCase()} address copied to clipboard`
+      const ticker = which.toUpperCase();
+      toast.success(i18n.t('wallet.receive.toast.copiedTitle'), {
+        description: i18n.t('wallet.receive.toast.copiedDescription', { ticker })
       });
       setTimeout(() => (copied = null), 2000);
     } catch {
-      toast.error('Failed to copy address');
+      toast.error(i18n.t('wallet.receive.toast.copyFailed'));
     }
   }
 </script>
@@ -61,13 +72,13 @@
     <Card.Header>
       <Card.Title class="flex items-center gap-2">
         <DownloadIcon class="h-5 w-5" />
-        Receive
+        {i18n.t('wallet.receive.title')}
       </Card.Title>
-      <Card.Description>Share your address to receive funds</Card.Description>
+      <Card.Description>{i18n.t('wallet.receive.description')}</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-6">
       {#if loading}
-        <p class="text-muted-foreground text-sm">Loading addresses…</p>
+        <p class="text-muted-foreground text-sm">{i18n.t('wallet.receive.loading')}</p>
       {:else if error}
         <p class="text-destructive text-sm">{error}</p>
       {:else if addresses}
@@ -85,7 +96,7 @@
               variant="outline"
               size="icon"
               onclick={() => copyAddress(addresses!.vrsc_address, 'vrsc')}
-              title="Copy"
+              title={i18n.t('wallet.receive.copy')}
             >
               {#if copied === 'vrsc'}
                 <CheckIcon class="h-4 w-4 text-green-600" />
@@ -109,7 +120,7 @@
               variant="outline"
               size="icon"
               onclick={() => copyAddress(addresses!.btc_address, 'btc')}
-              title="Copy"
+              title={i18n.t('wallet.receive.copy')}
             >
               {#if copied === 'btc'}
                 <CheckIcon class="h-4 w-4 text-green-600" />

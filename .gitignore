@@ -6,6 +6,7 @@ yarn.lock
 /.svelte-kit
 /.cursor
 /.claude
+AGENTS.md
 /package
 .env
 .env.*

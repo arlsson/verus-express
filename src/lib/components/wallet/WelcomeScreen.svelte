@@ -8,6 +8,9 @@
   import { Button } from '$lib/components/ui/button';
   import HelpDrawerLink from '$lib/components/common/HelpDrawerLink.svelte';
   import WalletCreation from '$lib/components/flows/WalletCreation/WalletCreation.svelte';
+  import { i18nStore } from '$lib/i18n';
+
+  const i18n = $derived($i18nStore);
 
   function handleCreateWallet() {
     console.info('[WALLET] Create new wallet flow initiated');
@@ -21,21 +24,21 @@
 
   let showCreateWallet = $state(false);
 
-  const walletHelpContent = {
+  const walletHelpContent = $derived({
     sections: [
       {
-        text: "A wallet is like a secure digital keychain that only you control."
+        text: i18n.t('welcome.help.intro')
       },
       {
-        heading: "Your Private Keys",
-        text: "These prove you own your money and identity. No one else can access them."
+        heading: i18n.t('welcome.help.privateKeysHeading'),
+        text: i18n.t('welcome.help.privateKeysText')
       },
       {
-        heading: "Complete Control",
-        text: "Send money globally, verify identity online - all without asking permission."
+        heading: i18n.t('welcome.help.completeControlHeading'),
+        text: i18n.t('welcome.help.completeControlText')
       }
     ]
-  };
+  });
 </script>
 
 <main class="bg-background relative flex min-h-screen flex-col overflow-hidden">
@@ -48,7 +51,7 @@
       <div class="space-y-4">
         <div class="relative">
           <h1 class="text-foreground leading-14 text-5xl tracking-tight font-bold">
-            Your access to <br/>the new internet.
+            {i18n.t('welcome.titleLine1')} <br/>{i18n.t('welcome.titleLine2')}
           </h1>
           <img 
             src="/icons/verus-express-icons2.webp" 
@@ -58,8 +61,8 @@
         </div>
         
         <HelpDrawerLink
-          linkText="What's a wallet?"
-          title="What's a Wallet?"
+          linkText={i18n.t('welcome.help.link')}
+          title={i18n.t('welcome.help.title')}
           content={walletHelpContent}
         />
       </div>
@@ -78,7 +81,7 @@
           onclick={handleCreateWallet}
           class="w-64 flex"
         >
-          Let's get you started
+          {i18n.t('welcome.cta.start')}
         </Button>
 
         <Button
@@ -87,13 +90,13 @@
           onclick={handleImportWallet}
           class="w-64 flex"
         >
-          I already have a wallet
+          {i18n.t('welcome.cta.existing')}
         </Button>
       </div>
 
       <!-- Confidence Builder -->
       <div class="text-muted-foreground text-xs">
-        Fully self-sovereign • Your keys, your coins
+        {i18n.t('welcome.footer.confidence')}
       </div>
     </div>
   </div>

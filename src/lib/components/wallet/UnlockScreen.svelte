@@ -1,19 +1,20 @@
 <!--
   UnlockScreen: Login with password for existing wallet(s).
   Shows wallet list and password field; invokes unlock_wallet then navigates to /wallet.
-  Hero panel: light image (seedling-sky.png) in light mode, dark image (seedling-sky-dark.png) in dark mode; tagline vertically centered (slightly below center), left-aligned, theme-aware text color.
+  Hero panel: Verus logo (white) above tagline; light/dark seedling images; tagline left-aligned, theme-aware text.
   Security: No password logging; generic error messages only.
 -->
 
 <script lang="ts">
+  import { onDestroy, tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { Button } from '$lib/components/ui/button';
-  import { Badge } from '$lib/components/ui/badge';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
   import * as Sheet from '$lib/components/ui/sheet';
+  import { i18nStore, networkLocaleKey } from '$lib/i18n';
   import HelpDrawerLink from '$lib/components/common/HelpDrawerLink.svelte';
   import WalletCreation from '$lib/components/flows/WalletCreation/WalletCreation.svelte';
 
@@ -31,10 +32,13 @@
   let password = $state('');
   let errorMessage = $state('');
   let isLoading = $state(false);
+  let shakePasswordField = $state(false);
   let showCreateOptionsDrawer = $state(false);
   let showWalletSwitcherDrawer = $state(false);
   let showCreateWallet = $state(false);
+  let shakeResetTimer: ReturnType<typeof setTimeout> | null = null;
   const appWindow = getCurrentWindow();
+  const i18n = $derived($i18nStore);
 
   const effectiveAccountId = $derived(
     wallets.length === 1 ? wallets[0].account_id : selectedAccountId
@@ -57,7 +61,7 @@
   });
 
   function networkLabel(network?: 'mainnet' | 'testnet'): string {
-    return network === 'testnet' ? 'Testnet' : 'Mainnet';
+    return i18n.t(networkLocaleKey(network));
   }
 
   const colorClasses: Record<string, string> = {
@@ -101,21 +105,21 @@
     showCreateWallet = true;
   }
 
-  const lostAccessHelpContent = {
+  const lostAccessHelpContent = $derived({
     sections: [
       {
-        text: "We can't recover forgotten passwords in a self-custody wallet."
+        text: i18n.t('unlock.lostAccess.intro')
       },
       {
-        heading: 'How to regain access',
-        text: 'Import your wallet again with your recovery seed phrase, then set a new local password on this device.'
+        heading: i18n.t('unlock.lostAccess.howHeading'),
+        text: i18n.t('unlock.lostAccess.howText')
       },
       {
-        heading: 'What you need',
-        text: 'Use the exact 24 words in the same order. Without the seed phrase, wallet recovery is not possible.'
+        heading: i18n.t('unlock.lostAccess.needHeading'),
+        text: i18n.t('unlock.lostAccess.needText')
       }
     ]
-  };
+  });
 
   function extractWalletErrorType(error: unknown): string | null {
     if (typeof error === 'string') {
@@ -135,6 +139,25 @@
     return null;
   }
 
+  async function triggerWrongPasswordShake() {
+    shakePasswordField = false;
+    await tick();
+    shakePasswordField = true;
+
+    if (shakeResetTimer) {
+      clearTimeout(shakeResetTimer);
+    }
+    shakeResetTimer = setTimeout(() => {
+      shakePasswordField = false;
+    }, 320);
+  }
+
+  onDestroy(() => {
+    if (shakeResetTimer) {
+      clearTimeout(shakeResetTimer);
+    }
+  });
+
   async function handleUnlock() {
     if (!effectiveAccountId || !password.trim()) return;
     isLoading = true;
@@ -149,13 +172,14 @@
     } catch (error) {
       const errorType = extractWalletErrorType(error);
       if (errorType === 'InvalidPassword') {
-        errorMessage = 'Wrong password. Please try again.';
+        errorMessage = i18n.t('unlock.error.invalidPassword');
+        await triggerWrongPasswordShake();
       } else if (errorType === 'OperationFailed') {
-        errorMessage = "Couldn't unlock wallet on this device. Try again or recreate wallet.";
+        errorMessage = i18n.t('unlock.error.operationFailed');
       } else if (errorType === 'InvalidArgs') {
-        errorMessage = 'Unlock request was malformed. Please restart the app and try again.';
+        errorMessage = i18n.t('unlock.error.invalidArgs');
       } else {
-        errorMessage = 'Unable to unlock wallet right now. Please try again.';
+        errorMessage = i18n.t('unlock.error.generic');
       }
     } finally {
       isLoading = false;
@@ -197,8 +221,13 @@
         class="hidden h-full w-full object-cover dark:block"
       />
       <div class="absolute inset-0 flex flex-col justify-start items-start pl-12 pr-8 pt-20">
-        <p class="text-2xl leading-tight font-bold text-white text-balance dark:text-white mt-4 cursor-default select-none">
-          Back in control of your digital life.
+        <img
+          src="/images/verus-logo-white.svg"
+          alt="Verus"
+          class="h-5 w-auto cursor-default select-none"
+        />
+        <p class="text-2xl leading-tight font-bold text-white text-balance dark:text-white mt-8 cursor-default select-none">
+          {i18n.t('unlock.hero.tagline')}
         </p>
       </div>
     </section>
@@ -228,35 +257,42 @@
                     showWalletSwitcherDrawer = true;
                   }}
                 >
-                  Switch
+                  {i18n.t('unlock.switch')}
                 </button>
               {/if}
             </div>
 
             {#if wallets.length > 1}
-              <p class="text-muted-foreground text-xs">{wallets.length} wallets on this device</p>
+              <p class="text-muted-foreground text-xs">
+                {i18n.t('unlock.walletsOnDevice', { count: wallets.length })}
+              </p>
             {/if}
           </div>
         {/if}
 
         <div class="space-y-2">
-          <Label for="unlock-password" class="sr-only">Password</Label>
-          <Input
-            id="unlock-password"
-            type="password"
-            bind:value={password}
-            placeholder="Password"
-            autocomplete="current-password"
-            class={errorMessage ? 'border-destructive' : ''}
-            onkeydown={(e) => e.key === 'Enter' && handleUnlock()}
-          />
+          <Label for="unlock-password" class="sr-only">{i18n.t('unlock.password')}</Label>
+          <div class={shakePasswordField ? 'unlock-error-shake' : ''}>
+            <Input
+              id="unlock-password"
+              type="password"
+              bind:value={password}
+              placeholder={i18n.t('unlock.password')}
+              autocomplete="current-password"
+              class={
+                'bg-muted/65 text-foreground placeholder:text-foreground/55 dark:bg-muted/50 dark:placeholder:text-foreground/60' +
+                (errorMessage ? ' border-destructive' : '')
+              }
+              onkeydown={(e) => e.key === 'Enter' && handleUnlock()}
+            />
+          </div>
           <p class="text-destructive min-h-10 text-sm leading-5" aria-live="polite">{errorMessage}</p>
         </div>
 
         <div class="flex justify-end">
           <HelpDrawerLink
-            linkText="Lost access?"
-            title="Lost access?"
+            linkText={i18n.t('unlock.lostAccess.link')}
+            title={i18n.t('unlock.lostAccess.title')}
             content={lostAccessHelpContent}
           />
         </div>
@@ -267,11 +303,15 @@
             onclick={handleUnlock}
             disabled={!effectiveAccountId || !password.trim() || isLoading}
           >
-            {isLoading ? 'Unlocking…' : 'Unlock'}
+            {isLoading ? i18n.t('unlock.button.unlocking') : i18n.t('unlock.button.unlock')}
           </Button>
 
-          <Button variant="secondary" class="w-full" onclick={handleCreateWallet}>
-            Create new wallet
+          <Button
+            variant="secondary"
+            class="w-full bg-primary/14 text-primary hover:bg-primary/22 dark:bg-primary/28 dark:text-primary-foreground dark:hover:bg-primary/36"
+            onclick={handleCreateWallet}
+          >
+            {i18n.t('unlock.button.createWallet')}
           </Button>
         </div>
       </div>
@@ -284,8 +324,8 @@
     {#snippet children()}
       <div class="flex h-full flex-col">
         <Sheet.Header>
-          <Sheet.Title>Choose wallet</Sheet.Title>
-          <Sheet.Description>Select the wallet you want to unlock.</Sheet.Description>
+          <Sheet.Title>{i18n.t('unlock.switcher.title')}</Sheet.Title>
+          <Sheet.Description>{i18n.t('unlock.switcher.description')}</Sheet.Description>
         </Sheet.Header>
 
         <div class="mt-5 flex-1 space-y-2 overflow-y-auto pr-1">
@@ -324,8 +364,8 @@
     {#snippet children()}
       <div class="flex h-full flex-col">
         <Sheet.Header>
-          <Sheet.Title>Create or import wallet</Sheet.Title>
-          <Sheet.Description>Choose how you want to continue.</Sheet.Description>
+          <Sheet.Title>{i18n.t('unlock.create.title')}</Sheet.Title>
+          <Sheet.Description>{i18n.t('unlock.create.description')}</Sheet.Description>
         </Sheet.Header>
 
         <div class="mt-5 space-y-3">
@@ -334,20 +374,53 @@
             class="border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors"
             onclick={handleStartNewWalletFlow}
           >
-            <p class="text-sm font-semibold text-foreground">Create a brand-new wallet</p>
-            <p class="text-xs text-muted-foreground mt-1">
-              Generate a new recovery phrase and set up a fresh wallet.
-            </p>
+            <div class="flex items-start gap-3">
+              <svg
+                class="h-4 w-4 mt-0.5 shrink-0 text-white"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M12 8v8"></path>
+                <path d="M8 12h8"></path>
+              </svg>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-foreground">{i18n.t('unlock.create.newTitle')}</p>
+                <p class="text-xs text-muted-foreground mt-1">
+                  {i18n.t('unlock.create.newDescription')}
+                </p>
+              </div>
+            </div>
           </button>
 
           <div class="border-input bg-muted/20 w-full rounded-lg border p-4">
-            <div class="flex items-center justify-between gap-3">
-              <p class="text-sm font-semibold text-foreground">Import an existing wallet</p>
-              <Badge variant="outline">Coming soon</Badge>
+            <div class="flex items-start gap-3">
+              <svg
+                class="h-4 w-4 mt-0.5 shrink-0 text-white"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3v11"></path>
+                <path d="m8 10 4 4 4-4"></path>
+                <path d="M4 20h16"></path>
+              </svg>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-foreground">{i18n.t('unlock.create.importTitle')}</p>
+                <p class="text-xs text-muted-foreground mt-1">
+                  {i18n.t('unlock.create.importDescription')}
+                </p>
+              </div>
             </div>
-            <p class="text-xs text-muted-foreground mt-1">
-              Use your existing seed phrase to restore a wallet on this device.
-            </p>
           </div>
         </div>
       </div>
@@ -364,3 +437,35 @@
     />
   </div>
 {/if}
+
+<style>
+  @keyframes unlock-error-shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20% {
+      transform: translateX(-5px);
+    }
+    40% {
+      transform: translateX(5px);
+    }
+    60% {
+      transform: translateX(-4px);
+    }
+    80% {
+      transform: translateX(4px);
+    }
+  }
+
+  .unlock-error-shake {
+    animation: unlock-error-shake 320ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+    will-change: transform;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .unlock-error-shake {
+      animation: none;
+    }
+  }
+</style>

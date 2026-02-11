@@ -6,24 +6,26 @@
 -->
 
 <script lang="ts">
-  import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
-  
+  import { i18nStore } from '$lib/i18n';
+
+  const i18n = $derived($i18nStore);
+
   // Props
-  let { 
+  let {
     seedPhrase = '',
     verificationIndices = [],
     onVerified = () => {},
     onSetupVerification = (indices: number[]) => {},
     onFieldsChanged = (filled: boolean) => {} // NEW: callback for field completion state
   } = $props();
-  
+
   // Local verification state
   let verificationWords = $state(['', '', '']);
   let verificationErrors = $state([false, false, false]);
   let hasAttempted = $state(false);
   let isVerified = $state(false);
-  
+
   // Auto-setup verification indices if not provided
   $effect(() => {
     if (verificationIndices.length === 0 && seedPhrase) {
@@ -37,37 +39,36 @@
       onSetupVerification(indices.sort((a, b) => a - b));
     }
   });
-  
+
   // Get correct words for verification
   const seedWords = $derived(seedPhrase.split(' '));
-  const correctWords = $derived(verificationIndices.map(index => seedWords[index] || ''));
-  const allFieldsFilled = $derived(verificationWords.every(word => word.trim() !== ''));
-  
+  const correctWords = $derived(verificationIndices.map((index) => seedWords[index] || ''));
+
   // Watch for field changes and notify parent
   $effect(() => {
-    const filled = verificationWords.every(word => word.trim() !== '');
+    const filled = verificationWords.every((word) => word.trim() !== '');
     onFieldsChanged(filled);
   });
-  
+
   function handleWordInput(index: number, event: Event) {
     const target = event.target as HTMLInputElement;
     verificationWords[index] = target.value;
-    
+
     // Clear error when user types
     if (hasAttempted) {
       verificationErrors[index] = false;
     }
   }
-  
+
   // Expose verifyWords function - returns boolean for success/failure
   export function verifyWords(): boolean {
     hasAttempted = true;
     let hasErrors = false;
-    
+
     verificationIndices.forEach((wordIndex, i) => {
       const userWord = verificationWords[i].toLowerCase().trim();
       const correctWord = correctWords[i].toLowerCase();
-      
+
       if (userWord !== correctWord) {
         verificationErrors[i] = true;
         hasErrors = true;
@@ -75,7 +76,7 @@
         verificationErrors[i] = false;
       }
     });
-    
+
     if (!hasErrors) {
       console.info('[WALLET] Seed verification successful');
       isVerified = true;
@@ -97,33 +98,33 @@
         <div class="w-8 h-6 bg-primary text-primary-foreground rounded flex items-center justify-center text-xs font-bold">
           {wordIndex + 1}
         </div>
-        <span>Word #{wordIndex + 1}</span>
+        <span>{i18n.t('walletCreation.verify.word', { index: wordIndex + 1 })}</span>
       </label>
-      
+
       <Input
         id="word-{i}"
         value={verificationWords[i]}
         oninput={(e) => handleWordInput(i, e)}
-        placeholder="Enter word"
+        placeholder={i18n.t('walletCreation.verify.enterWord')}
         autocomplete="off"
         class={verificationErrors[i] ? 'border-destructive' : ''}
       />
-      
+
       {#if verificationErrors[i]}
         <div class="flex items-center gap-2 text-xs text-destructive">
           <span>❌</span>
-          <span>Incorrect word, please try again</span>
+          <span>{i18n.t('walletCreation.verify.incorrect')}</span>
         </div>
       {/if}
     </div>
   {/each}
-  
+
   <!-- Verification Tip -->
   <div class="bg-muted/50 border border-border rounded-lg p-3">
     <div class="text-center space-y-1">
-      <h4 class="text-card-foreground font-semibold text-sm">💡 Tip</h4>
+      <h4 class="text-card-foreground font-semibold text-sm">{i18n.t('walletCreation.verify.tipTitle')}</h4>
       <p class="text-xs text-muted-foreground">
-        This verification ensures you can recover your wallet even if you lose access to this device.
+        {i18n.t('walletCreation.verify.tipText')}
       </p>
     </div>
   </div>

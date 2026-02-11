@@ -6,22 +6,22 @@
 -->
 
 <script lang="ts">
-  // Props (none needed for display-only component)
+  import { i18nStore } from '$lib/i18n';
+
+  const i18n = $derived($i18nStore);
 </script>
 
 <!-- Security Guidelines Content -->
 <div class="w-full max-w-md mx-auto">
-  
   <!-- Security Guidelines -->
   <div class="p-6 border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-950/20 rounded-r-lg">
-    <h3 class="text-foreground font-semibold text-lg mb-4">Security guidelines</h3>
-    
+    <h3 class="text-foreground font-semibold text-lg mb-4">{i18n.t('walletCreation.security.title')}</h3>
+
     <div class="space-y-3 text-foreground text-sm">
-      <p>• Write these words on paper in exact order</p>
-      <p>• Never save screenshots or digital copies</p>
-      <p>• Store your backup in a secure location</p>
-      <p>• Never share these words with anyone</p>
+      <p>• {i18n.t('walletCreation.security.item1')}</p>
+      <p>• {i18n.t('walletCreation.security.item2')}</p>
+      <p>• {i18n.t('walletCreation.security.item3')}</p>
+      <p>• {i18n.t('walletCreation.security.item4')}</p>
     </div>
   </div>
-  
 </div>

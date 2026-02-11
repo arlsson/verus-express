@@ -16,6 +16,7 @@
   import { transactionStore, getTransactions } from '$lib/stores/transactions.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { walletChannelsStore } from '$lib/stores/walletChannels.js';
+  import { i18nStore } from '$lib/i18n';
 
   interface WalletData {
     name: string;
@@ -48,6 +49,7 @@
   );
 
   const coins = $derived($coinsStore);
+  const i18n = $derived($i18nStore);
   const walletChannels = $derived($walletChannelsStore);
   const primaryChannel = $derived(walletChannels.primaryChannelId);
   const hasPrimaryChannel = $derived(Boolean(primaryChannel));
@@ -87,7 +89,7 @@
         </Avatar.Root>
         <div>
           <div class="text-xl">{walletData.name}</div>
-          <div class="text-sm text-muted-foreground font-normal">Main Wallet</div>
+          <div class="text-sm text-muted-foreground font-normal">{i18n.t('wallet.overview.mainWallet')}</div>
         </div>
       </Card.Title>
     </Card.Header>
@@ -99,13 +101,13 @@
           </div>
           <div class="flex gap-4 text-sm text-muted-foreground">
             <span
-              >Available: <span class="text-foreground font-medium"
+              >{i18n.t('wallet.overview.available')} <span class="text-foreground font-medium"
                 >{availableBalanceText} {primaryTicker}</span
               ></span
             >
             <span>•</span>
             <span
-              >Pending: <span class="text-foreground font-medium"
+              >{i18n.t('wallet.overview.pending')} <span class="text-foreground font-medium"
                 >{pendingBalanceText} {primaryTicker}</span
               ></span
             >
@@ -113,7 +115,7 @@
         </div>
       {:else}
         <p class="text-sm text-muted-foreground">
-          No active channel resolved yet. Reopen the wallet to refresh channels.
+          {i18n.t('wallet.overview.noChannelRefresh')}
         </p>
       {/if}
     </Card.Content>
@@ -123,33 +125,33 @@
   <div class="flex gap-4">
     <Button class="flex-1" size="lg" onclick={onNavigateToSend}>
       <SendIcon class="h-4 w-4 mr-2" />
-      Send
+      {i18n.t('wallet.overview.send')}
     </Button>
     <Button variant="outline" class="flex-1" size="lg" onclick={onNavigateToReceive}>
       <DownloadIcon class="h-4 w-4 mr-2" />
-      Receive
+      {i18n.t('wallet.overview.receive')}
     </Button>
   </div>
 
   <!-- Recent Transactions Card -->
   <Card.Root>
     <Card.Header>
-      <Card.Title>Recent Transactions</Card.Title>
-      <Card.Description>Your latest wallet activity</Card.Description>
+      <Card.Title>{i18n.t('wallet.overview.recentTransactions')}</Card.Title>
+      <Card.Description>{i18n.t('wallet.overview.latestActivity')}</Card.Description>
     </Card.Header>
     <Card.Content>
       {#if !hasPrimaryChannel}
         <p class="text-muted-foreground text-sm">
-          No active channel available yet.
+          {i18n.t('wallet.overview.noChannel')}
         </p>
       {:else if recentTxs.length === 0}
         <div class="flex flex-col items-center justify-center py-12 text-center">
           <div class="rounded-full bg-muted p-3 mb-4">
             <ArrowDownUpIcon class="h-6 w-6 text-muted-foreground" />
           </div>
-          <p class="text-muted-foreground text-sm">No transactions yet</p>
+          <p class="text-muted-foreground text-sm">{i18n.t('wallet.overview.noTransactions')}</p>
           <p class="text-xs text-muted-foreground mt-1">
-            Transactions will appear here once you send or receive {primaryTicker}
+            {i18n.t('wallet.overview.txHint', { ticker: primaryTicker })}
           </p>
         </div>
       {:else}
@@ -161,7 +163,9 @@
                 <span class="text-foreground font-medium">{tx.amount} {primaryTicker}</span>
               </div>
               <div class="text-xs text-muted-foreground">
-                {tx.pending ? 'Pending' : `${tx.confirmations} confirmations`}
+                {tx.pending
+                  ? i18n.t('wallet.overview.pendingStatus')
+                  : i18n.t('wallet.overview.confirmations', { count: tx.confirmations })}
               </div>
             </li>
           {/each}

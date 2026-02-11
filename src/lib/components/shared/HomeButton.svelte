@@ -7,17 +7,21 @@
 
 <script lang="ts">
   import { Button } from '$lib/components/ui/button';
-  
+  import { i18nStore } from '$lib/i18n';
+
   // Props
-  let { 
+  let {
     onGoHome = () => {},
     requireConfirmation = false,
-    confirmationMessage = 'Are you sure you want to go back? Your progress will be lost.'
+    confirmationMessage = ''
   } = $props();
-  
+
+  const i18n = $derived($i18nStore);
+
   function handleClick() {
+    const fallbackMessage = i18n.t('shared.homeConfirm');
     if (requireConfirmation) {
-      if (confirm(confirmationMessage)) {
+      if (globalThis.confirm(confirmationMessage || fallbackMessage)) {
         onGoHome();
       }
     } else {
@@ -33,6 +37,6 @@
     onclick={handleClick}
     class="text-muted-foreground hover:text-foreground"
   >
-    ← Home
+    {i18n.t('shared.home')}
   </Button>
 </div>

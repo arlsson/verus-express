@@ -20,6 +20,7 @@
   import PasswordStep from './PasswordStep.svelte';
   import CompleteStep from './CompleteStep.svelte';
   import { goto } from '$app/navigation';
+  import { i18nStore } from '$lib/i18n';
 
   type WalletData = {
     name: string;
@@ -55,6 +56,7 @@
   let createdWalletId = $state('');
   let openWalletLoading = $state(false);
   let openWalletError = $state('');
+  const i18n = $derived($i18nStore);
 
   function extractWalletErrorType(error: unknown): string | null {
     if (typeof error === 'string') {
@@ -102,9 +104,9 @@
     } catch (error) {
       const errorType = extractWalletErrorType(error);
       if (errorType === 'WalletExists') {
-        createError = 'A wallet with this name already exists.';
+        createError = i18n.t('walletCreation.error.walletExists');
       } else {
-        createError = 'Failed to create wallet. Please try again.';
+        createError = i18n.t('walletCreation.error.createFailed');
       }
     } finally {
       createLoading = false;
@@ -113,7 +115,7 @@
 
   async function handleOpenWallet() {
     if (!createdWalletId || !walletData.password) {
-      openWalletError = 'Could not open wallet. Please return to unlock and try again.';
+      openWalletError = i18n.t('walletCreation.error.openMissingData');
       return;
     }
 
@@ -130,11 +132,11 @@
     } catch (error) {
       const errorType = extractWalletErrorType(error);
       if (errorType === 'InvalidPassword' || errorType === 'OperationFailed') {
-        openWalletError = "Couldn't unlock wallet on this device. Try again or recreate wallet.";
+        openWalletError = i18n.t('walletCreation.error.openFailed');
       } else if (errorType === 'InvalidArgs') {
-        openWalletError = 'Wallet open request was malformed. Please restart the app and try again.';
+        openWalletError = i18n.t('walletCreation.error.openInvalidArgs');
       } else {
-        openWalletError = 'Unable to open wallet right now. Please try again.';
+        openWalletError = i18n.t('walletCreation.error.openGeneric');
       }
     } finally {
       openWalletLoading = false;
@@ -195,7 +197,7 @@
       totalSteps={7}
       onGoHome={handleGoHome}
       requireConfirmation={currentStep >= 4}
-      confirmationMessage="Are you sure you want to go back? Your wallet creation progress will be lost and any seed phrase will be cleared."
+      confirmationMessage={i18n.t('walletCreation.confirmLeave')}
     />
   </div>
 
@@ -205,25 +207,25 @@
       <StepLayout>
         <div slot="left">
           <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
-            Let's get you started with a new wallet.
+            {i18n.t('walletCreation.step1.title')}
           </h1>
-          <p class="text-muted-foreground text-sm mt-4">Together, we'll get you started to be self-sovereign.</p>
+          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step1.description')}</p>
         </div>
 
         <IntroStep slot="right" />
 
         <Button slot="action" size="lg" onclick={() => nextStep()} class="w-48">
-          I understand, continue
+          {i18n.t('walletCreation.step1.button')}
         </Button>
       </StepLayout>
     {:else if currentStep === 2}
       <StepLayout>
         <div slot="left">
           <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
-            Choose a name for your wallet.
+            {i18n.t('walletCreation.step2.title')}
           </h1>
-          <p class="text-muted-foreground text-sm mt-4">Personalize your wallet and choose your network.</p>
-          <p class="text-muted-foreground text-sm mt-4">Name examples: Savings, Investments, Business, Personal, etc.</p>
+          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step2.description1')}</p>
+          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step2.description2')}</p>
         </div>
 
         <NameStep
@@ -244,17 +246,17 @@
           class="w-48"
           size="lg"
         >
-          Continue
+          {i18n.t('common.continue')}
         </Button>
       </StepLayout>
     {:else if currentStep === 3}
       <StepLayout>
         <div slot="left">
           <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
-            Import information before we begin.
+            {i18n.t('walletCreation.step3.title')}
           </h1>
           <p class="text-muted-foreground text-sm mt-4">
-            Please read and acknowledge these important security guidelines before you seeyour recovery phrase.
+            {i18n.t('walletCreation.step3.description')}
           </p>
         </div>
 
@@ -267,21 +269,21 @@
               for="security-acceptance-main"
               class="text-sm text-foreground cursor-pointer select-none"
             >
-              I understand and will follow these guidelines
+              {i18n.t('walletCreation.step3.checkbox')}
             </label>
           </div>
           <Button onclick={() => nextStep()} disabled={!securityAccepted} class="w-48" size="lg">
-            Show my backup
+            {i18n.t('walletCreation.step3.button')}
           </Button>
         </div>
       </StepLayout>
     {:else if currentStep === 4}
       <StepLayout>
         <div slot="left">
-          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">Backup Recovery Phrase</h1>
-          <p class="text-muted-foreground text-sm mt-4">
-            Write down your 24-word backup in exact order. This is your only way to recover your wallet.
-          </p>
+          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+            {i18n.t('walletCreation.step4.title')}
+          </h1>
+          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step4.description')}</p>
         </div>
 
         <BackupStep
@@ -300,16 +302,16 @@
           class="w-48"
           size="lg"
         >
-          I've Written It Down
+          {i18n.t('walletCreation.step4.button')}
         </Button>
       </StepLayout>
     {:else if currentStep === 5}
       <StepLayout>
         <div slot="left">
-          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">Verify Your Backup</h1>
-          <p class="text-muted-foreground text-sm mt-4">
-            Enter the 3 requested words to confirm you wrote them down correctly.
-          </p>
+          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+            {i18n.t('walletCreation.step5.title')}
+          </h1>
+          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step5.description')}</p>
         </div>
 
         <VerifyStep
@@ -333,14 +335,16 @@
           class="w-48"
           size="lg"
         >
-          Verify & Continue
+          {i18n.t('walletCreation.step5.button')}
         </Button>
       </StepLayout>
     {:else if currentStep === 6}
       <StepLayout>
         <div slot="left">
-          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">Set Password</h1>
-          <p class="text-muted-foreground text-sm mt-4">Create a password to encrypt your wallet on this device.</p>
+          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+            {i18n.t('walletCreation.step6.title')}
+          </h1>
+          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step6.description')}</p>
         </div>
 
         <PasswordStep
@@ -359,7 +363,7 @@
             <p class="text-destructive text-sm">{createError}</p>
           {/if}
           {#if createLoading}
-            <p class="text-muted-foreground text-xs">This may take a moment on first run.</p>
+            <p class="text-muted-foreground text-xs">{i18n.t('walletCreation.step6.loadingHint')}</p>
           {/if}
           <Button
             onclick={handleCreateWallet}
@@ -367,7 +371,9 @@
             class="w-48"
             size="lg"
           >
-            {createLoading ? 'Creating…' : 'Create Wallet'}
+            {createLoading
+              ? i18n.t('walletCreation.step6.buttonCreating')
+              : i18n.t('walletCreation.step6.buttonCreate')}
           </Button>
         </div>
       </StepLayout>
@@ -375,9 +381,9 @@
       <StepLayout>
         <div slot="left">
           <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight text-green-700 dark:text-green-400">
-            Wallet Ready!
+            {i18n.t('walletCreation.step7.title')}
           </h1>
-          <p class="text-muted-foreground text-sm mt-4">Your secure wallet is created and ready to use.</p>
+          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step7.description')}</p>
         </div>
 
         <CompleteStep slot="right" walletData={walletData} />
@@ -387,7 +393,7 @@
             <p class="text-destructive text-sm">{openWalletError}</p>
           {/if}
           {#if openWalletLoading}
-            <p class="text-muted-foreground text-xs">This may take a moment on first run.</p>
+            <p class="text-muted-foreground text-xs">{i18n.t('walletCreation.step7.loadingHint')}</p>
           {/if}
           <Button
             onclick={handleOpenWallet}
@@ -395,7 +401,9 @@
             class="w-48"
             size="lg"
           >
-            {openWalletLoading ? 'Opening…' : 'Open My Wallet'}
+            {openWalletLoading
+              ? i18n.t('walletCreation.step7.buttonOpening')
+              : i18n.t('walletCreation.step7.buttonOpen')}
           </Button>
         </div>
       </StepLayout>

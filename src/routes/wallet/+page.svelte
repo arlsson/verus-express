@@ -17,11 +17,13 @@
   import { coinsStore } from '$lib/stores/coins.js';
   import { walletChannelsStore, buildWalletChannels, resetWalletChannels } from '$lib/stores/walletChannels.js';
   import { clearWalletErrors, pushWalletError } from '$lib/stores/walletErrors.js';
+  import { i18nStore } from '$lib/i18n';
   import type { WalletNetwork } from '$lib/types/wallet.js';
 
   let loading = $state(true);
   let walletData = $state<{ name: string; emoji: string; color: string; network: WalletNetwork } | null>(null);
   let teardownEventBridge: (() => void) | null = null;
+  const i18n = $derived($i18nStore);
 
   onMount(async () => {
     clearWalletErrors();
@@ -42,10 +44,10 @@
             color: active.color || 'blue',
             network: walletNetwork
           }
-        : { name: 'Wallet', emoji: '💰', color: 'blue', network: walletNetwork };
+        : { name: i18n.t('wallet.overview.mainWallet'), emoji: '💰', color: 'blue', network: walletNetwork };
       const addresses = await walletService.getAddresses().catch(() => null);
       if (!addresses) {
-        pushWalletError('wallet: Could not load receive addresses');
+        pushWalletError(i18n.t('wallet.receive.errorLoad'));
       }
 
       const allCoins = await coinsService.getCoinRegistry();
@@ -57,8 +59,8 @@
       teardownEventBridge = await setupWalletEventBridge();
       await walletService.startUpdateEngine();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      pushWalletError(`wallet: ${message}`);
+      const message = error instanceof Error ? error.message : i18n.t('common.unknownError');
+      pushWalletError(message);
       goto('/');
       return;
     }
@@ -75,7 +77,7 @@
 
 {#if loading}
   <main class="bg-background flex min-h-screen items-center justify-center">
-    <div class="text-muted-foreground">Loading…</div>
+    <div class="text-muted-foreground">{i18n.t('common.loading')}</div>
   </main>
 {:else if walletData}
   <WalletLayout walletData={walletData} />

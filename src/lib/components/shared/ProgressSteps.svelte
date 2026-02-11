@@ -6,12 +6,27 @@
 -->
 
 <script lang="ts">
+  import { i18nStore } from '$lib/i18n';
+
+  const i18n = $derived($i18nStore);
+
   // Props
   let { 
     currentStep = 1,
     totalSteps = 4,
-    stepLabels = ['Name', 'Backup', 'Verify', 'Complete']
+    stepLabels = []
   } = $props();
+
+  const effectiveStepLabels = $derived(
+    stepLabels.length > 0
+      ? stepLabels
+      : [
+          i18n.t('walletCreation.step2.title'),
+          i18n.t('walletCreation.step4.title'),
+          i18n.t('walletCreation.step5.title'),
+          i18n.t('walletCreation.step7.title')
+        ]
+  );
   
   // Calculate progress percentage
   const progressPercentage = $derived((currentStep / totalSteps) * 100);
@@ -28,7 +43,7 @@
   
   <!-- Step Indicators -->
   <div class="flex justify-between">
-    {#each stepLabels as label, index}
+    {#each effectiveStepLabels as label, index}
       {@const stepNumber = index + 1}
       {@const isActive = stepNumber === currentStep}
       {@const isCompleted = stepNumber < currentStep}
@@ -66,7 +81,7 @@
   <!-- Step Text -->
   <div class="text-center">
     <p class="text-sm text-muted-foreground">
-      Step {currentStep} of {totalSteps}
+      {i18n.t('shared.stepOf', { current: currentStep, total: totalSteps })}
     </p>
   </div>
 </div>

@@ -14,6 +14,7 @@
   import { Button } from '$lib/components/ui/button';
   import SettingsIcon from '@lucide/svelte/icons/settings';
   import LockIcon from '@lucide/svelte/icons/lock';
+  import { i18nStore } from '$lib/i18n';
 
   interface WalletData {
     name: string;
@@ -23,6 +24,7 @@
   }
 
   let { walletData }: { walletData: WalletData } = $props();
+  const i18n = $derived($i18nStore);
 
   // Color class lookup (matching CompleteStep pattern)
   const colorOptions = [
@@ -67,17 +69,17 @@
         {#snippet child({ props })}
           <Button {...props} variant="ghost" size="icon">
             <SettingsIcon class="h-5 w-5" />
-            <span class="sr-only">Settings</span>
+            <span class="sr-only">{i18n.t('wallet.topbar.settings')}</span>
           </Button>
         {/snippet}
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" class="w-48">
-        <DropdownMenu.Label>Settings</DropdownMenu.Label>
+        <DropdownMenu.Label>{i18n.t('wallet.topbar.settings')}</DropdownMenu.Label>
         <DropdownMenu.Separator />
-        <DropdownMenu.Item>Wallet Settings</DropdownMenu.Item>
-        <DropdownMenu.Item>Network Settings</DropdownMenu.Item>
+        <DropdownMenu.Item>{i18n.t('wallet.topbar.walletSettings')}</DropdownMenu.Item>
+        <DropdownMenu.Item>{i18n.t('wallet.topbar.networkSettings')}</DropdownMenu.Item>
         <DropdownMenu.Separator />
-        <DropdownMenu.Item>About</DropdownMenu.Item>
+        <DropdownMenu.Item>{i18n.t('wallet.topbar.about')}</DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu.Root>
 
@@ -87,12 +89,12 @@
         {#snippet child({ props })}
           <Button {...props} variant="ghost" size="icon" onclick={handleLock}>
             <LockIcon class="h-5 w-5" />
-            <span class="sr-only">Lock Wallet</span>
+            <span class="sr-only">{i18n.t('wallet.topbar.lockWallet')}</span>
           </Button>
         {/snippet}
       </Tooltip.Trigger>
       <Tooltip.Content>
-        <p>Lock Wallet</p>
+        <p>{i18n.t('wallet.topbar.lockWallet')}</p>
       </Tooltip.Content>
     </Tooltip.Root>
   </div>

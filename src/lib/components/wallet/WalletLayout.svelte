@@ -16,6 +16,7 @@
   import Identity from './sections/Identity.svelte';
   import AddressBook from './sections/AddressBook.svelte';
   import { walletErrorsStore, dismissWalletError } from '$lib/stores/walletErrors.js';
+  import { i18nStore } from '$lib/i18n';
 
   interface WalletData {
     name: string;
@@ -28,6 +29,7 @@
   let activeSection = $state('overview');
   const walletErrors = $derived($walletErrorsStore);
   const latestError = $derived(walletErrors.latest);
+  const i18n = $derived($i18nStore);
 </script>
 
 <Sidebar.Provider>
@@ -38,7 +40,9 @@
       <div class="mx-6 mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
         <div class="flex items-start justify-between gap-3">
           <p class="break-all">{latestError}</p>
-          <button class="shrink-0 text-xs underline" onclick={dismissWalletError}>Dismiss</button>
+          <button class="shrink-0 text-xs underline" onclick={dismissWalletError}>
+            {i18n.t('wallet.layout.dismiss')}
+          </button>
         </div>
       </div>
     {/if}
