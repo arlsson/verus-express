@@ -123,8 +123,4 @@
       </p>
     </div>
   {/each}
-
-  <p class="text-muted-foreground pt-1 text-center text-xs">
-    {i18n.t('walletCreation.verify.tipText')}
-  </p>
 </div>

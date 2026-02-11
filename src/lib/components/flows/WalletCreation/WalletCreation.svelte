@@ -1,7 +1,7 @@
 <!--
   Component: WalletCreation
   Purpose: Wallet creation flow with onboarding, backup, and setup
-  Last Updated: Login-style hero panel layout with setup-only steps (intro removed)
+  Last Updated: Centered single-panel setup flow with setup-only steps (intro removed)
   Security: Manages shared state and sensitive data clearing, enforces security acknowledgment
 -->
 
@@ -208,31 +208,6 @@
   <div class="absolute top-0 right-0 left-0 z-30 h-11" data-tauri-drag-region aria-hidden="true"></div>
 
   <div class="relative z-10 flex min-h-0 flex-1 w-full">
-    <section class="relative hidden w-[clamp(320px,38vw,500px)] shrink-0 overflow-hidden md:block">
-      <img
-        src="/images/seedling-sky.png"
-        alt=""
-        aria-hidden="true"
-        class="h-full w-full object-cover dark:hidden"
-      />
-      <img
-        src="/images/seedling-sky-dark.png"
-        alt=""
-        aria-hidden="true"
-        class="hidden h-full w-full object-cover dark:block"
-      />
-      <div class="absolute inset-0 flex flex-col justify-start items-start pl-12 pr-8 pt-20">
-        <img
-          src="/images/verus-logo-white.svg"
-          alt="Verus"
-          class="h-5 w-auto cursor-default select-none"
-        />
-        <p class="text-2xl leading-tight font-bold text-white text-balance dark:text-white mt-8 cursor-default select-none">
-          {i18n.t('unlock.hero.tagline')}
-        </p>
-      </div>
-    </section>
-
     <section class="flex min-w-0 flex-1">
       <div class="flex min-h-0 flex-1 flex-col">
         <div class="shrink-0 border-b border-border/80">
@@ -259,10 +234,42 @@
           </div>
         </div>
 
+        {#if currentStep === 1}
+          <div class="absolute top-[58px] right-6 z-20 sm:right-8">
+            <div class="flex items-center gap-1 opacity-70 transition-opacity hover:opacity-100">
+              <span class="sr-only">{i18n.t('walletCreation.name.network')}</span>
+              <button
+                type="button"
+                onclick={() => {
+                  walletData = { ...walletData, network: 'mainnet' };
+                }}
+                class="h-5 rounded border px-2 text-[10px] font-medium transition-colors {walletData.network ===
+                'mainnet'
+                  ? 'border-border bg-muted/70 text-foreground'
+                  : 'border-transparent bg-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/40'}"
+              >
+                {i18n.t('walletCreation.name.mainnetTitle')}
+              </button>
+              <button
+                type="button"
+                onclick={() => {
+                  walletData = { ...walletData, network: 'testnet' };
+                }}
+                class="h-5 rounded border px-2 text-[10px] font-medium transition-colors {walletData.network ===
+                'testnet'
+                  ? 'border-border bg-muted/70 text-foreground'
+                  : 'border-transparent bg-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/40'}"
+              >
+                {i18n.t('walletCreation.name.testnetTitle')}
+              </button>
+            </div>
+          </div>
+        {/if}
+
         <div class="flex-1 overflow-y-auto px-6 py-10 sm:px-8">
           <div class="mx-auto w-full max-w-[620px] space-y-6">
             {#if currentStep === 1}
-              <div class="space-y-3">
+              <div class="space-y-3 text-center">
                 <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
                   {i18n.t('walletCreation.step2.title')}
                 </h1>
@@ -275,14 +282,14 @@
                 errorMessage=""
               />
             {:else if currentStep === 2}
-              <div class="space-y-3">
+              <div class="space-y-3 text-center">
                 <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
                   {i18n.t('walletCreation.step3.title')}
                 </h1>
               </div>
               <SecurityStep bind:securityAccepted />
             {:else if currentStep === 3}
-              <div class="space-y-3">
+              <div class="space-y-3 text-center">
                 <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
                   {i18n.t('walletCreation.step4.title')}
                 </h1>
@@ -297,7 +304,7 @@
                 }}
               />
             {:else if currentStep === 4}
-              <div class="space-y-3">
+              <div class="space-y-3 text-center">
                 <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
                   {i18n.t('walletCreation.step5.title')}
                 </h1>
@@ -316,7 +323,7 @@
                 bind:this={verifyStepRef}
               />
             {:else if currentStep === 5}
-              <div class="space-y-3">
+              <div class="space-y-3 text-center">
                 <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
                   {i18n.t('walletCreation.step6.title')}
                 </h1>
@@ -332,7 +339,7 @@
                 }}
               />
             {:else if currentStep === 6}
-              <div class="space-y-3">
+              <div class="space-y-3 text-center">
                 <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
                   {i18n.t('walletCreation.step7.title')}
                 </h1>
@@ -344,8 +351,8 @@
         </div>
 
         <div class="shrink-0 border-t border-black/10 bg-muted/10 dark:border-white/20">
-          <div class="mx-auto flex w-full max-w-[620px] items-center justify-between gap-4 px-6 py-4 sm:px-8">
-            <Button variant="secondary" onclick={handleBack} class="w-48">
+          <div class="flex w-full items-center justify-between gap-4 px-6 py-4 sm:px-8">
+            <Button variant="secondary" onclick={handleBack} class="min-w-48 px-6">
               {i18n.t('common.back')}
             </Button>
 
@@ -353,23 +360,23 @@
               <Button
                 onclick={nextStep}
                 disabled={!walletData.name.trim() || /[/\\:*?"<>|]/.test(walletData.name)}
-                class="w-48"
+                class="min-w-48 px-6"
               >
                 {i18n.t('common.continue')}
               </Button>
             {:else if currentStep === 2}
-              <Button onclick={nextStep} disabled={!securityAccepted} class="w-48">
+              <Button onclick={nextStep} disabled={!securityAccepted} class="min-w-48 px-6">
                 {i18n.t('walletCreation.step3.button')}
               </Button>
             {:else if currentStep === 3}
-              <Button onclick={nextStep} disabled={!backupCanContinue} class="w-48">
+              <Button onclick={nextStep} disabled={!backupCanContinue} class="min-w-48 px-6">
                 {i18n.t('walletCreation.step4.button')}
               </Button>
             {:else if currentStep === 4}
               <Button
                 onclick={handleVerifyAndContinue}
                 disabled={!allVerificationFieldsFilled}
-                class="w-48"
+                class="min-w-48 px-6"
               >
                 {i18n.t('walletCreation.step5.button')}
               </Button>
@@ -384,7 +391,7 @@
                 <Button
                   onclick={handleCreateWallet}
                   disabled={!canCreateWallet || createLoading}
-                  class="w-48"
+                  class="min-w-48 px-6"
                 >
                   {createLoading
                     ? i18n.t('walletCreation.step6.buttonCreating')
@@ -406,12 +413,12 @@
                       handleOpenWallet();
                     }}
                     disabled={openWalletLoading}
-                    class="w-48"
+                    class="min-w-48 px-6"
                   >
                     {i18n.t('walletCreation.step7.buttonRetry')}
                   </Button>
                 {:else}
-                  <Button disabled class="w-48">
+                  <Button disabled class="min-w-48 px-6">
                     {i18n.t('walletCreation.step7.buttonOpening')}
                   </Button>
                 {/if}

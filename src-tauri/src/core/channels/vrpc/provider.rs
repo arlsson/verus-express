@@ -290,7 +290,7 @@ impl VrpcProvider {
 
         let body = serde_json::json!({
             "jsonrpc": "1.0",
-            "id": "lite-wallet",
+            "id": "verus-express",
             "method": method,
             "params": params
         });

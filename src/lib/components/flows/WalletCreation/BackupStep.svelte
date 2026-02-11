@@ -114,9 +114,6 @@
       <!-- Group Info -->
       <div class="mx-auto flex w-full max-w-[560px] items-center justify-between">
         <h3 class="text-card-foreground text-base font-semibold">{groupLabel}</h3>
-        <p class="text-muted-foreground text-xs">
-          {i18n.t('walletCreation.backup.groupProgress', { current: currentWordGroup + 1 })}
-        </p>
       </div>
 
       <!-- Seed Words Grid with Group Blur Protection -->
@@ -156,12 +153,6 @@
         {/if}
       </div>
 
-      <!-- Progress Indicator -->
-      <div class="text-center min-h-5">
-        {#if !hasSeenAllGroups}
-          <p class="text-muted-foreground text-xs">{i18n.t('walletCreation.backup.reviewHint')}</p>
-        {/if}
-      </div>
     </div>
   {:else}
     <div class="text-center space-y-3">

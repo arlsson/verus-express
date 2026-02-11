@@ -2,7 +2,7 @@
 	import { type VariantProps, tv } from "tailwind-variants";
 
 	export const inputVariants = tv({
-		base: "bg-background/90 dark:bg-input/20 selection:bg-primary selection:text-primary-foreground ring-offset-background placeholder:text-muted-foreground flex w-full min-w-0 border border-transparent shadow-none transition-[border-color,box-shadow,background-color] outline-none disabled:cursor-not-allowed disabled:opacity-50",
+		base: "bg-muted/90 dark:bg-muted/65 text-foreground selection:bg-primary selection:text-primary-foreground ring-offset-background placeholder:text-foreground/55 dark:placeholder:text-foreground/60 flex w-full min-w-0 border border-transparent shadow-none transition-[border-color,box-shadow,background-color] outline-none disabled:cursor-not-allowed disabled:opacity-50",
 		variants: {
 			variant: {
 				default: "h-11 rounded-md px-4 py-2 text-base md:text-sm",
@@ -52,8 +52,8 @@
 		data-slot={dataSlot}
 		class={cn(
 			"selection:bg-primary selection:text-primary-foreground ring-offset-background placeholder:text-muted-foreground flex h-11 w-full min-w-0 rounded-md border border-transparent bg-transparent px-3 pt-1.5 text-sm font-medium shadow-none transition-[border-color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50",
-			"focus-visible:border-ring/70 focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-			"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+			"focus-visible:border-transparent focus-visible:ring-ring/60 focus-visible:ring-[3px]",
+			"aria-invalid:ring-destructive/30 dark:aria-invalid:ring-destructive/45 aria-invalid:border-transparent",
 			className
 		)}
 		type="file"
@@ -68,8 +68,8 @@
 			data-slot={dataSlot}
 			class={cn(
 				inputVariants({ variant }),
-				"focus-visible:border-ring/70 focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-				"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+				"focus-visible:border-transparent focus-visible:ring-ring/60 focus-visible:ring-[3px]",
+				"aria-invalid:ring-destructive/30 dark:aria-invalid:ring-destructive/45 aria-invalid:border-transparent",
 				type === "password" && "pe-11",
 				className
 			)}

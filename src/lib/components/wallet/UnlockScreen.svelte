@@ -274,10 +274,7 @@
               bind:value={password}
               placeholder={i18n.t('unlock.password')}
               autocomplete="current-password"
-              class={
-                'bg-muted/65 text-foreground placeholder:text-foreground/55 dark:bg-muted/50 dark:placeholder:text-foreground/60' +
-                (errorMessage ? ' border-destructive' : '')
-              }
+              class={errorMessage ? 'border-destructive' : ''}
               onkeydown={(e) => e.key === 'Enter' && handleUnlock()}
             />
           </div>
@@ -371,7 +368,7 @@
           >
             <div class="flex items-start gap-3">
               <svg
-                class="h-4 w-4 mt-0.5 shrink-0 text-white"
+                class="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -396,7 +393,7 @@
           <div class="border-input bg-muted/20 w-full rounded-lg border p-4">
             <div class="flex items-start gap-3">
               <svg
-                class="h-4 w-4 mt-0.5 shrink-0 text-white"
+                class="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"

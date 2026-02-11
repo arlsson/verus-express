@@ -12,8 +12,12 @@
 
   const { onContinue = () => {} }: { onContinue?: () => void } = $props();
   const i18n = $derived($i18nStore);
-  const selectedLabel = $derived(
-    i18n.locale === 'nl' ? i18n.t('languageGate.option.nl') : i18n.t('languageGate.option.en')
+  const localeOptions = $derived([
+    { value: 'en' as const, flag: '🇺🇸', label: i18n.t('languageGate.option.en') },
+    { value: 'nl' as const, flag: '🇳🇱', label: i18n.t('languageGate.option.nl') }
+  ]);
+  const selectedOption = $derived(
+    localeOptions.find((option) => option.value === i18n.locale) ?? localeOptions[0]
   );
 
   function chooseLocale(locale: Locale) {
@@ -53,57 +57,51 @@
 
     <section class="flex min-w-0 flex-1 flex-col">
       <div class="flex-1 flex items-center justify-center px-6 py-10 sm:px-8">
-        <div class="w-full max-w-[560px] space-y-6">
-          <div class="space-y-3">
+        <div class="w-full max-w-[360px] space-y-6">
+          <div>
             <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
               {i18n.t('languageGate.title')}
             </h1>
-            <p class="text-muted-foreground text-sm">
-              {i18n.t('languageGate.description')}
-            </p>
           </div>
 
-          <div class="w-full max-w-[520px] space-y-2">
-            <label for="language-trigger" class="text-sm font-medium text-card-foreground">
-              {i18n.t('languageGate.label')}
-            </label>
-
+          <div class="w-full">
             <DropdownMenu.Root>
-              <DropdownMenu.Trigger id="language-trigger">
+              <DropdownMenu.Trigger id="language-trigger" aria-label={i18n.t('languageGate.title')}>
                 {#snippet child({ props })}
                   <Button
                     {...props}
                     variant="outline"
                     class="w-full justify-between border-input bg-background px-3 py-2 text-left text-base"
                   >
-                    <span>{selectedLabel}</span>
+                    <span class="flex items-center gap-2">
+                      <span aria-hidden="true">{selectedOption.flag}</span>
+                      <span>{selectedOption.label}</span>
+                    </span>
                     <ChevronDownIcon class="size-4 opacity-70" />
                   </Button>
                 {/snippet}
               </DropdownMenu.Trigger>
 
-              <DropdownMenu.Content align="start" class="w-[var(--bits-dropdown-menu-anchor-width)] min-w-[320px]">
+              <DropdownMenu.Content align="start" class="w-[var(--bits-dropdown-menu-anchor-width)]">
                 <DropdownMenu.RadioGroup value={i18n.locale}>
-                  <DropdownMenu.RadioItem value="en" onclick={() => chooseLocale('en')}>
-                    {i18n.t('languageGate.option.en')}
-                  </DropdownMenu.RadioItem>
-                  <DropdownMenu.RadioItem value="nl" onclick={() => chooseLocale('nl')}>
-                    {i18n.t('languageGate.option.nl')}
-                  </DropdownMenu.RadioItem>
+                  {#each localeOptions as option (option.value)}
+                    <DropdownMenu.RadioItem value={option.value} onclick={() => chooseLocale(option.value)}>
+                      <span class="flex items-center gap-2">
+                        <span aria-hidden="true">{option.flag}</span>
+                        <span>{option.label}</span>
+                      </span>
+                    </DropdownMenu.RadioItem>
+                  {/each}
                 </DropdownMenu.RadioGroup>
               </DropdownMenu.Content>
             </DropdownMenu.Root>
-
-            <p class="text-xs text-muted-foreground pt-2">
-              {i18n.t('languageGate.hint')}
-            </p>
           </div>
         </div>
       </div>
 
       <div class="shrink-0 border-t border-black/10 bg-muted/10 dark:border-white/20">
         <div class="mx-auto flex w-full max-w-[560px] items-center justify-end px-6 py-4 sm:px-8">
-          <Button onclick={onContinue} class="w-48" size="lg">
+          <Button onclick={onContinue} class="w-48">
             {i18n.t('languageGate.button')}
           </Button>
         </div>

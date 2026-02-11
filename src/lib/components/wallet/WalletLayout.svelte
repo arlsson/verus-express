@@ -15,7 +15,7 @@
   import Conversions from './sections/Conversions.svelte';
   import Identity from './sections/Identity.svelte';
   import AddressBook from './sections/AddressBook.svelte';
-  import { walletErrorsStore, dismissWalletError } from '$lib/stores/walletErrors.js';
+  import { dismissWalletError, walletErrorsStore } from '$lib/stores/walletErrors.js';
   import { i18nStore } from '$lib/i18n';
 
   interface WalletData {
@@ -25,45 +25,50 @@
     network?: 'mainnet' | 'testnet';
   }
 
-  let { walletData }: { walletData: WalletData } = $props();
-  let activeSection = $state('overview');
+  type SectionId = 'overview' | 'send' | 'receive' | 'conversions' | 'identity' | 'address-book';
+
+  const { walletData }: { walletData: WalletData } = $props();
+  let activeSection = $state<SectionId>('overview');
   const walletErrors = $derived($walletErrorsStore);
   const latestError = $derived(walletErrors.latest);
   const i18n = $derived($i18nStore);
 </script>
 
-<Sidebar.Provider>
-  <AppSidebar bind:activeSection />
-  <Sidebar.Inset>
-    <TopBar {walletData} />
-    {#if latestError}
-      <div class="mx-6 mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-        <div class="flex items-start justify-between gap-3">
-          <p class="break-all">{latestError}</p>
-          <button class="shrink-0 text-xs underline" onclick={dismissWalletError}>
-            {i18n.t('wallet.layout.dismiss')}
-          </button>
+<div class="relative min-h-screen">
+  <div class="absolute top-0 left-0 z-40 h-11 w-[16rem]" data-tauri-drag-region aria-hidden="true"></div>
+  <Sidebar.Provider>
+    <AppSidebar bind:activeSection />
+    <Sidebar.Inset>
+      <TopBar {walletData} />
+      {#if latestError}
+        <div class="mx-6 mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <div class="flex items-start justify-between gap-3">
+            <p class="break-all">{latestError}</p>
+            <button class="shrink-0 text-xs underline" onclick={dismissWalletError}>
+              {i18n.t('wallet.layout.dismiss')}
+            </button>
+          </div>
         </div>
-      </div>
-    {/if}
-    <main class="flex-1 overflow-auto">
-      {#if activeSection === 'overview'}
-        <Overview
-          {walletData}
-          onNavigateToSend={() => (activeSection = 'send')}
-          onNavigateToReceive={() => (activeSection = 'receive')}
-        />
-      {:else if activeSection === 'send'}
-        <Send />
-      {:else if activeSection === 'receive'}
-        <Receive />
-      {:else if activeSection === 'conversions'}
-        <Conversions />
-      {:else if activeSection === 'identity'}
-        <Identity />
-      {:else if activeSection === 'address-book'}
-        <AddressBook />
       {/if}
-    </main>
-  </Sidebar.Inset>
-</Sidebar.Provider>
+      <main class="flex-1 overflow-auto">
+        {#if activeSection === 'overview'}
+          <Overview
+            {walletData}
+            onNavigateToSend={() => (activeSection = 'send')}
+            onNavigateToReceive={() => (activeSection = 'receive')}
+          />
+        {:else if activeSection === 'send'}
+          <Send />
+        {:else if activeSection === 'receive'}
+          <Receive />
+        {:else if activeSection === 'conversions'}
+          <Conversions />
+        {:else if activeSection === 'identity'}
+          <Identity />
+        {:else if activeSection === 'address-book'}
+          <AddressBook />
+        {/if}
+      </main>
+    </Sidebar.Inset>
+  </Sidebar.Provider>
+</div>

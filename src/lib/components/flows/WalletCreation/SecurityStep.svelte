@@ -15,26 +15,26 @@
 
 <!-- Security Guidelines Content -->
 <div class="w-full space-y-5">
-  <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-6">
-    <p class="mb-4 text-sm font-medium text-amber-200">
+  <div class="rounded-xl border border-amber-300/70 bg-amber-50 p-6 dark:border-amber-500/35 dark:bg-amber-500/12">
+    <p class="mb-4 text-sm font-semibold text-amber-900 dark:text-amber-200">
       {i18n.t('walletCreation.security.warning')}
     </p>
 
     <ul class="space-y-2 text-sm text-foreground">
       <li class="flex items-start gap-2">
-        <span class="text-amber-500">•</span>
+        <span class="text-amber-700 dark:text-amber-400">•</span>
         <span>{i18n.t('walletCreation.security.item1')}</span>
       </li>
       <li class="flex items-start gap-2">
-        <span class="text-amber-500">•</span>
+        <span class="text-amber-700 dark:text-amber-400">•</span>
         <span>{i18n.t('walletCreation.security.item2')}</span>
       </li>
       <li class="flex items-start gap-2">
-        <span class="text-amber-500">•</span>
+        <span class="text-amber-700 dark:text-amber-400">•</span>
         <span>{i18n.t('walletCreation.security.item3')}</span>
       </li>
       <li class="flex items-start gap-2">
-        <span class="text-amber-500">•</span>
+        <span class="text-amber-700 dark:text-amber-400">•</span>
         <span>{i18n.t('walletCreation.security.item4')}</span>
       </li>
     </ul>

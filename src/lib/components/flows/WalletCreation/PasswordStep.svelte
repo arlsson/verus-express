@@ -56,6 +56,7 @@
   // Password validation with strength requirements
   const passwordsMatch = $derived(walletData.password === confirmPassword && walletData.password !== '');
   const passwordValid = $derived(passwordScore >= MIN_PASS_SCORE);
+  const showConfirmField = $derived(passwordValid || confirmPassword.length > 0);
   const canCreateWallet = $derived(passwordValid && passwordsMatch);
 
   // Notify parent component of validation state
@@ -65,7 +66,7 @@
 </script>
 
 <!-- Content only for password step -->
-<div class="mx-auto w-full max-w-[560px] space-y-5">
+<div class="mx-auto w-full max-w-[360px] space-y-5">
   <!-- Password Input with Strength Indicator -->
   <div class="space-y-2">
     <label for="wallet-password" class="text-sm font-medium text-card-foreground">
@@ -124,26 +125,28 @@
     </p>
   </div>
 
-  <!-- Confirm Password -->
-  <div class="space-y-2">
-    <label for="confirm-password" class="text-sm font-medium text-card-foreground">
-      {i18n.t('walletCreation.password.confirm')}
-    </label>
-    <Input
-      id="confirm-password"
-      type="password"
-      value={confirmPassword}
-      oninput={(e) => {
-        confirmPassword = (e.target as HTMLInputElement).value;
-      }}
-      placeholder={i18n.t('walletCreation.password.confirmPlaceholder')}
-      autocomplete="new-password"
-      aria-invalid={Boolean(confirmPassword) && !passwordsMatch}
-    />
-    <p class="min-h-5 text-xs text-destructive">
-      {#if confirmPassword && !passwordsMatch}
-        {i18n.t('walletCreation.password.mismatch')}
-      {/if}
-    </p>
-  </div>
+  {#if showConfirmField}
+    <!-- Confirm Password -->
+    <div class="space-y-2">
+      <label for="confirm-password" class="text-sm font-medium text-card-foreground">
+        {i18n.t('walletCreation.password.confirm')}
+      </label>
+      <Input
+        id="confirm-password"
+        type="password"
+        value={confirmPassword}
+        oninput={(e) => {
+          confirmPassword = (e.target as HTMLInputElement).value;
+        }}
+        placeholder={i18n.t('walletCreation.password.confirmPlaceholder')}
+        autocomplete="new-password"
+        aria-invalid={Boolean(confirmPassword) && !passwordsMatch}
+      />
+      <p class="min-h-5 text-xs text-destructive">
+        {#if confirmPassword && !passwordsMatch}
+          {i18n.t('walletCreation.password.mismatch')}
+        {/if}
+      </p>
+    </div>
+  {/if}
 </div>

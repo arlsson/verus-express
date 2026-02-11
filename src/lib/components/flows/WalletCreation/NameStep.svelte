@@ -8,7 +8,6 @@
 <script lang="ts">
   import { i18nStore } from '$lib/i18n';
   import { Input } from '$lib/components/ui/input';
-  import { badgeVariants } from '$lib/components/ui/badge';
   import { cn } from '$lib/utils.js';
 
   type WalletData = {
@@ -87,7 +86,7 @@
 
 <!-- Content centered in available space -->
 <div class="flex min-h-full flex-col items-center justify-center py-4">
-  <div class="w-full max-w-lg space-y-6 text-center">
+  <div class="relative w-full max-w-lg space-y-6 text-center">
     <!-- Main Icon with Controls -->
     <div class="relative">
       <!-- Main Icon Display -->
@@ -135,44 +134,12 @@
         oninput={(e) => onUpdate({ name: (e.target as HTMLInputElement).value })}
         placeholder={i18n.t('walletCreation.name.placeholder')}
         variant="lg"
-        class="w-full bg-background/60 text-center placeholder:text-muted-foreground/40
-               focus-visible:bg-background {hasInvalidChars ? 'text-destructive' : 'text-card-foreground'}"
+        class={cn('w-full text-center', hasInvalidChars && 'text-destructive')}
         autocomplete="off"
         spellcheck="false"
         autocorrect="off"
         autocapitalize="off"
       />
-    </div>
-
-    <!-- Network Selection -->
-    <div class="space-y-2">
-      <div class="flex items-center justify-center gap-2">
-        <button
-          type="button"
-          onclick={() => onUpdate({ network: 'mainnet' })}
-          class={cn(
-            badgeVariants({ variant: walletData.network === 'mainnet' ? 'default' : 'outline' }),
-            'h-6 cursor-pointer px-2.5 text-[11px] font-semibold transition-colors hover:bg-accent/60'
-          )}
-        >
-          {i18n.t('walletCreation.name.mainnetTitle')}
-        </button>
-        <button
-          type="button"
-          onclick={() => onUpdate({ network: 'testnet' })}
-          class={cn(
-            badgeVariants({ variant: walletData.network === 'testnet' ? 'default' : 'outline' }),
-            'h-6 cursor-pointer px-2.5 text-[11px] font-semibold transition-colors hover:bg-accent/60'
-          )}
-        >
-          {i18n.t('walletCreation.name.testnetTitle')}
-        </button>
-      </div>
-      {#if walletData.network === 'testnet'}
-        <p class="text-xs text-amber-700 dark:text-amber-400">
-          {i18n.t('walletCreation.name.testnetWarning')}
-        </p>
-      {/if}
     </div>
 
     <!-- Validation Messages -->

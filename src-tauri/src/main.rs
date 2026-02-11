@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    lite_wallet_lib::run()
+    verus_express_lib::run()
 }
