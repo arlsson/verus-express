@@ -262,11 +262,6 @@
               {/if}
             </div>
 
-            {#if wallets.length > 1}
-              <p class="text-muted-foreground text-xs">
-                {i18n.t('unlock.walletsOnDevice', { count: wallets.length })}
-              </p>
-            {/if}
           </div>
         {/if}
 
