@@ -90,42 +90,41 @@
 </script>
 
 <!-- Content only for verify step -->
-<div class="space-y-5 max-w-sm mx-auto">
-  <!-- Verification Inputs -->
+<div class="mx-auto w-full max-w-[560px] space-y-3">
   {#each verificationIndices as wordIndex, i}
-    <div class="space-y-2">
-      <label for="word-{i}" class="flex items-center gap-3 text-sm font-medium">
-        <div class="w-8 h-6 bg-primary text-primary-foreground rounded flex items-center justify-center text-xs font-bold">
-          {wordIndex + 1}
-        </div>
-        <span>{i18n.t('walletCreation.verify.word', { index: wordIndex + 1 })}</span>
-      </label>
+    <div class="space-y-1.5">
+      <div class="grid grid-cols-[116px_1fr] items-center gap-3">
+        <label
+          for="word-{i}"
+          class="text-foreground flex items-center gap-2 text-sm font-medium"
+        >
+          <span
+            class="inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border bg-muted px-1.5 text-xs font-semibold"
+          >
+            {wordIndex + 1}
+          </span>
+          <span>{i18n.t('walletCreation.verify.word', { index: wordIndex + 1 })}</span>
+        </label>
 
-      <Input
-        id="word-{i}"
-        value={verificationWords[i]}
-        oninput={(e) => handleWordInput(i, e)}
-        placeholder={i18n.t('walletCreation.verify.enterWord')}
-        autocomplete="off"
-        class={verificationErrors[i] ? 'border-destructive' : ''}
-      />
+        <Input
+          id="word-{i}"
+          value={verificationWords[i]}
+          oninput={(e) => handleWordInput(i, e)}
+          placeholder={i18n.t('walletCreation.verify.enterWord')}
+          autocomplete="off"
+          aria-invalid={verificationErrors[i]}
+        />
+      </div>
 
-      {#if verificationErrors[i]}
-        <div class="flex items-center gap-2 text-xs text-destructive">
-          <span>❌</span>
-          <span>{i18n.t('walletCreation.verify.incorrect')}</span>
-        </div>
-      {/if}
+      <p class="min-h-5 pl-[119px] text-xs text-destructive">
+        {#if verificationErrors[i]}
+          {i18n.t('walletCreation.verify.incorrect')}
+        {/if}
+      </p>
     </div>
   {/each}
 
-  <!-- Verification Tip -->
-  <div class="bg-muted/50 border border-border rounded-lg p-3">
-    <div class="text-center space-y-1">
-      <h4 class="text-card-foreground font-semibold text-sm">{i18n.t('walletCreation.verify.tipTitle')}</h4>
-      <p class="text-xs text-muted-foreground">
-        {i18n.t('walletCreation.verify.tipText')}
-      </p>
-    </div>
-  </div>
+  <p class="text-muted-foreground pt-1 text-center text-xs">
+    {i18n.t('walletCreation.verify.tipText')}
+  </p>
 </div>

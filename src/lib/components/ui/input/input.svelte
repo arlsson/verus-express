@@ -1,3 +1,22 @@
+<script lang="ts" module>
+	import { type VariantProps, tv } from "tailwind-variants";
+
+	export const inputVariants = tv({
+		base: "bg-background/90 dark:bg-input/20 selection:bg-primary selection:text-primary-foreground ring-offset-background placeholder:text-muted-foreground flex w-full min-w-0 border border-transparent shadow-none transition-[border-color,box-shadow,background-color] outline-none disabled:cursor-not-allowed disabled:opacity-50",
+		variants: {
+			variant: {
+				default: "h-11 rounded-md px-4 py-2 text-base md:text-sm",
+				lg: "h-12 rounded-xl px-5 py-3 text-lg font-semibold md:text-base",
+			},
+		},
+		defaultVariants: {
+			variant: "default",
+		},
+	});
+
+	export type InputVariant = VariantProps<typeof inputVariants>["variant"];
+</script>
+
 <script lang="ts">
 	import type { HTMLInputAttributes, HTMLInputTypeAttribute } from "svelte/elements";
 	import EyeIcon from "@lucide/svelte/icons/eye";
@@ -9,13 +28,16 @@
 	type Props = WithElementRef<
 		Omit<HTMLInputAttributes, "type"> &
 			({ type: "file"; files?: FileList } | { type?: InputType; files?: undefined })
-	>;
+	> & {
+		variant?: InputVariant;
+	};
 
 	let {
 		ref = $bindable(null),
 		value = $bindable(),
 		type,
 		files = $bindable(),
+		variant = "default",
 		class: className,
 		"data-slot": dataSlot = "input",
 		...restProps
@@ -45,7 +67,7 @@
 			bind:this={ref}
 			data-slot={dataSlot}
 			class={cn(
-				"bg-background/90 dark:bg-input/20 selection:bg-primary selection:text-primary-foreground ring-offset-background placeholder:text-muted-foreground flex h-11 w-full min-w-0 rounded-md border border-transparent px-4 py-2 text-base shadow-none transition-[border-color,box-shadow,background-color] outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+				inputVariants({ variant }),
 				"focus-visible:border-ring/70 focus-visible:ring-ring/50 focus-visible:ring-[3px]",
 				"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
 				type === "password" && "pe-11",

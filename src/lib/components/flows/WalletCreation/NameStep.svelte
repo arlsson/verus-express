@@ -7,6 +7,9 @@
 
 <script lang="ts">
   import { i18nStore } from '$lib/i18n';
+  import { Input } from '$lib/components/ui/input';
+  import { badgeVariants } from '$lib/components/ui/badge';
+  import { cn } from '$lib/utils.js';
 
   type WalletData = {
     name: string;
@@ -83,17 +86,19 @@
 </script>
 
 <!-- Content centered in available space -->
-<div class="flex flex-col items-center justify-center min-h-full py-8">
-  <div class="text-center space-y-8 w-full max-w-lg">
+<div class="flex min-h-full flex-col items-center justify-center py-4">
+  <div class="w-full max-w-lg space-y-6 text-center">
     <!-- Main Icon with Controls -->
     <div class="relative">
       <!-- Main Icon Display -->
-      <div class="{selectedColorClass} w-32 h-32 rounded-3xl flex items-center justify-center shadow-xl border-4 border-white/20 mx-auto">
+      <div
+        class="{selectedColorClass} mx-auto flex h-28 w-28 items-center justify-center rounded-3xl border-4 border-white/20 shadow-xl"
+      >
         <span class="text-6xl" role="img">{walletData.emoji}</span>
       </div>
 
       <!-- Small Picker Controls -->
-      <div class="absolute right-20 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+      <div class="absolute left-1/2 top-1/2 ml-20 flex -translate-y-1/2 flex-col gap-2">
         <!-- Emoji Picker -->
         <button
           onclick={() => {
@@ -122,16 +127,16 @@
       </div>
     </div>
 
-    <!-- Large Name Input -->
-    <div>
-      <input
+    <!-- Name Input -->
+    <div class="mx-auto w-full max-w-[420px]">
+      <Input
         type="text"
         value={walletData.name}
         oninput={(e) => onUpdate({ name: (e.target as HTMLInputElement).value })}
         placeholder={i18n.t('walletCreation.name.placeholder')}
-        class="w-full text-2xl font-bold text-center bg-background/60 border-2 border-border rounded-2xl px-4 py-4 
-               focus:border-primary focus:bg-background focus:shadow-lg transition-all outline-none
-               placeholder:text-muted-foreground/40 {hasInvalidChars ? 'text-destructive border-destructive' : 'text-card-foreground'}"
+        variant="lg"
+        class="w-full bg-background/60 text-center placeholder:text-muted-foreground/40
+               focus-visible:bg-background {hasInvalidChars ? 'text-destructive' : 'text-card-foreground'}"
         autocomplete="off"
         spellcheck="false"
         autocorrect="off"
@@ -140,30 +145,27 @@
     </div>
 
     <!-- Network Selection -->
-    <div class="space-y-3">
-      <p class="text-sm font-medium text-card-foreground">{i18n.t('walletCreation.name.network')}</p>
-      <div class="grid grid-cols-2 gap-3">
+    <div class="space-y-2">
+      <div class="flex items-center justify-center gap-2">
         <button
           type="button"
           onclick={() => onUpdate({ network: 'mainnet' })}
-          class="rounded-xl border px-4 py-3 text-left transition-all
-            {walletData.network === 'mainnet'
-              ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
-              : 'border-border bg-background hover:border-primary/40'}"
+          class={cn(
+            badgeVariants({ variant: walletData.network === 'mainnet' ? 'default' : 'outline' }),
+            'h-6 cursor-pointer px-2.5 text-[11px] font-semibold transition-colors hover:bg-accent/60'
+          )}
         >
-          <p class="text-sm font-semibold text-card-foreground">{i18n.t('walletCreation.name.mainnetTitle')}</p>
-          <p class="text-xs text-muted-foreground mt-1">{i18n.t('walletCreation.name.mainnetDescription')}</p>
+          {i18n.t('walletCreation.name.mainnetTitle')}
         </button>
         <button
           type="button"
           onclick={() => onUpdate({ network: 'testnet' })}
-          class="rounded-xl border px-4 py-3 text-left transition-all
-            {walletData.network === 'testnet'
-              ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
-              : 'border-border bg-background hover:border-primary/40'}"
+          class={cn(
+            badgeVariants({ variant: walletData.network === 'testnet' ? 'default' : 'outline' }),
+            'h-6 cursor-pointer px-2.5 text-[11px] font-semibold transition-colors hover:bg-accent/60'
+          )}
         >
-          <p class="text-sm font-semibold text-card-foreground">{i18n.t('walletCreation.name.testnetTitle')}</p>
-          <p class="text-xs text-muted-foreground mt-1">{i18n.t('walletCreation.name.testnetDescription')}</p>
+          {i18n.t('walletCreation.name.testnetTitle')}
         </button>
       </div>
       {#if walletData.network === 'testnet'}

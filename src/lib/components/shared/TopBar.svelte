@@ -50,16 +50,18 @@
   }
 </script>
 
-<div class="h-[50px] bg-background border-b border-border flex items-center justify-between pl-4 pr-6">
-  <!-- Home Button (moved more left) -->
-  <Button
-    variant="ghost"
-    size="sm"
-    onclick={handleHomeClick}
-    class="text-muted-foreground hover:text-foreground p-2"
-  >
-    <Home class="h-5 w-5" />
-  </Button>
+<div class="h-[50px] bg-background border-b border-border flex items-center px-4">
+  <!-- Left rail reserves room for macOS traffic lights -->
+  <div class="flex w-[96px] justify-end">
+    <Button
+      variant="ghost"
+      size="sm"
+      onclick={handleHomeClick}
+      class="text-muted-foreground hover:text-foreground p-2"
+    >
+      <Home class="h-5 w-5" />
+    </Button>
+  </div>
 
   <!-- Step Indicator (dot style) -->
   <div class="flex-1 flex items-center justify-center gap-4">
@@ -84,8 +86,8 @@
     </div>
   </div>
 
-  <!-- Right spacer to center progress -->
-  <div class="w-[44px]"></div>
+  <!-- Right spacer mirrors left rail to keep progress centered -->
+  <div class="w-[96px]"></div>
 </div>
 
 <!-- Custom Confirmation Dialog -->

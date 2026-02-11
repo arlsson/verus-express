@@ -1,25 +1,20 @@
 <!--
   Component: WalletCreation
-  Purpose: Skeleton layout for wallet creation flow - routes to individual step components
-  Last Updated: Step 7 unlocks wallet before navigating to /wallet
+  Purpose: Wallet creation flow with onboarding, backup, and setup
+  Last Updated: Login-style hero panel layout with setup-only steps (intro removed)
   Security: Manages shared state and sensitive data clearing, enforces security acknowledgment
 -->
 
 <script lang="ts">
-  // Components
   import { invoke } from '@tauri-apps/api/core';
+  import { goto } from '$app/navigation';
   import { Button } from '$lib/components/ui/button';
-  import { Checkbox } from '$lib/components/ui/checkbox';
-  import TopBar from '$lib/components/shared/TopBar.svelte';
-  import StepLayout from '$lib/components/shared/StepLayout.svelte';
-  import IntroStep from './IntroStep.svelte';
   import NameStep from './NameStep.svelte';
   import SecurityStep from './SecurityStep.svelte';
   import BackupStep from './BackupStep.svelte';
   import VerifyStep from './VerifyStep.svelte';
   import PasswordStep from './PasswordStep.svelte';
   import CompleteStep from './CompleteStep.svelte';
-  import { goto } from '$app/navigation';
   import { i18nStore } from '$lib/i18n';
 
   type WalletData = {
@@ -32,6 +27,8 @@
 
   type WalletUpdate = Partial<WalletData>;
   type CreateWalletResult = { wallet_id: string; success: boolean };
+
+  const TOTAL_STEPS = 6;
 
   // Props
   const { onGoHome = () => {} } = $props();
@@ -50,12 +47,14 @@
   let securityAccepted = $state(false);
   let allVerificationFieldsFilled = $state(false);
   let verifyStepRef: any = $state(null);
+  let backupCanContinue = $state(false);
   let canCreateWallet = $state(false);
   let createLoading = $state(false);
   let createError = $state('');
   let createdWalletId = $state('');
   let openWalletLoading = $state(false);
   let openWalletError = $state('');
+  let openWalletAttempted = $state(false);
   const i18n = $derived($i18nStore);
 
   function extractWalletErrorType(error: unknown): string | null {
@@ -100,6 +99,7 @@
 
       createdWalletId = result.wallet_id;
       seedPhrase = '';
+      openWalletAttempted = false;
       nextStep();
     } catch (error) {
       const errorType = extractWalletErrorType(error);
@@ -144,7 +144,15 @@
   }
 
   function nextStep() {
-    currentStep++;
+    currentStep = Math.min(currentStep + 1, TOTAL_STEPS);
+  }
+
+  function handleBack() {
+    if (currentStep > 1) {
+      currentStep -= 1;
+      return;
+    }
+    handleGoHome();
   }
 
   // Handle verification and continue
@@ -171,10 +179,20 @@
     walletData = { name: '', emoji: '💰', color: 'blue', password: '', network: 'mainnet' };
     verificationIndices = [];
     securityAccepted = false;
+    backupCanContinue = false;
     createdWalletId = '';
     openWalletError = '';
     openWalletLoading = false;
+    openWalletAttempted = false;
   }
+
+  $effect(() => {
+    if (currentStep !== TOTAL_STEPS) return;
+    if (!createdWalletId || !walletData.password) return;
+    if (openWalletAttempted || openWalletLoading || openWalletError) return;
+    openWalletAttempted = true;
+    handleOpenWallet();
+  });
 
   // Security: Clear all sensitive data on component destroy
   $effect(() => {
@@ -185,228 +203,223 @@
   });
 </script>
 
-<!-- Main Layout (simplified to work in fixed overlay) -->
 <main class="h-screen flex flex-col overflow-hidden">
-  <!-- Background (matches WelcomeScreen) -->
   <div class="absolute inset-0 bg-[#fbfbfb] dark:bg-[#111111]"></div>
+  <div class="absolute top-0 right-0 left-0 z-30 h-11" data-tauri-drag-region aria-hidden="true"></div>
 
-  <!-- Top Bar with Progress and Home -->
-  <div class="relative z-20 shrink-0">
-    <TopBar
-      currentStep={currentStep}
-      totalSteps={7}
-      onGoHome={handleGoHome}
-      requireConfirmation={currentStep >= 4}
-      confirmationMessage={i18n.t('walletCreation.confirmLeave')}
-    />
-  </div>
-
-  <!-- Step Content using reusable layout -->
-  <div class="relative z-10 flex-1">
-    {#if currentStep === 1}
-      <StepLayout>
-        <div slot="left">
-          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
-            {i18n.t('walletCreation.step1.title')}
-          </h1>
-          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step1.description')}</p>
-        </div>
-
-        <IntroStep slot="right" />
-
-        <Button slot="action" size="lg" onclick={() => nextStep()} class="w-48">
-          {i18n.t('walletCreation.step1.button')}
-        </Button>
-      </StepLayout>
-    {:else if currentStep === 2}
-      <StepLayout>
-        <div slot="left">
-          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
-            {i18n.t('walletCreation.step2.title')}
-          </h1>
-          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step2.description1')}</p>
-          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step2.description2')}</p>
-        </div>
-
-        <NameStep
-          slot="right"
-          walletData={walletData}
-          onUpdate={(data: WalletUpdate) => {
-            walletData = { ...walletData, ...data };
-          }}
-          errorMessage=""
+  <div class="relative z-10 flex min-h-0 flex-1 w-full">
+    <section class="relative hidden w-[clamp(320px,38vw,500px)] shrink-0 overflow-hidden md:block">
+      <img
+        src="/images/seedling-sky.png"
+        alt=""
+        aria-hidden="true"
+        class="h-full w-full object-cover dark:hidden"
+      />
+      <img
+        src="/images/seedling-sky-dark.png"
+        alt=""
+        aria-hidden="true"
+        class="hidden h-full w-full object-cover dark:block"
+      />
+      <div class="absolute inset-0 flex flex-col justify-start items-start pl-12 pr-8 pt-20">
+        <img
+          src="/images/verus-logo-white.svg"
+          alt="Verus"
+          class="h-5 w-auto cursor-default select-none"
         />
+        <p class="text-2xl leading-tight font-bold text-white text-balance dark:text-white mt-8 cursor-default select-none">
+          {i18n.t('unlock.hero.tagline')}
+        </p>
+      </div>
+    </section>
 
-        <Button
-          slot="action"
-          onclick={() => {
-            nextStep();
-          }}
-          disabled={!walletData.name.trim() || /[/\\:*?"<>|]/.test(walletData.name)}
-          class="w-48"
-          size="lg"
-        >
-          {i18n.t('common.continue')}
-        </Button>
-      </StepLayout>
-    {:else if currentStep === 3}
-      <StepLayout>
-        <div slot="left">
-          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
-            {i18n.t('walletCreation.step3.title')}
-          </h1>
-          <p class="text-muted-foreground text-sm mt-4">
-            {i18n.t('walletCreation.step3.description')}
-          </p>
-        </div>
+    <section class="flex min-w-0 flex-1">
+      <div class="flex min-h-0 flex-1 flex-col">
+        <div class="shrink-0 border-b border-border/80">
+          <div class="flex h-[50px] items-center justify-center px-6">
+            <div class="flex items-center gap-4">
+              <span class="text-sm text-muted-foreground font-medium">
+                {i18n.t('shared.stepOf', { current: currentStep, total: TOTAL_STEPS })}
+              </span>
 
-        <SecurityStep slot="right" />
-
-        <div slot="action" class="flex items-center gap-4">
-          <div class="flex items-center space-x-3">
-            <Checkbox id="security-acceptance-main" bind:checked={securityAccepted} />
-            <label
-              for="security-acceptance-main"
-              class="text-sm text-foreground cursor-pointer select-none"
-            >
-              {i18n.t('walletCreation.step3.checkbox')}
-            </label>
+              <div class="flex items-center gap-2">
+                {#each Array(TOTAL_STEPS) as _, index}
+                  {@const stepNum = index + 1}
+                  <div
+                    class="w-2 h-2 rounded-full transition-all duration-200
+                           {stepNum === currentStep
+                             ? 'bg-primary scale-125'
+                             : stepNum < currentStep
+                               ? 'bg-primary/60'
+                               : 'bg-muted-foreground/30'}"
+                  ></div>
+                {/each}
+              </div>
+            </div>
           </div>
-          <Button onclick={() => nextStep()} disabled={!securityAccepted} class="w-48" size="lg">
-            {i18n.t('walletCreation.step3.button')}
-          </Button>
-        </div>
-      </StepLayout>
-    {:else if currentStep === 4}
-      <StepLayout>
-        <div slot="left">
-          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
-            {i18n.t('walletCreation.step4.title')}
-          </h1>
-          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step4.description')}</p>
         </div>
 
-        <BackupStep
-          slot="right"
-          walletData={walletData}
-          seedPhrase={seedPhrase}
-          onSeedGenerated={(seed: string) => {
-            seedPhrase = seed;
-          }}
-        />
-
-        <Button
-          slot="action"
-          onclick={() => nextStep()}
-          disabled={!seedPhrase}
-          class="w-48"
-          size="lg"
-        >
-          {i18n.t('walletCreation.step4.button')}
-        </Button>
-      </StepLayout>
-    {:else if currentStep === 5}
-      <StepLayout>
-        <div slot="left">
-          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
-            {i18n.t('walletCreation.step5.title')}
-          </h1>
-          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step5.description')}</p>
+        <div class="flex-1 overflow-y-auto px-6 py-10 sm:px-8">
+          <div class="mx-auto w-full max-w-[620px] space-y-6">
+            {#if currentStep === 1}
+              <div class="space-y-3">
+                <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+                  {i18n.t('walletCreation.step2.title')}
+                </h1>
+              </div>
+              <NameStep
+                walletData={walletData}
+                onUpdate={(data: WalletUpdate) => {
+                  walletData = { ...walletData, ...data };
+                }}
+                errorMessage=""
+              />
+            {:else if currentStep === 2}
+              <div class="space-y-3">
+                <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+                  {i18n.t('walletCreation.step3.title')}
+                </h1>
+              </div>
+              <SecurityStep bind:securityAccepted />
+            {:else if currentStep === 3}
+              <div class="space-y-3">
+                <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+                  {i18n.t('walletCreation.step4.title')}
+                </h1>
+                <p class="text-muted-foreground text-sm">{i18n.t('walletCreation.step4.description')}</p>
+              </div>
+              <BackupStep
+                walletData={walletData}
+                seedPhrase={seedPhrase}
+                bind:canContinue={backupCanContinue}
+                onSeedGenerated={(seed: string) => {
+                  seedPhrase = seed;
+                }}
+              />
+            {:else if currentStep === 4}
+              <div class="space-y-3">
+                <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+                  {i18n.t('walletCreation.step5.title')}
+                </h1>
+                <p class="text-muted-foreground text-sm">{i18n.t('walletCreation.step5.description')}</p>
+              </div>
+              <VerifyStep
+                seedPhrase={seedPhrase}
+                verificationIndices={verificationIndices}
+                onVerified={nextStep}
+                onSetupVerification={(indices: number[]) => {
+                  verificationIndices = indices;
+                }}
+                onFieldsChanged={(filled: boolean) => {
+                  allVerificationFieldsFilled = filled;
+                }}
+                bind:this={verifyStepRef}
+              />
+            {:else if currentStep === 5}
+              <div class="space-y-3">
+                <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+                  {i18n.t('walletCreation.step6.title')}
+                </h1>
+                <p class="text-muted-foreground text-sm">{i18n.t('walletCreation.step6.description')}</p>
+              </div>
+              <PasswordStep
+                walletData={walletData}
+                onUpdate={(data: WalletUpdate) => {
+                  walletData = { ...walletData, ...data };
+                }}
+                onCanCreateChanged={(canCreate: boolean) => {
+                  canCreateWallet = canCreate;
+                }}
+              />
+            {:else if currentStep === 6}
+              <div class="space-y-3">
+                <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+                  {i18n.t('walletCreation.step7.title')}
+                </h1>
+                <p class="text-muted-foreground text-sm">{i18n.t('walletCreation.step7.description')}</p>
+              </div>
+              <CompleteStep isOpening={openWalletLoading} openError={openWalletError} />
+            {/if}
+          </div>
         </div>
 
-        <VerifyStep
-          slot="right"
-          seedPhrase={seedPhrase}
-          verificationIndices={verificationIndices}
-          onVerified={nextStep}
-          onSetupVerification={(indices: number[]) => {
-            verificationIndices = indices;
-          }}
-          onFieldsChanged={(filled: boolean) => {
-            allVerificationFieldsFilled = filled;
-          }}
-          bind:this={verifyStepRef}
-        />
+        <div class="shrink-0 border-t border-black/10 bg-muted/10 dark:border-white/20">
+          <div class="mx-auto flex w-full max-w-[620px] items-center justify-between gap-4 px-6 py-4 sm:px-8">
+            <Button variant="secondary" onclick={handleBack} class="w-48">
+              {i18n.t('common.back')}
+            </Button>
 
-        <Button
-          slot="action"
-          onclick={handleVerifyAndContinue}
-          disabled={!allVerificationFieldsFilled}
-          class="w-48"
-          size="lg"
-        >
-          {i18n.t('walletCreation.step5.button')}
-        </Button>
-      </StepLayout>
-    {:else if currentStep === 6}
-      <StepLayout>
-        <div slot="left">
-          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
-            {i18n.t('walletCreation.step6.title')}
-          </h1>
-          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step6.description')}</p>
+            {#if currentStep === 1}
+              <Button
+                onclick={nextStep}
+                disabled={!walletData.name.trim() || /[/\\:*?"<>|]/.test(walletData.name)}
+                class="w-48"
+              >
+                {i18n.t('common.continue')}
+              </Button>
+            {:else if currentStep === 2}
+              <Button onclick={nextStep} disabled={!securityAccepted} class="w-48">
+                {i18n.t('walletCreation.step3.button')}
+              </Button>
+            {:else if currentStep === 3}
+              <Button onclick={nextStep} disabled={!backupCanContinue} class="w-48">
+                {i18n.t('walletCreation.step4.button')}
+              </Button>
+            {:else if currentStep === 4}
+              <Button
+                onclick={handleVerifyAndContinue}
+                disabled={!allVerificationFieldsFilled}
+                class="w-48"
+              >
+                {i18n.t('walletCreation.step5.button')}
+              </Button>
+            {:else if currentStep === 5}
+              <div class="flex flex-col items-end gap-2">
+                {#if createError}
+                  <p class="text-destructive text-sm">{createError}</p>
+                {/if}
+                {#if createLoading}
+                  <p class="text-muted-foreground text-xs">{i18n.t('walletCreation.step6.loadingHint')}</p>
+                {/if}
+                <Button
+                  onclick={handleCreateWallet}
+                  disabled={!canCreateWallet || createLoading}
+                  class="w-48"
+                >
+                  {createLoading
+                    ? i18n.t('walletCreation.step6.buttonCreating')
+                    : i18n.t('walletCreation.step6.buttonCreate')}
+                </Button>
+              </div>
+            {:else if currentStep === 6}
+              <div class="flex flex-col items-end gap-2">
+                <div class="min-h-5">
+                  {#if openWalletError}
+                    <p class="text-destructive text-sm">{openWalletError}</p>
+                  {/if}
+                </div>
+                {#if openWalletError}
+                  <Button
+                    onclick={() => {
+                      openWalletError = '';
+                      openWalletAttempted = true;
+                      handleOpenWallet();
+                    }}
+                    disabled={openWalletLoading}
+                    class="w-48"
+                  >
+                    {i18n.t('walletCreation.step7.buttonRetry')}
+                  </Button>
+                {:else}
+                  <Button disabled class="w-48">
+                    {i18n.t('walletCreation.step7.buttonOpening')}
+                  </Button>
+                {/if}
+              </div>
+            {/if}
+          </div>
         </div>
-
-        <PasswordStep
-          slot="right"
-          walletData={walletData}
-          onUpdate={(data: WalletUpdate) => {
-            walletData = { ...walletData, ...data };
-          }}
-          onCanCreateChanged={(canCreate: boolean) => {
-            canCreateWallet = canCreate;
-          }}
-        />
-
-        <div slot="action" class="flex flex-col items-center gap-3">
-          {#if createError}
-            <p class="text-destructive text-sm">{createError}</p>
-          {/if}
-          {#if createLoading}
-            <p class="text-muted-foreground text-xs">{i18n.t('walletCreation.step6.loadingHint')}</p>
-          {/if}
-          <Button
-            onclick={handleCreateWallet}
-            disabled={!canCreateWallet || createLoading}
-            class="w-48"
-            size="lg"
-          >
-            {createLoading
-              ? i18n.t('walletCreation.step6.buttonCreating')
-              : i18n.t('walletCreation.step6.buttonCreate')}
-          </Button>
-        </div>
-      </StepLayout>
-    {:else if currentStep === 7}
-      <StepLayout>
-        <div slot="left">
-          <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight text-green-700 dark:text-green-400">
-            {i18n.t('walletCreation.step7.title')}
-          </h1>
-          <p class="text-muted-foreground text-sm mt-4">{i18n.t('walletCreation.step7.description')}</p>
-        </div>
-
-        <CompleteStep slot="right" walletData={walletData} />
-
-        <div slot="action" class="flex flex-col items-center gap-3">
-          {#if openWalletError}
-            <p class="text-destructive text-sm">{openWalletError}</p>
-          {/if}
-          {#if openWalletLoading}
-            <p class="text-muted-foreground text-xs">{i18n.t('walletCreation.step7.loadingHint')}</p>
-          {/if}
-          <Button
-            onclick={handleOpenWallet}
-            disabled={openWalletLoading}
-            class="w-48"
-            size="lg"
-          >
-            {openWalletLoading
-              ? i18n.t('walletCreation.step7.buttonOpening')
-              : i18n.t('walletCreation.step7.buttonOpen')}
-          </Button>
-        </div>
-      </StepLayout>
-    {/if}
+      </div>
+    </section>
   </div>
 </main>

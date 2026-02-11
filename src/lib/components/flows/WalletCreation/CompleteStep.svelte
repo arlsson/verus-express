@@ -1,91 +1,64 @@
 <!-- 
   Component: CompleteStep
-  Purpose: Complete success step with 2-column layout + bottom action
-  Last Updated: Refactored from SuccessStep to new layout
-  Security: No sensitive data - success confirmation only
+  Purpose: Finalizing/loading state before wallet is opened
+  Last Updated: Streamlined to a compact status view with loading and error states
+  Security: No sensitive data - status feedback only
 -->
 
 <script lang="ts">
-  import { i18nStore, networkLocaleKey } from '$lib/i18n';
+  import { Spinner } from '$lib/components/ui/spinner';
+  import { i18nStore } from '$lib/i18n';
 
   // Props
   let {
-    walletData = { name: '', emoji: '💰', color: 'blue', password: '', network: 'mainnet' },
-    onFinish = () => {}
+    isOpening = false,
+    openError = ''
   } = $props();
 
   const i18n = $derived($i18nStore);
-
-  // Color class lookup
-  const colorOptions = [
-    { name: 'blue', class: 'bg-blue-100 dark:bg-blue-900' },
-    { name: 'green', class: 'bg-green-100 dark:bg-green-900' },
-    { name: 'purple', class: 'bg-purple-100 dark:bg-purple-900' },
-    { name: 'orange', class: 'bg-orange-100 dark:bg-orange-900' },
-    { name: 'pink', class: 'bg-pink-100 dark:bg-pink-900' },
-    { name: 'yellow', class: 'bg-yellow-100 dark:bg-yellow-900' }
-  ];
-
-  const selectedColorClass = $derived(
-    colorOptions.find((c) => c.name === walletData.color)?.class || colorOptions[0].class
-  );
 </script>
 
-<!-- Content only for complete step -->
-<div class="space-y-5 max-w-md mx-auto text-center">
-  <!-- Success Icon -->
-  <div class="flex justify-center">
-    <div class="w-16 h-16 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
-      <span class="text-3xl">✅</span>
-    </div>
+<!-- Content only for finalizing step -->
+<div class="mx-auto flex w-full max-w-[560px] flex-col items-center justify-center space-y-6 py-4 text-center">
+  <div class="flex h-20 w-20 items-center justify-center rounded-full bg-muted/30">
+    {#if openError}
+      <span class="text-4xl">⚠️</span>
+    {:else if isOpening}
+      <Spinner class="size-10 text-primary" />
+    {:else}
+      <span class="inline-block h-3 w-3 animate-pulse rounded-full bg-primary/80"></span>
+    {/if}
   </div>
 
-  <!-- Wallet Preview -->
-  <div class="flex justify-center">
-    <div class="flex items-center gap-3 p-4 bg-muted/30 border border-border rounded-lg">
-      <div class="{selectedColorClass} w-12 h-12 rounded-full flex items-center justify-center">
-        <span class="text-xl" role="img">{walletData.emoji}</span>
-      </div>
-      <span class="text-card-foreground font-medium text-lg">
-        {walletData.name}
-      </span>
-    </div>
-  </div>
-
-  <div class="text-xs text-muted-foreground">
-    {i18n.t('walletCreation.complete.network', {
-      network: i18n.t(networkLocaleKey(walletData.network))
-    })}
-  </div>
-
-  <!-- Success Details -->
-  <div class="bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-lg p-4 space-y-2">
-    <h3 class="text-green-800 dark:text-green-400 font-semibold text-sm">
-      {i18n.t('walletCreation.complete.nextTitle')}
-    </h3>
-    <div class="text-xs text-green-700 dark:text-green-300 space-y-1">
-      <div class="flex items-center gap-2">
+  <div class="w-full rounded-xl border border-border/70 bg-muted/20 p-4 text-left">
+    <div class="space-y-2 text-sm">
+      <div class="flex items-center gap-2 text-foreground">
         <span>✓</span>
-        <span>{i18n.t('walletCreation.complete.next1')}</span>
+        <span>{i18n.t('walletCreation.complete.statusCreated')}</span>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 text-foreground">
         <span>✓</span>
-        <span>{i18n.t('walletCreation.complete.next2')}</span>
+        <span>{i18n.t('walletCreation.complete.statusSecured')}</span>
       </div>
-      <div class="flex items-center gap-2">
-        <span>✓</span>
-        <span>{i18n.t('walletCreation.complete.next3')}</span>
+      <div class="flex items-center gap-2 {openError ? 'text-destructive' : 'text-muted-foreground'}">
+        {#if openError}
+          <span>!</span>
+          <span>{i18n.t('walletCreation.complete.statusOpenFailed')}</span>
+        {:else}
+          <span class="inline-block h-3 w-3 animate-pulse rounded-full bg-primary/80"></span>
+          <span>{i18n.t('walletCreation.complete.statusOpening')}</span>
+        {/if}
       </div>
     </div>
   </div>
 
-  <!-- Security Reminder -->
-  <div class="bg-muted/50 border border-border rounded-lg p-3">
-    <h4 class="text-card-foreground font-semibold mb-1 text-sm">{i18n.t('walletCreation.complete.remember')}</h4>
-    <div class="text-xs text-muted-foreground space-y-1">
-      <p>{i18n.t('walletCreation.complete.reminder1')}</p>
-      <p>{i18n.t('walletCreation.complete.reminder2')}</p>
-      <p>{i18n.t('walletCreation.complete.reminder3')}</p>
-    </div>
-  </div>
+  <p class="text-muted-foreground text-xs">
+    {#if openError}
+      {i18n.t('walletCreation.step7.loadingHint')}
+    {:else if isOpening}
+      {i18n.t('walletCreation.complete.waitingHint')}
+    {:else}
+      {i18n.t('walletCreation.step7.loadingHint')}
+    {/if}
+  </p>
 </div>

@@ -42,6 +42,7 @@
   let passwordScore = $state(0);
   const passwordStrength = $derived(getPasswordStrength(passwordScore));
   const strengthBars = [0, 1, 2, 3, 4];
+  const strengthLabel = $derived(i18n.t(`walletCreation.password.level.${passwordStrength.label}`));
 
   // Update score when password changes
   $effect(() => {
@@ -64,7 +65,7 @@
 </script>
 
 <!-- Content only for password step -->
-<div class="space-y-5 max-w-sm mx-auto">
+<div class="mx-auto w-full max-w-[560px] space-y-5">
   <!-- Password Input with Strength Indicator -->
   <div class="space-y-2">
     <label for="wallet-password" class="text-sm font-medium text-card-foreground">
@@ -77,54 +78,50 @@
       oninput={(e) => onUpdate({ password: (e.target as HTMLInputElement).value })}
       placeholder={i18n.t('walletCreation.password.placeholder')}
       autocomplete="new-password"
-      class={walletData.password && !passwordValid ? 'border-destructive' : ''}
+      aria-invalid={Boolean(walletData.password) && !passwordValid}
     />
 
     <!-- Strength Bars (5 bars) -->
-    {#if walletData.password}
-      <div class="flex gap-1 h-1.5">
-        {#each strengthBars as i}
-          {@const isActive = i < passwordStrength.level}
-          {@const barColor = isActive
-            ? passwordStrength.color === 'destructive'
-              ? 'bg-destructive'
-              : passwordStrength.color === 'blue-500'
-                ? 'bg-blue-500'
-                : passwordStrength.color === 'primary'
-                  ? 'bg-primary'
-                  : passwordStrength.color === 'green-500'
-                    ? 'bg-green-500 dark:bg-green-600'
-                    : 'bg-muted'
-            : 'bg-muted'}
-          <div class="flex-1 rounded-full transition-colors {barColor}"></div>
-        {/each}
-      </div>
+    <div class="space-y-1 min-h-9">
+      {#if walletData.password}
+        <div class="flex h-1.5 gap-1">
+          {#each strengthBars as i}
+            {@const isActive = i < passwordStrength.level}
+            {@const barColor = isActive
+              ? passwordStrength.color === 'destructive'
+                ? 'bg-destructive'
+                : passwordStrength.color === 'blue-500'
+                  ? 'bg-blue-500'
+                  : passwordStrength.color === 'primary'
+                    ? 'bg-primary'
+                    : passwordStrength.color === 'green-500'
+                      ? 'bg-green-500 dark:bg-green-600'
+                      : 'bg-muted'
+              : 'bg-muted'}
+            <div class="flex-1 rounded-full transition-colors {barColor}"></div>
+          {/each}
+        </div>
 
-      <!-- Strength Label -->
-      {@const labelColor = passwordStrength.color === 'destructive'
-        ? 'text-destructive'
-        : passwordStrength.color === 'blue-500'
-          ? 'text-blue-500'
-          : passwordStrength.color === 'primary'
-            ? 'text-primary'
-            : passwordStrength.color === 'green-500'
-              ? 'text-green-500 dark:text-green-400'
-              : 'text-muted-foreground'}
-      <p class="text-xs {labelColor}">
-        {i18n.t('walletCreation.password.strength', { label: passwordStrength.label })}
-      </p>
-    {/if}
+        {@const labelColor = passwordStrength.color === 'destructive'
+          ? 'text-destructive'
+          : passwordStrength.color === 'blue-500'
+            ? 'text-blue-500'
+            : passwordStrength.color === 'primary'
+              ? 'text-primary'
+              : passwordStrength.color === 'green-500'
+                ? 'text-green-500 dark:text-green-400'
+                : 'text-muted-foreground'}
+        <p class="text-xs {labelColor}">
+          {i18n.t('walletCreation.password.strength', { label: strengthLabel })}
+        </p>
+      {/if}
+    </div>
 
-    <p class="text-xs text-muted-foreground">
-      {i18n.t('walletCreation.password.requirements')}
+    <p class="min-h-5 text-xs text-destructive">
+      {#if walletData.password && !passwordValid}
+        {i18n.t('walletCreation.password.stronger')}
+      {/if}
     </p>
-
-    <!-- Password Strength Error -->
-    {#if walletData.password && !passwordValid}
-      <div class="bg-destructive/10 border border-destructive/20 rounded-lg p-2">
-        <p class="text-xs text-destructive">{i18n.t('walletCreation.password.stronger')}</p>
-      </div>
-    {/if}
   </div>
 
   <!-- Confirm Password -->
@@ -141,18 +138,12 @@
       }}
       placeholder={i18n.t('walletCreation.password.confirmPlaceholder')}
       autocomplete="new-password"
-      class={confirmPassword && !passwordsMatch ? 'border-destructive' : ''}
+      aria-invalid={Boolean(confirmPassword) && !passwordsMatch}
     />
-    {#if confirmPassword && !passwordsMatch}
-      <p class="text-xs text-destructive">{i18n.t('walletCreation.password.mismatch')}</p>
-    {/if}
-  </div>
-
-  <!-- Password Info -->
-  <div class="bg-muted/50 border border-border rounded-lg p-3">
-    <h4 class="text-card-foreground font-semibold text-sm mb-1">{i18n.t('walletCreation.password.securityTitle')}</h4>
-    <p class="text-xs text-muted-foreground">
-      {i18n.t('walletCreation.password.securityText')}
+    <p class="min-h-5 text-xs text-destructive">
+      {#if confirmPassword && !passwordsMatch}
+        {i18n.t('walletCreation.password.mismatch')}
+      {/if}
     </p>
   </div>
 </div>

@@ -7,16 +7,18 @@
 
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
+  import { Spinner } from '$lib/components/ui/spinner';
   import BlurredSeedGrid from '$lib/components/shared/BlurredSeedGrid.svelte';
-  import { i18nStore, networkLocaleKey } from '$lib/i18n';
+  import { i18nStore } from '$lib/i18n';
 
   // Props
   let {
     walletData = { name: '', emoji: '💰', color: 'blue', password: '', network: 'mainnet' },
     seedPhrase = '',
     onSeedGenerated = (seed: string) => {},
-    onNext = () => {}
+    canContinue = $bindable(false)
   } = $props();
 
   const i18n = $derived($i18nStore);
@@ -25,12 +27,15 @@
   let currentWordGroup = $state(0);
   let isLoading = $state(false);
   let errorMessage = $state('');
+  let seenGroups = $state<Set<number>>(new Set());
+  let lastSeedPhrase = $state('');
 
   // Derived values
   const seedWords = $derived(seedPhrase.split(' '));
   const currentGroupWords = $derived(seedWords.slice(currentWordGroup * 8, (currentWordGroup + 1) * 8));
   const isLastGroup = $derived(currentWordGroup >= 2);
   const isFirstGroup = $derived(currentWordGroup === 0);
+  const hasSeenAllGroups = $derived(seenGroups.size >= 3);
   const groupLabel = $derived(
     i18n.t('walletCreation.backup.groupLabel', {
       start: currentWordGroup * 8 + 1,
@@ -43,6 +48,27 @@
     if (!seedPhrase && walletData.name) {
       generateSeed();
     }
+  });
+
+  $effect(() => {
+    if (seedPhrase !== lastSeedPhrase) {
+      lastSeedPhrase = seedPhrase;
+      currentWordGroup = 0;
+      seenGroups = new Set();
+      canContinue = false;
+    }
+  });
+
+  $effect(() => {
+    if (!seedPhrase) return;
+    if (seenGroups.has(currentWordGroup)) return;
+    const nextSeen = new Set(seenGroups);
+    nextSeen.add(currentWordGroup);
+    seenGroups = nextSeen;
+  });
+
+  $effect(() => {
+    canContinue = hasSeenAllGroups;
   });
 
   async function generateSeed() {
@@ -80,31 +106,26 @@
 <div class="w-full">
   {#if isLoading}
     <div class="text-center space-y-4">
-      <div class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+      <Spinner class="mx-auto size-10 text-primary" />
       <p class="text-muted-foreground">{i18n.t('walletCreation.backup.generating')}</p>
     </div>
   {:else if seedPhrase}
-    <div class="space-y-5">
+    <div class="space-y-4">
       <!-- Group Info -->
-      <div class="text-center space-y-2">
-        <h3 class="text-card-foreground font-semibold">{groupLabel}</h3>
-        <p class="text-muted-foreground text-sm">
-          {i18n.t('walletCreation.backup.wallet', { name: walletData.name })}
-        </p>
+      <div class="mx-auto flex w-full max-w-[560px] items-center justify-between">
+        <h3 class="text-card-foreground text-base font-semibold">{groupLabel}</h3>
         <p class="text-muted-foreground text-xs">
-          {i18n.t('walletCreation.backup.network', {
-            network: i18n.t(networkLocaleKey(walletData.network))
-          })}
+          {i18n.t('walletCreation.backup.groupProgress', { current: currentWordGroup + 1 })}
         </p>
       </div>
 
       <!-- Seed Words Grid with Group Blur Protection -->
-      <div class="max-w-md mx-auto">
+      <div class="mx-auto w-full max-w-[560px]">
         <BlurredSeedGrid seedWords={currentGroupWords} startIndex={currentWordGroup * 8} showNumbers={true} />
       </div>
 
       <!-- Group Navigation -->
-      <div class="flex gap-3 justify-center">
+      <div class="flex items-center justify-center gap-3">
         {#if !isFirstGroup}
           <Button
             variant="outline"
@@ -117,26 +138,29 @@
           </Button>
         {/if}
 
-        <Button
-          onclick={() => {
-            if (currentWordGroup < 2) {
-              currentWordGroup = Math.min(currentWordGroup + 1, 2);
-            }
-          }}
-          disabled={isLastGroup}
-          size="sm"
-        >
-          {isLastGroup
-            ? i18n.t('walletCreation.backup.allGroupsShown')
-            : i18n.t('walletCreation.backup.nextGroup', { group: currentWordGroup + 2 })}
-        </Button>
+        {#if !isLastGroup}
+          <Button
+            onclick={() => {
+              if (currentWordGroup < 2) {
+                currentWordGroup = Math.min(currentWordGroup + 1, 2);
+              }
+            }}
+            size="sm"
+          >
+            {i18n.t('walletCreation.backup.nextGroup')}
+          </Button>
+        {:else}
+          <Badge variant="outline" class="border-border/80 bg-muted/30 px-3 py-1 text-xs font-medium">
+            {i18n.t('walletCreation.backup.reviewComplete')}
+          </Badge>
+        {/if}
       </div>
 
       <!-- Progress Indicator -->
-      <div class="text-center">
-        <p class="text-muted-foreground text-xs">
-          {i18n.t('walletCreation.backup.groupProgress', { current: currentWordGroup + 1 })}
-        </p>
+      <div class="text-center min-h-5">
+        {#if !hasSeenAllGroups}
+          <p class="text-muted-foreground text-xs">{i18n.t('walletCreation.backup.reviewHint')}</p>
+        {/if}
       </div>
     </div>
   {:else}

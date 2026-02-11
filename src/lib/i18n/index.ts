@@ -9,6 +9,7 @@ export type TranslationParams = Record<string, string | number>;
 type Dictionary = Record<string, string>;
 
 const DEFAULT_LOCALE: Locale = 'en';
+const LOCALE_STORAGE_KEY = 'lite_wallet_locale_v1';
 const dictionaries: Record<Locale, Dictionary> = {
   en,
   nl
@@ -34,6 +35,26 @@ function translate(locale: Locale, key: string, params?: TranslationParams): str
   const fallback = dictionaries.en[key];
   const message = primary ?? fallback ?? key;
   return interpolate(message, params);
+}
+
+function readStoredLocale(): Locale | null {
+  if (typeof globalThis.localStorage === 'undefined') return null;
+  try {
+    const raw = globalThis.localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (!raw) return null;
+    return toSupportedLocale(raw);
+  } catch {
+    return null;
+  }
+}
+
+function persistLocale(locale: Locale): void {
+  if (typeof globalThis.localStorage === 'undefined') return;
+  try {
+    globalThis.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // Ignore persistence failures (private mode / restricted storage)
+  }
 }
 
 export const localeStore = writable<Locale>(DEFAULT_LOCALE);
@@ -79,11 +100,14 @@ localeStore.subscribe((locale) => {
 });
 
 export function setLocale(locale: Locale | string): void {
-  localeStore.set(toSupportedLocale(locale));
+  const normalized = toSupportedLocale(locale);
+  localeStore.set(normalized);
+  persistLocale(normalized);
 }
 
 export function initI18n(): void {
-  localeStore.set(detectLocaleFromNavigator());
+  const stored = readStoredLocale();
+  localeStore.set(stored ?? detectLocaleFromNavigator());
 }
 
 export function networkLocaleKey(network?: 'mainnet' | 'testnet'): 'common.network.mainnet' | 'common.network.testnet' {

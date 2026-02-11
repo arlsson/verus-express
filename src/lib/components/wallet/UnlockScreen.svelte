@@ -308,7 +308,7 @@
 
           <Button
             variant="secondary"
-            class="w-full bg-primary/14 text-primary hover:bg-primary/22 dark:bg-primary/28 dark:text-primary-foreground dark:hover:bg-primary/36"
+            class="w-full"
             onclick={handleCreateWallet}
           >
             {i18n.t('unlock.button.createWallet')}

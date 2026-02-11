@@ -8,6 +8,7 @@
   import { goto } from '$app/navigation';
   import { invoke } from '@tauri-apps/api/core';
   import { i18nStore } from '$lib/i18n';
+  import LanguageGate from '$lib/components/wallet/LanguageGate.svelte';
   import WelcomeScreen from '$lib/components/wallet/WelcomeScreen.svelte';
   import UnlockScreen from '$lib/components/wallet/UnlockScreen.svelte';
 
@@ -22,7 +23,32 @@
   let loading = $state(true);
   let wallets = $state<WalletListItem[]>([]);
   let unlocked = $state(false);
+  let showLanguageGate = $state(false);
   const i18n = $derived($i18nStore);
+  const LANGUAGE_GATE_SEEN_KEY = 'lite_wallet_language_gate_seen_v1';
+
+  function hasSeenLanguageGate(): boolean {
+    if (typeof globalThis.localStorage === 'undefined') return false;
+    try {
+      return globalThis.localStorage.getItem(LANGUAGE_GATE_SEEN_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  function markLanguageGateSeen(): void {
+    if (typeof globalThis.localStorage === 'undefined') return;
+    try {
+      globalThis.localStorage.setItem(LANGUAGE_GATE_SEEN_KEY, '1');
+    } catch {
+      // Ignore local storage failures.
+    }
+  }
+
+  function handleLanguageGateContinue(): void {
+    markLanguageGateSeen();
+    showLanguageGate = false;
+  }
 
   onMount(async () => {
     try {
@@ -37,9 +63,11 @@
         goto('/wallet');
         return;
       }
+      showLanguageGate = wallets.length === 0 && !hasSeenLanguageGate();
     } catch {
       wallets = [];
       unlocked = false;
+      showLanguageGate = !hasSeenLanguageGate();
     } finally {
       loading = false;
     }
@@ -52,7 +80,11 @@
     <div class="text-muted-foreground relative z-10">{i18n.t('common.loading')}</div>
   </main>
 {:else if wallets.length === 0}
-  <WelcomeScreen />
+  {#if showLanguageGate}
+    <LanguageGate onContinue={handleLanguageGateContinue} />
+  {:else}
+    <WelcomeScreen />
+  {/if}
 {:else}
   <UnlockScreen {wallets} />
 {/if}

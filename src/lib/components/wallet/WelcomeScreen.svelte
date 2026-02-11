@@ -1,7 +1,6 @@
-<!-- 
+<!--
   WelcomeScreen Component for Verus Express Wallet
-  Two-section layout: text content (top) and action buttons (bottom) with clean divider
-  Features minimal design, reusable HelpLink component, and centered action section
+  Matches login screen proportions and hero image panel for visual consistency
 -->
 
 <script lang="ts">
@@ -41,84 +40,74 @@
   });
 </script>
 
-<main class="bg-background relative flex min-h-screen flex-col overflow-hidden">
-  <!-- Simple light gray background -->
+<main class="bg-background relative flex min-h-screen overflow-hidden">
   <div class="absolute inset-0 bg-[#fbfbfb] dark:bg-[#111111]"></div>
-  
-  <!-- Text Section -->
-  <div class="relative z-10 flex flex-1 items-center justify-center p-4">
-    <div class="mx-auto max-w-xl text-left">
-      <div class="space-y-4">
-        <div class="relative">
-          <h1 class="text-foreground leading-14 text-5xl tracking-tight font-bold">
-            {i18n.t('welcome.titleLine1')} <br/>{i18n.t('welcome.titleLine2')}
+  <div class="absolute top-0 right-0 left-0 z-20 h-11" data-tauri-drag-region aria-hidden="true"></div>
+
+  <div class="relative z-10 flex min-h-screen w-full">
+    <section class="relative hidden w-[clamp(320px,38vw,500px)] shrink-0 overflow-hidden md:block">
+      <img
+        src="/images/seedling-sky.png"
+        alt=""
+        aria-hidden="true"
+        class="h-full w-full object-cover dark:hidden"
+      />
+      <img
+        src="/images/seedling-sky-dark.png"
+        alt=""
+        aria-hidden="true"
+        class="hidden h-full w-full object-cover dark:block"
+      />
+      <div class="absolute inset-0 flex flex-col justify-start items-start pl-12 pr-8 pt-20">
+        <img
+          src="/images/verus-logo-white.svg"
+          alt="Verus"
+          class="h-5 w-auto cursor-default select-none"
+        />
+        <p class="text-2xl leading-tight font-bold text-white text-balance dark:text-white mt-8 cursor-default select-none">
+          {i18n.t('unlock.hero.tagline')}
+        </p>
+      </div>
+    </section>
+
+    <section class="flex min-w-0 flex-1 items-center justify-center px-6 py-10 sm:px-8">
+      <div class="w-full max-w-[420px] space-y-8">
+        <div class="space-y-4">
+          <h1 class="text-foreground text-4xl leading-tight tracking-tight font-bold">
+            {i18n.t('welcome.titleLine1')} <br />{i18n.t('welcome.titleLine2')}
           </h1>
-          <img 
-            src="/icons/verus-express-icons2.webp" 
-            alt="Verus Express" 
-            class="absolute -left-24 top-[43px] h-[70px] w-auto -translate-y-1/2 icon-glow"
+
+          <HelpDrawerLink
+            linkText={i18n.t('welcome.help.link')}
+            title={i18n.t('welcome.help.title')}
+            content={walletHelpContent}
           />
         </div>
-        
-        <HelpDrawerLink
-          linkText={i18n.t('welcome.help.link')}
-          title={i18n.t('welcome.help.title')}
-          content={walletHelpContent}
-        />
+
+        <div class="space-y-3">
+          <Button variant="default" size="lg" onclick={handleCreateWallet} class="w-full">
+            {i18n.t('welcome.cta.start')}
+          </Button>
+
+          <Button variant="secondary" size="lg" onclick={handleImportWallet} class="w-full">
+            {i18n.t('welcome.cta.existing')}
+          </Button>
+        </div>
+
+        <div class="text-muted-foreground text-xs">
+          {i18n.t('welcome.footer.confidence')}
+        </div>
       </div>
-    </div>
-  </div>
-
- 
-
-  <!-- Action Section -->
-  <div class="relative z-10 flex items-center justify-center py-12 bg-muted/10 border-t border-black/10 dark:border-white/20">
-    <div class="flex flex-col items-center space-y-6 text-center">
-      <div class="flex flex-col space-y-4">
-        <Button
-          variant="default"
-          size="lg"
-          onclick={handleCreateWallet}
-          class="w-64 flex"
-        >
-          {i18n.t('welcome.cta.start')}
-        </Button>
-
-        <Button
-          variant="secondary"
-          size="lg"
-          onclick={handleImportWallet}
-          class="w-64 flex"
-        >
-          {i18n.t('welcome.cta.existing')}
-        </Button>
-      </div>
-
-      <!-- Confidence Builder -->
-      <div class="text-muted-foreground text-xs">
-        {i18n.t('welcome.footer.confidence')}
-      </div>
-    </div>
+    </section>
   </div>
 </main>
 
-<!-- Wallet Creation Flow -->
 {#if showCreateWallet}
   <div class="fixed inset-0 z-50">
-    <WalletCreation 
+    <WalletCreation
       onGoHome={() => {
         showCreateWallet = false;
       }}
     />
   </div>
 {/if}
-
-<style>
-  .icon-glow {
-    filter: drop-shadow(0 0 20px #A8C4FE) drop-shadow(0 0 40px #A8C4FE40) drop-shadow(0 0 60px #A8C4FE20);
-  }
-  
-  :global(.dark) .icon-glow {
-    filter: drop-shadow(0 0 20px #00329A) drop-shadow(0 0 40px #00329A40) drop-shadow(0 0 60px #00329A20);
-  }
-</style>

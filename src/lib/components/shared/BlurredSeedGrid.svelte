@@ -16,22 +16,23 @@
 
 <div class="relative">
   <!-- Grid Container -->
-  <div class="grid grid-cols-2 gap-3 p-6 bg-muted/30 rounded-lg">
+  <div class="grid grid-cols-2 gap-2 rounded-xl bg-muted/30 p-3">
     {#each seedWords as word, index}
       {@const wordNumber = startIndex + index + 1}
       
-      <div class="relative rounded-lg bg-background border border-border p-4">
+      <div class="relative rounded-md border border-border bg-background p-2.5">
         <!-- Word Number Badge -->
         {#if showNumbers}
-          <div class="absolute -top-2 -left-2 w-6 h-6 bg-primary text-primary-foreground 
-                      rounded-full flex items-center justify-center text-xs font-bold">
+          <div
+            class="absolute -left-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-muted text-xs font-bold text-foreground"
+          >
             {wordNumber}
           </div>
         {/if}
         
         <!-- Word Display -->
-        <div class="flex items-center justify-center min-h-[2rem]">
-          <span class="font-mono text-lg font-semibold text-card-foreground">
+        <div class="flex min-h-[1.5rem] items-center justify-center">
+          <span class="font-mono text-base font-semibold text-card-foreground">
             {word}
           </span>
         </div>
