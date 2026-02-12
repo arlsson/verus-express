@@ -12,16 +12,24 @@ export const nl: Record<string, string> = {
 
   'welcome.titleLine1': 'Jouw toegang tot',
   'welcome.titleLine2': 'het nieuwe internet',
-  'welcome.help.link': 'Wat is een wallet?',
-  'welcome.help.title': 'Wat is een wallet?',
-  'welcome.help.intro': 'Een wallet is als een veilige digitale sleutelhanger die alleen jij beheert.',
-  'welcome.help.privateKeysHeading': 'Jouw privésleutels',
-  'welcome.help.privateKeysText': 'Die bewijzen dat jij eigenaar bent van je geld en identiteit. Niemand anders heeft toegang.',
-  'welcome.help.completeControlHeading': 'Volledige controle',
-  'welcome.help.completeControlText': 'Stuur wereldwijd geld en verifieer online je identiteit - zonder toestemming te vragen.',
-  'welcome.cta.start': 'Laten we je op weg helpen',
+  'welcome.help.link': 'Wat is dit nieuwe internet?',
+  'welcome.help.title': 'Wat is dit nieuwe internet?',
+  'welcome.help.intro':
+    'Vandaag gebruik je accounts die bedrijven bezitten. Zij beheren je data, bepalen je toegang en als je vertrekt neem je niets mee. Met Verus bezit je je identiteit en beheer je je data en geld met cryptografische sleutels die alleen jij hebt. Geen accounts waaruit je kunt worden gesloten. Geen platforms ertussen. Deze wallet is waar het begint.',
+  'welcome.help.privateKeysHeading': 'Wat gebeurt er met mijn data?',
+  'welcome.help.privateKeysText':
+    'Je data wordt versleuteld met sleutels die alleen jouw wallet heeft. De app kan die data opslaan, maar niet lezen. De ontwikkelaar niet, een hacker niet, een dagvaarding niet. Wissel van telefoon, herstel je wallet en alles staat er weer. Geen herstelmails, geen back-upcodes.',
+  'welcome.help.completeControlHeading': 'Wie beheert mijn identiteit?',
+  'welcome.help.completeControlText':
+    'Jij. Je VerusID is een naam die je bezit, niet huurt. Niemand kan je account schorsen of de voorwaarden wijzigen. Als je sleutels gecompromitteerd zijn, trek je in en herstel je. Je identiteit en bewijsbare gegevens gaan met je mee van app naar app.',
+  'welcome.help.paymentsHeading': 'Hoe werken betalingen en conversies?',
+  'welcome.help.paymentsText':
+    'Je verstuurt waarde direct. Geen tussenpartij, niemand die je tegoeden kan bevriezen. Moet je omzetten tussen valuta? Het protocol garandeert ultralage kosten en een eerlijke prijs zonder front-running. Conversies kunnen zelfs als onderdeel van een betaling plaatsvinden. Een stap, supermakkelijk.',
+  'welcome.help.trustHeading': 'Waarom zou ik dit vertrouwen?',
+  'welcome.help.trustText':
+    'Dat hoeft niet. Je sleutels verlaten je wallet nooit. Je data wordt versleuteld voordat die een server raakt. Alles is verifieerbaar. Niets hangt af van een bedrijf dat zijn beloftes nakomt. Vertrouwen wordt vervangen door wiskunde.',
+  'welcome.cta.start': 'Ga aan de slag',
   'welcome.cta.existing': 'Ik heb al een wallet',
-  'welcome.footer.confidence': 'Volledig self-sovereign • Jouw sleutels, jouw coins',
 
   'unlock.hero.tagline': 'Weer in controle over je digitale leven',
   'unlock.switch': 'Wisselen',
@@ -247,7 +255,7 @@ export const nl: Record<string, string> = {
     'Maak een wachtwoord om deze wallet op dit apparaat te versleutelen.',
   'walletImport.step3.loadingHint': 'Wallet wordt geimporteerd…',
   'walletImport.step4.title': 'Import wordt afgerond',
-  'walletImport.step4.description': 'Even geduld terwijl we je wallet openen.',
+  'walletImport.step4.description': 'Je wallet wordt geopend. Even geduld.',
   'walletImport.button.importing': 'Importeren…',
   'walletImport.button.import': 'Wallet importeren',
   'walletImport.button.retryOpen': 'Opnieuw openen',
@@ -322,8 +330,8 @@ export const nl: Record<string, string> = {
   'walletCreation.language.hint': 'Deze taal wordt gebruikt tijdens het instellen van je wallet.',
   'walletCreation.language.button': 'Doorgaan',
 
-  'walletCreation.step1.title': 'Laten we je op weg helpen met een nieuwe wallet.',
-  'walletCreation.step1.description': 'Samen zetten we je eerste stappen naar self-sovereignty.',
+  'walletCreation.step1.title': 'Ga aan de slag met een nieuwe wallet.',
+  'walletCreation.step1.description': 'Stel je wallet in voor self-sovereignty.',
   'walletCreation.step1.button': 'Ik begrijp het, ga verder',
 
   'walletCreation.step2.title': 'Personaliseer je wallet',
@@ -350,10 +358,10 @@ export const nl: Record<string, string> = {
   'walletCreation.step6.buttonCreate': 'Wallet maken',
 
   'walletCreation.step7.title': 'Je wallet wordt afgerond',
-  'walletCreation.step7.description': 'Even geduld terwijl we je wallet beveiligen en openen.',
+  'walletCreation.step7.description': 'Je wallet wordt beveiligd en geopend. Even geduld.',
   'walletCreation.step7.loadingHint': 'Openen duurt langer dan verwacht.',
   'walletCreation.step7.buttonOpening': 'Openen…',
-  'walletCreation.step7.buttonOpen': 'Open mijn wallet',
+  'walletCreation.step7.buttonOpen': 'Open wallet',
   'walletCreation.step7.buttonRetry': 'Opnieuw openen',
 
   'walletCreation.intro.title': 'Wat gebeurt er hierna:',

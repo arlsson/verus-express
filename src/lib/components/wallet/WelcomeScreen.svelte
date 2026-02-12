@@ -5,7 +5,7 @@
 
 <script lang="ts">
   import { Button } from '$lib/components/ui/button';
-  import * as Sheet from '$lib/components/ui/sheet';
+  import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import HelpDrawerLink from '$lib/components/common/HelpDrawerLink.svelte';
   import WalletCreation from '$lib/components/flows/WalletCreation/WalletCreation.svelte';
   import WalletImport from '$lib/components/flows/WalletImport/WalletImport.svelte';
@@ -39,6 +39,7 @@
   const walletHelpContent = $derived({
     sections: [
       {
+        heading: i18n.t('welcome.help.title'),
         text: i18n.t('welcome.help.intro')
       },
       {
@@ -48,6 +49,14 @@
       {
         heading: i18n.t('welcome.help.completeControlHeading'),
         text: i18n.t('welcome.help.completeControlText')
+      },
+      {
+        heading: i18n.t('welcome.help.paymentsHeading'),
+        text: i18n.t('welcome.help.paymentsText')
+      },
+      {
+        heading: i18n.t('welcome.help.trustHeading'),
+        text: i18n.t('welcome.help.trustText')
       }
     ]
   });
@@ -82,16 +91,10 @@
 
     <section class="flex min-w-0 flex-1 items-center justify-center px-6 py-10 sm:px-8">
       <div class="w-full max-w-[420px] space-y-8">
-        <div class="space-y-4">
+        <div>
           <h1 class="text-foreground text-4xl leading-tight tracking-tight font-bold">
             {i18n.t('welcome.titleLine1')} <br />{i18n.t('welcome.titleLine2')}
           </h1>
-
-          <HelpDrawerLink
-            linkText={i18n.t('welcome.help.link')}
-            title={i18n.t('welcome.help.title')}
-            content={walletHelpContent}
-          />
         </div>
 
         <div class="space-y-3">
@@ -105,7 +108,11 @@
         </div>
 
         <div class="text-muted-foreground text-xs">
-          {i18n.t('welcome.footer.confidence')}
+          <HelpDrawerLink
+            linkText={i18n.t('welcome.help.link')}
+            title={i18n.t('welcome.help.title')}
+            content={walletHelpContent}
+          />
         </div>
       </div>
     </section>
@@ -136,16 +143,11 @@
   </div>
 {/if}
 
-<Sheet.Root bind:open={showImportOptionsDrawer}>
-  <Sheet.Content side="right" class="w-[420px] max-w-[92vw] p-6">
-    {#snippet children()}
-      <div class="flex h-full flex-col">
-        <ImportMethodList
-          onSelect={(method) => {
-            handleStartImportWalletFlow(method);
-          }}
-        />
-      </div>
-    {/snippet}
-  </Sheet.Content>
-</Sheet.Root>
+<StandardRightSheet bind:isOpen={showImportOptionsDrawer} title={i18n.t('unlock.importMethods.title')}>
+  <ImportMethodList
+    showHeader={false}
+    onSelect={(method) => {
+      handleStartImportWalletFlow(method);
+    }}
+  />
+</StandardRightSheet>

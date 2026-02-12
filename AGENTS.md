@@ -15,6 +15,8 @@ Use this file as a table of contents, not as an encyclopedia.
   UI elements.
 - Keep visual language consistent with existing screens (especially
   `UnlockScreen` input treatment).
+- Use Lucide icons (`@lucide/svelte/icons/*`) for UI iconography; avoid custom
+  inline SVG icons when a Lucide equivalent exists.
 - For parity research against `valu-mobile` (`newsend2`), use
   `/Users/maxtheyse/dev/valu-mobile` on branch `newsend2`.
 

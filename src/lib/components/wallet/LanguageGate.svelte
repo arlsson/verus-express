@@ -54,7 +54,7 @@
 
     <section class="flex min-w-0 flex-1 flex-col">
       <div class="flex-1 flex items-center justify-center px-6 py-10 sm:px-8">
-        <div class="w-full max-w-[360px] space-y-6">
+        <div class="w-full max-w-[320px] space-y-6">
           <div>
             <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
               {i18n.t('languageGate.title')}
@@ -68,7 +68,7 @@
                   <Button
                     {...props}
                     variant="outline"
-                    class="w-full justify-between border-input bg-background px-3 py-2 text-left text-base"
+                    class="w-full justify-between border-input bg-background px-3 py-2 text-left text-sm font-normal"
                   >
                     <span class="flex items-center gap-2">
                       <span aria-hidden="true">{selectedOption.flag}</span>
@@ -79,11 +79,15 @@
                 {/snippet}
               </DropdownMenu.Trigger>
 
-              <DropdownMenu.Content align="start" class="w-[var(--bits-dropdown-menu-anchor-width)]">
+              <DropdownMenu.Content
+                align="start"
+                class="w-[var(--bits-dropdown-menu-anchor-width)] overflow-y-auto"
+                style="max-height: min(16rem, var(--bits-dropdown-menu-content-available-height));"
+              >
                 <DropdownMenu.RadioGroup value={i18n.locale}>
                   {#each localeOptions as option (option.value)}
                     <DropdownMenu.RadioItem value={option.value} onclick={() => chooseLocale(option.value)}>
-                      <span class="flex items-center gap-2">
+                      <span class="flex min-w-0 items-center gap-2">
                         <span aria-hidden="true">{option.flag}</span>
                         <span>{option.label}</span>
                       </span>
@@ -97,7 +101,7 @@
       </div>
 
       <div class="shrink-0 border-t border-black/10 bg-muted/10 dark:border-white/20">
-        <div class="mx-auto flex w-full max-w-[560px] items-center justify-end px-6 py-4 sm:px-8">
+        <div class="flex w-full items-center justify-end px-4 py-4 sm:px-4">
           <Button onclick={onContinue} class="w-48">
             {i18n.t('languageGate.button')}
           </Button>

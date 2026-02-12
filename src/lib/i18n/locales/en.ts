@@ -12,16 +12,24 @@ export const en: Record<string, string> = {
 
   'welcome.titleLine1': 'Your access to',
   'welcome.titleLine2': 'the new internet',
-  'welcome.help.link': "What's a wallet?",
-  'welcome.help.title': "What's a wallet?",
-  'welcome.help.intro': 'A wallet is like a secure digital keychain that only you control.',
-  'welcome.help.privateKeysHeading': 'Your private keys',
-  'welcome.help.privateKeysText': 'These prove you own your money and identity. No one else can access them.',
-  'welcome.help.completeControlHeading': 'Complete control',
-  'welcome.help.completeControlText': 'Send money globally, verify identity online - all without asking permission.',
-  'welcome.cta.start': "Let's get you started",
+  'welcome.help.link': 'What is this new internet?',
+  'welcome.help.title': 'What is this new internet?',
+  'welcome.help.intro':
+    "Today you use accounts that companies own. They hold your data, control your access, and when you leave, nothing comes with you. With Verus, you own your identity and control your data and money through cryptographic keys that only you hold. No accounts to get locked out of. No platforms in the middle. This wallet is where it starts.",
+  'welcome.help.privateKeysHeading': 'What happens to my data?',
+  'welcome.help.privateKeysText':
+    "Your data gets encrypted with keys that only your wallet has. So the app can store it but can't read it. The developer can't, a hacker can't, a subpoena can't. Switch phones, restore your wallet, and everything's there. No recovery emails, no backup codes.",
+  'welcome.help.completeControlHeading': 'Who controls my identity?',
+  'welcome.help.completeControlText':
+    'You do. Your VerusID is a name you own, not rent. Nobody can suspend your account or change the terms. If your keys are compromised, you revoke and recover. Your identity and credentials move with you from app to app.',
+  'welcome.help.paymentsHeading': 'How do payments and conversions work?',
+  'welcome.help.paymentsText':
+    'You send value directly. No middleman, no one who can freeze your funds. Need to convert between currencies? The protocol guarantees ultra low fees and a fair price with no front-running. Conversions can even happen as part of a payment. One step, super easy.',
+  'welcome.help.trustHeading': 'Why should I trust this?',
+  'welcome.help.trustText':
+    "You don't have to. Your keys never leave your wallet. Your data is encrypted before it touches a server. Everything is verifiable. Nothing depends on a company keeping its promises. Trust is replaced with math.",
+  'welcome.cta.start': 'Get started',
   'welcome.cta.existing': 'I already have a wallet',
-  'welcome.footer.confidence': 'Fully self-sovereign • Your keys, your coins',
 
   'unlock.hero.tagline': 'Back in control of your digital life',
   'unlock.switch': 'Switch',
@@ -243,7 +251,7 @@ export const en: Record<string, string> = {
   'walletImport.step3.description': 'Create a password to encrypt this wallet on this device.',
   'walletImport.step3.loadingHint': 'Importing wallet…',
   'walletImport.step4.title': 'Finalizing import',
-  'walletImport.step4.description': 'Please wait while we open your wallet.',
+  'walletImport.step4.description': 'Opening your wallet. Please wait.',
   'walletImport.button.importing': 'Importing…',
   'walletImport.button.import': 'Import wallet',
   'walletImport.button.retryOpen': 'Retry opening',
@@ -314,8 +322,8 @@ export const en: Record<string, string> = {
   'walletCreation.language.hint': 'This language will be used throughout wallet setup.',
   'walletCreation.language.button': 'Continue',
 
-  'walletCreation.step1.title': "Let's get you started with a new wallet.",
-  'walletCreation.step1.description': "Together, we'll get you started to be self-sovereign.",
+  'walletCreation.step1.title': 'Get started with a new wallet.',
+  'walletCreation.step1.description': 'Set up your wallet to be self-sovereign.',
   'walletCreation.step1.button': 'I understand, continue',
 
   'walletCreation.step2.title': 'Personalise your wallet',
@@ -342,10 +350,10 @@ export const en: Record<string, string> = {
   'walletCreation.step6.buttonCreate': 'Create Wallet',
 
   'walletCreation.step7.title': 'Finalizing your wallet',
-  'walletCreation.step7.description': 'Please wait while we secure and open your wallet.',
+  'walletCreation.step7.description': 'Securing and opening your wallet. Please wait.',
   'walletCreation.step7.loadingHint': 'Opening is taking longer than expected.',
   'walletCreation.step7.buttonOpening': 'Opening…',
-  'walletCreation.step7.buttonOpen': 'Open My Wallet',
+  'walletCreation.step7.buttonOpen': 'Open wallet',
   'walletCreation.step7.buttonRetry': 'Retry opening',
 
   'walletCreation.intro.title': 'What happens next:',

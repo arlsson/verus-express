@@ -202,8 +202,8 @@
   .guard-dock-button {
     --guard-dock-bg: color-mix(in oklab, var(--primary) 14%, var(--background) 86%);
     --guard-dock-bg-hover: color-mix(in oklab, var(--primary) 22%, var(--background) 78%);
-    --guard-dock-fg: color-mix(in oklab, var(--primary) 56%, var(--foreground) 44%);
-    --guard-dock-fg-hover: color-mix(in oklab, var(--primary) 66%, var(--foreground) 34%);
+    --guard-dock-fg: var(--primary);
+    --guard-dock-fg-hover: var(--primary);
     position: fixed;
     right: 0;
     bottom: 0;
@@ -245,9 +245,16 @@
   }
 
   .guard-dock-icon {
-    width: 0.88rem;
-    height: 0.88rem;
-    stroke-width: 2;
+    width: 1.2rem;
+    height: 1.2rem;
+    opacity: 0.33;
+    fill: currentColor;
+    stroke: none;
+    transition: opacity 140ms ease;
+  }
+
+  .guard-dock-button:hover .guard-dock-icon {
+    opacity: 0.8;
   }
 
   .guard-dock-label {
@@ -255,5 +262,13 @@
     font-weight: 600;
     letter-spacing: 0.01em;
     white-space: nowrap;
+  }
+
+  .dark .guard-dock-icon {
+    opacity: 0.33;
+  }
+
+  .dark .guard-dock-button:hover .guard-dock-icon {
+    opacity: 1;
   }
 }

@@ -1,5 +1,8 @@
 <script lang="ts">
   import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+  import BookOpenIcon from '@lucide/svelte/icons/book-open';
+  import SquarePenIcon from '@lucide/svelte/icons/square-pen';
+  import * as Sheet from '$lib/components/ui/sheet';
   import { i18nStore } from '$lib/i18n';
   import type { ImportMethod } from './types';
 
@@ -9,7 +12,7 @@
 
   type ImportMethodListProps = {
     title?: string;
-    description?: string;
+    showHeader?: boolean;
     onSelect?: typeof defaultOnSelect;
     onBack?: (() => void) | null;
   };
@@ -17,7 +20,7 @@
   /* eslint-disable prefer-const */
   let {
     title = '',
-    description = '',
+    showHeader = true,
     onSelect = defaultOnSelect,
     onBack = null
   }: ImportMethodListProps = $props();
@@ -25,14 +28,13 @@
 
   const i18n = $derived($i18nStore);
   const resolvedTitle = $derived(title || i18n.t('unlock.importMethods.title'));
-  const resolvedDescription = $derived(description || i18n.t('unlock.importMethods.description'));
 </script>
 
-<div class="space-y-3">
-  {#if onBack}
+<div>
+  {#if showHeader && onBack}
     <button
       type="button"
-      class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+      class="text-muted-foreground hover:text-foreground mb-3 inline-flex items-center gap-1.5 text-sm transition-colors"
       onclick={() => onBack?.()}
     >
       <ArrowLeftIcon class="size-4" />
@@ -40,65 +42,53 @@
     </button>
   {/if}
 
-  <div class="space-y-1">
-    <h2 class="text-foreground text-base font-semibold">{resolvedTitle}</h2>
-    <p class="text-muted-foreground text-sm">{resolvedDescription}</p>
+  {#if showHeader}
+    <Sheet.Header class="gap-1 p-0 pr-8 pt-4">
+      <Sheet.Title class="text-base">{resolvedTitle}</Sheet.Title>
+    </Sheet.Header>
+  {/if}
+
+  <div class="{showHeader ? 'mt-5' : ''} space-y-3">
+    <button
+      type="button"
+      class="group border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      onclick={() => onSelect('seed24')}
+    >
+      <div class="flex items-start gap-3">
+        <BookOpenIcon
+          class="mt-0.5 h-7 w-7 shrink-0 text-foreground opacity-30 transition-[color,opacity] duration-150 group-hover:text-foreground group-hover:opacity-55 dark:opacity-45 dark:group-hover:text-white dark:group-hover:opacity-100"
+          absoluteStrokeWidth
+          stroke-linecap="butt"
+          aria-hidden="true"
+        />
+        <div class="min-w-0">
+          <p class="text-foreground text-sm font-semibold">{i18n.t('unlock.importMethods.seed24Title')}</p>
+          <p class="text-muted-foreground mt-1 text-xs">
+            {i18n.t('unlock.importMethods.seed24Description')}
+          </p>
+        </div>
+      </div>
+    </button>
+
+    <button
+      type="button"
+      class="group border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      onclick={() => onSelect('text')}
+    >
+      <div class="flex items-start gap-3">
+        <SquarePenIcon
+          class="mt-0.5 h-7 w-7 shrink-0 text-foreground opacity-30 transition-[color,opacity] duration-150 group-hover:text-foreground group-hover:opacity-55 dark:opacity-45 dark:group-hover:text-white dark:group-hover:opacity-100"
+          absoluteStrokeWidth
+          stroke-linecap="butt"
+          aria-hidden="true"
+        />
+        <div class="min-w-0">
+          <p class="text-foreground text-sm font-semibold">{i18n.t('unlock.importMethods.textTitle')}</p>
+          <p class="text-muted-foreground mt-1 text-xs">
+            {i18n.t('unlock.importMethods.textDescription')}
+          </p>
+        </div>
+      </div>
+    </button>
   </div>
-
-  <button
-    type="button"
-    class="border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-    onclick={() => onSelect('seed24')}
-  >
-    <div class="flex items-start gap-3">
-      <svg
-        class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"></path>
-      </svg>
-      <div class="min-w-0">
-        <p class="text-foreground text-sm font-semibold">{i18n.t('unlock.importMethods.seed24Title')}</p>
-        <p class="text-muted-foreground mt-1 text-xs">
-          {i18n.t('unlock.importMethods.seed24Description')}
-        </p>
-      </div>
-    </div>
-  </button>
-
-  <button
-    type="button"
-    class="border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-    onclick={() => onSelect('text')}
-  >
-    <div class="flex items-start gap-3">
-      <svg
-        class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M15 7v10"></path>
-        <path d="M9 7v10"></path>
-        <path d="M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"></path>
-      </svg>
-      <div class="min-w-0">
-        <p class="text-foreground text-sm font-semibold">{i18n.t('unlock.importMethods.textTitle')}</p>
-        <p class="text-muted-foreground mt-1 text-xs">
-          {i18n.t('unlock.importMethods.textDescription')}
-        </p>
-      </div>
-    </div>
-  </button>
 </div>
