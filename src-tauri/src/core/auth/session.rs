@@ -4,10 +4,9 @@
 // Last Updated: get_addresses now returns (vrsc, eth, btc) for Bitcoin P2PKH parity
 
 use crate::core::auth::stronghold_store::StrongholdStore;
-use crate::core::crypto::{derive_keys_v1, Network};
+use crate::core::crypto::{derive_keys_from_material, Network};
 use crate::types::errors::WalletError;
-use crate::types::wallet::DerivedKeys;
-use crate::types::wallet::WalletNetwork;
+use crate::types::wallet::{DerivedKeys, WalletNetwork, WalletSecretKind};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tauri::AppHandle;
@@ -46,6 +45,7 @@ impl SessionManager {
         account_id: String,
         password: String,
         wallet_network: WalletNetwork,
+        wallet_secret_kind: WalletSecretKind,
         app_handle: &AppHandle,
     ) -> Result<(), WalletError> {
         println!("[SESSION] Unlock requested for account: {}", account_id);
@@ -61,11 +61,12 @@ impl SessionManager {
             WalletNetwork::Testnet => Network::Testnet,
         };
 
-        // Derive keys using v1 derivation (Verus-Mobile compatible)
-        let keys = derive_keys_v1(&seed, derivation_network).map_err(|_e| {
-            println!("[SESSION] Key derivation failed");
-            WalletError::OperationFailed
-        })?;
+        // Derive keys from the imported secret material type.
+        let keys = derive_keys_from_material(&seed, wallet_secret_kind, derivation_network)
+            .map_err(|_e| {
+                println!("[SESSION] Key derivation failed");
+                WalletError::OperationFailed
+            })?;
 
         // Store in session (keys will be zeroized on drop via ZeroizeOnDrop)
         self.derived_keys.insert(account_id.clone(), keys);

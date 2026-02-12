@@ -3,6 +3,7 @@
 // Security: Thin wrappers that validate inputs and delegate to core logic
 // Last Updated: Module 10 — unlock/session and update-engine start are decoupled
 
+use secp256k1::SecretKey;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -13,11 +14,13 @@ use crate::core::auth::SessionManager;
 use crate::core::channels::btc::BtcProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::coins::CoinRegistry;
+use crate::core::crypto::wif_encoding::decode_wif_unchecked_network;
 use crate::core::wallet::WalletManager;
 use crate::core::{PreflightStore, UpdateEngine};
 use crate::types::{
     AccountRecord, ActiveWalletResponse, AddressResponse, CreateWalletRequest, CreateWalletResult,
-    GenerateMnemonicRequest, MnemonicResult, WalletError, WalletListItem,
+    GenerateMnemonicRequest, ImportWalletTextRequest, MnemonicResult, WalletError, WalletListItem,
+    WalletSecretKind,
 };
 
 /// Generate a new BIP39 mnemonic phrase
@@ -63,6 +66,48 @@ pub async fn validate_mnemonic(
     println!("[WALLET] Mnemonic validation completed: {}", is_valid);
 
     Ok(is_valid)
+}
+
+/// Get the BIP39 English word list used for mnemonic entry suggestions.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_mnemonic_wordlist(
+    wallet_manager: State<'_, WalletManager>,
+) -> Result<Vec<String>, WalletError> {
+    wallet_manager.get_mnemonic_wordlist().await
+}
+
+fn normalize_hex_private_key_candidate(input: &str) -> Option<String> {
+    let stripped = input
+        .strip_prefix("0x")
+        .or_else(|| input.strip_prefix("0X"))
+        .unwrap_or(input);
+    if stripped.len() != 64 || !stripped.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return None;
+    }
+    let decoded = hex::decode(stripped).ok()?;
+    if decoded.len() != 32 {
+        return None;
+    }
+    SecretKey::from_slice(&decoded).ok()?;
+    Some(stripped.to_lowercase())
+}
+
+fn classify_import_text(import_text: &str) -> Result<(WalletSecretKind, String), WalletError> {
+    let trimmed = import_text.trim();
+    if trimmed.is_empty() {
+        return Err(WalletError::InvalidImportText);
+    }
+
+    if decode_wif_unchecked_network(trimmed).is_ok() {
+        return Ok((WalletSecretKind::Wif, trimmed.to_string()));
+    }
+
+    if let Some(private_key_hex) = normalize_hex_private_key_candidate(trimmed) {
+        return Ok((WalletSecretKind::PrivateKeyHex, private_key_hex));
+    }
+
+    // Parity behavior with valu-mobile: any remaining non-empty input is treated as seed text.
+    Ok((WalletSecretKind::SeedText, trimmed.to_string()))
 }
 
 /// Create a new wallet with Stronghold encryption
@@ -117,6 +162,7 @@ pub async fn create_wallet(
         network: request.network,
         emoji: request.emoji,
         color: request.color,
+        secret_kind: WalletSecretKind::SeedText,
     };
 
     // Save metadata to file (using WalletManager's existing method)
@@ -125,6 +171,75 @@ pub async fn create_wallet(
     std::fs::write(metadata_path, metadata_json).map_err(|_| WalletError::OperationFailed)?;
 
     println!("[WALLET] Wallet created successfully: {}", account_id);
+
+    Ok(CreateWalletResult {
+        wallet_id: account_id,
+        success: true,
+    })
+}
+
+/// Import wallet from pasted private key or seed text.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn import_wallet_text(
+    request: ImportWalletTextRequest,
+    password: String,
+    wallet_manager: State<'_, WalletManager>,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+    app_handle: AppHandle,
+) -> Result<CreateWalletResult, WalletError> {
+    request.validate()?;
+
+    if password.trim().is_empty() {
+        return Err(WalletError::InvalidPassword);
+    }
+
+    if password.len() < 7 {
+        return Err(WalletError::PasswordTooShort);
+    }
+
+    println!(
+        "[WALLET] Import wallet text requested: {}",
+        request.wallet_name
+    );
+
+    if wallet_manager.wallet_exists(&request.wallet_name).await? {
+        return Err(WalletError::WalletExists);
+    }
+
+    let (secret_kind, secret_material) = classify_import_text(&request.import_text)?;
+
+    let account_id = Uuid::new_v4().to_string();
+
+    let session = session_manager.lock().await;
+    session
+        .stronghold_store()
+        .store_seed(&account_id, &secret_material, &password, &app_handle)
+        .await?;
+    drop(session);
+
+    let account_hash = hash_account_id(&account_id);
+    let account = AccountRecord {
+        id: account_id.clone(),
+        account_hash,
+        key_derivation_version: 1,
+        created_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
+        network: request.network,
+        emoji: request.emoji,
+        color: request.color,
+        secret_kind,
+    };
+
+    let metadata_path = wallet_manager.get_metadata_path(&request.wallet_name)?;
+    let metadata_json = serde_json::to_string_pretty(&account)?;
+    std::fs::write(metadata_path, metadata_json).map_err(|_| WalletError::OperationFailed)?;
+
+    println!(
+        "[WALLET] Wallet text import created account: {}",
+        account_id
+    );
 
     Ok(CreateWalletResult {
         wallet_id: account_id,
@@ -144,13 +259,19 @@ pub async fn unlock_wallet(
     println!("[WALLET] Unlock wallet requested");
 
     let wallet = wallet_manager
-        .get_wallet_by_account_id(&account_id)
+        .get_account_record_by_account_id(&account_id)
         .await?
         .ok_or(WalletError::OperationFailed)?;
 
     let mut session = session_manager.lock().await;
     if let Err(err) = session
-        .unlock(account_id, password, wallet.network, &app_handle)
+        .unlock(
+            account_id,
+            password,
+            wallet.network,
+            wallet.secret_kind,
+            &app_handle,
+        )
         .await
     {
         println!("[WALLET] Unlock failed: {:?}", err);

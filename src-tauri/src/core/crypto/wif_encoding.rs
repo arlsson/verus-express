@@ -70,6 +70,27 @@ pub fn decode_wif(wif: &str, network: Network) -> Result<[u8; 32], WalletError> 
     Ok(priv_key)
 }
 
+/// Decode a WIF string without enforcing network version.
+/// Accepts both compressed and uncompressed payload formats.
+pub fn decode_wif_unchecked_network(wif: &str) -> Result<[u8; 32], WalletError> {
+    let decoded = bs58::decode(wif)
+        .with_check(None)
+        .into_vec()
+        .map_err(|_| WalletError::InvalidAddress)?;
+
+    // [version][32-byte key] (uncompressed) OR [version][32-byte key][0x01] (compressed)
+    if decoded.len() != 33 && decoded.len() != 34 {
+        return Err(WalletError::InvalidAddress);
+    }
+    if decoded.len() == 34 && decoded[33] != 0x01 {
+        return Err(WalletError::InvalidAddress);
+    }
+
+    let mut priv_key = [0u8; 32];
+    priv_key.copy_from_slice(&decoded[1..33]);
+    Ok(priv_key)
+}
+
 /// Generate a P2PKH address from a compressed public key
 /// Format: [version byte][RIPEMD160(SHA256(pubkey))] + checksum → base58check
 pub fn generate_p2pkh_address(

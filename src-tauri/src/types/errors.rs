@@ -15,6 +15,9 @@ pub enum WalletError {
     #[error("Invalid seed phrase")]
     InvalidSeedPhrase,
 
+    #[error("Invalid import text")]
+    InvalidImportText,
+
     #[error("Invalid wallet name")]
     InvalidWalletName,
 

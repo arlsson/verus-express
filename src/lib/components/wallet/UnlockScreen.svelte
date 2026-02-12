@@ -17,6 +17,9 @@
   import { i18nStore, networkLocaleKey } from '$lib/i18n';
   import HelpDrawerLink from '$lib/components/common/HelpDrawerLink.svelte';
   import WalletCreation from '$lib/components/flows/WalletCreation/WalletCreation.svelte';
+  import WalletImport from '$lib/components/flows/WalletImport/WalletImport.svelte';
+  import ImportMethodList from '$lib/components/flows/WalletImport/ImportMethodList.svelte';
+  import type { ImportMethod } from '$lib/components/flows/WalletImport/types';
 
   export type WalletListItem = {
     account_id: string;
@@ -36,6 +39,9 @@
   let showCreateOptionsDrawer = $state(false);
   let showWalletSwitcherDrawer = $state(false);
   let showCreateWallet = $state(false);
+  let showWalletImport = $state(false);
+  let selectedImportMethod = $state<ImportMethod>('seed24');
+  let createDrawerView = $state<'root' | 'importMethods'>('root');
   let shakeResetTimer: ReturnType<typeof setTimeout> | null = null;
   const appWindow = getCurrentWindow();
   const i18n = $derived($i18nStore);
@@ -97,12 +103,25 @@
   }
 
   function handleCreateWallet() {
+    createDrawerView = 'root';
     showCreateOptionsDrawer = true;
   }
 
   function handleStartNewWalletFlow() {
     showCreateOptionsDrawer = false;
+    createDrawerView = 'root';
     showCreateWallet = true;
+  }
+
+  function handleShowImportMethods() {
+    createDrawerView = 'importMethods';
+  }
+
+  function handleStartImportWalletFlow(method: ImportMethod) {
+    selectedImportMethod = method;
+    showCreateOptionsDrawer = false;
+    createDrawerView = 'root';
+    showWalletImport = true;
   }
 
   const lostAccessHelpContent = $derived({
@@ -155,6 +174,12 @@
   onDestroy(() => {
     if (shakeResetTimer) {
       clearTimeout(shakeResetTimer);
+    }
+  });
+
+  $effect(() => {
+    if (!showCreateOptionsDrawer) {
+      createDrawerView = 'root';
     }
   });
 
@@ -355,66 +380,81 @@
   <Sheet.Content side="right" class="w-[420px] max-w-[92vw] p-6">
     {#snippet children()}
       <div class="flex h-full flex-col">
-        <Sheet.Header>
-          <Sheet.Title>{i18n.t('unlock.create.title')}</Sheet.Title>
-          <Sheet.Description>{i18n.t('unlock.create.description')}</Sheet.Description>
-        </Sheet.Header>
+        {#if createDrawerView === 'root'}
+          <Sheet.Header>
+            <Sheet.Title>{i18n.t('unlock.create.title')}</Sheet.Title>
+            <Sheet.Description>{i18n.t('unlock.create.description')}</Sheet.Description>
+          </Sheet.Header>
 
-        <div class="mt-5 space-y-3">
-          <button
-            type="button"
-            class="border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors"
-            onclick={handleStartNewWalletFlow}
-          >
-            <div class="flex items-start gap-3">
-              <svg
-                class="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="9"></circle>
-                <path d="M12 8v8"></path>
-                <path d="M8 12h8"></path>
-              </svg>
-              <div class="min-w-0">
-                <p class="text-sm font-semibold text-foreground">{i18n.t('unlock.create.newTitle')}</p>
-                <p class="text-xs text-muted-foreground mt-1">
-                  {i18n.t('unlock.create.newDescription')}
-                </p>
+          <div class="mt-5 space-y-3">
+            <button
+              type="button"
+              class="border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors"
+              onclick={handleStartNewWalletFlow}
+            >
+              <div class="flex items-start gap-3">
+                <svg
+                  class="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M12 8v8"></path>
+                  <path d="M8 12h8"></path>
+                </svg>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-foreground">{i18n.t('unlock.create.newTitle')}</p>
+                  <p class="text-xs text-muted-foreground mt-1">
+                    {i18n.t('unlock.create.newDescription')}
+                  </p>
+                </div>
               </div>
-            </div>
-          </button>
+            </button>
 
-          <div class="border-input bg-muted/20 w-full rounded-lg border p-4">
-            <div class="flex items-start gap-3">
-              <svg
-                class="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M12 3v11"></path>
-                <path d="m8 10 4 4 4-4"></path>
-                <path d="M4 20h16"></path>
-              </svg>
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-semibold text-foreground">{i18n.t('unlock.create.importTitle')}</p>
-                <p class="text-xs text-muted-foreground mt-1">
-                  {i18n.t('unlock.create.importDescription')}
-                </p>
+            <button
+              type="button"
+              class="border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors"
+              onclick={handleShowImportMethods}
+            >
+              <div class="flex items-start gap-3">
+                <svg
+                  class="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 3v11"></path>
+                  <path d="m8 10 4 4 4-4"></path>
+                  <path d="M4 20h16"></path>
+                </svg>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-semibold text-foreground">{i18n.t('unlock.create.importTitle')}</p>
+                  <p class="text-xs text-muted-foreground mt-1">
+                    {i18n.t('unlock.create.importDescription')}
+                  </p>
+                </div>
               </div>
-            </div>
+            </button>
           </div>
-        </div>
+        {:else}
+          <ImportMethodList
+            onBack={() => {
+              createDrawerView = 'root';
+            }}
+            onSelect={(method) => {
+              handleStartImportWalletFlow(method);
+            }}
+          />
+        {/if}
       </div>
     {/snippet}
   </Sheet.Content>
@@ -425,6 +465,18 @@
     <WalletCreation
       onGoHome={() => {
         showCreateWallet = false;
+      }}
+    />
+  </div>
+{/if}
+
+{#if showWalletImport}
+  <div class="fixed inset-0 z-50">
+    <WalletImport
+      initialMethod={selectedImportMethod}
+      onGoHome={() => {
+        showWalletImport = false;
+        selectedImportMethod = 'seed24';
       }}
     />
   </div>

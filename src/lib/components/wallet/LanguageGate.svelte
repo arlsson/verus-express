@@ -43,15 +43,12 @@
         aria-hidden="true"
         class="hidden h-full w-full object-cover dark:block"
       />
-      <div class="absolute inset-0 flex flex-col justify-start items-start pl-12 pr-8 pt-20">
+      <div class="absolute inset-0 flex flex-col items-center pt-24">
         <img
           src="/images/verus-logo-white.svg"
           alt="Verus"
-          class="h-5 w-auto cursor-default select-none"
+          class="h-8 w-auto cursor-default select-none"
         />
-        <p class="text-2xl leading-tight font-bold text-white text-balance dark:text-white mt-8 cursor-default select-none">
-          {i18n.t('unlock.hero.tagline')}
-        </p>
       </div>
     </section>
 

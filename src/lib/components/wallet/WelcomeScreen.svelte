@@ -5,9 +5,13 @@
 
 <script lang="ts">
   import { Button } from '$lib/components/ui/button';
+  import * as Sheet from '$lib/components/ui/sheet';
   import HelpDrawerLink from '$lib/components/common/HelpDrawerLink.svelte';
   import WalletCreation from '$lib/components/flows/WalletCreation/WalletCreation.svelte';
+  import WalletImport from '$lib/components/flows/WalletImport/WalletImport.svelte';
+  import ImportMethodList from '$lib/components/flows/WalletImport/ImportMethodList.svelte';
   import { i18nStore } from '$lib/i18n';
+  import type { ImportMethod } from '$lib/components/flows/WalletImport/types';
 
   const i18n = $derived($i18nStore);
 
@@ -17,11 +21,19 @@
   }
 
   function handleImportWallet() {
-    console.info('[WALLET] Import existing wallet flow initiated');
-    // TODO: Navigate to wallet import flow
+    showImportOptionsDrawer = true;
+  }
+
+  function handleStartImportWalletFlow(method: ImportMethod) {
+    selectedImportMethod = method;
+    showImportOptionsDrawer = false;
+    showWalletImport = true;
   }
 
   let showCreateWallet = $state(false);
+  let showWalletImport = $state(false);
+  let showImportOptionsDrawer = $state(false);
+  let selectedImportMethod = $state<ImportMethod>('seed24');
 
   const walletHelpContent = $derived({
     sections: [
@@ -58,15 +70,12 @@
         aria-hidden="true"
         class="hidden h-full w-full object-cover dark:block"
       />
-      <div class="absolute inset-0 flex flex-col justify-start items-start pl-12 pr-8 pt-20">
+      <div class="absolute inset-0 flex flex-col items-center pt-24">
         <img
           src="/images/verus-logo-white.svg"
           alt="Verus"
-          class="h-5 w-auto cursor-default select-none"
+          class="h-8 w-auto cursor-default select-none"
         />
-        <p class="text-2xl leading-tight font-bold text-white text-balance dark:text-white mt-8 cursor-default select-none">
-          {i18n.t('unlock.hero.tagline')}
-        </p>
       </div>
     </section>
 
@@ -111,3 +120,29 @@
     />
   </div>
 {/if}
+
+{#if showWalletImport}
+  <div class="fixed inset-0 z-50">
+    <WalletImport
+      initialMethod={selectedImportMethod}
+      onGoHome={() => {
+        showWalletImport = false;
+        selectedImportMethod = 'seed24';
+      }}
+    />
+  </div>
+{/if}
+
+<Sheet.Root bind:open={showImportOptionsDrawer}>
+  <Sheet.Content side="right" class="w-[420px] max-w-[92vw] p-6">
+    {#snippet children()}
+      <div class="flex h-full flex-col">
+        <ImportMethodList
+          onSelect={(method) => {
+            handleStartImportWalletFlow(method);
+          }}
+        />
+      </div>
+    {/snippet}
+  </Sheet.Content>
+</Sheet.Root>

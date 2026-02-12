@@ -11,7 +11,7 @@ export const nl: Record<string, string> = {
   'common.network.testnet': 'Testnet',
 
   'welcome.titleLine1': 'Jouw toegang tot',
-  'welcome.titleLine2': 'het nieuwe internet.',
+  'welcome.titleLine2': 'het nieuwe internet',
   'welcome.help.link': 'Wat is een wallet?',
   'welcome.help.title': 'Wat is een wallet?',
   'welcome.help.intro': 'Een wallet is als een veilige digitale sleutelhanger die alleen jij beheert.',
@@ -23,7 +23,7 @@ export const nl: Record<string, string> = {
   'welcome.cta.existing': 'Ik heb al een wallet',
   'welcome.footer.confidence': 'Volledig self-sovereign • Jouw sleutels, jouw coins',
 
-  'unlock.hero.tagline': 'Weer in controle over je digitale leven.',
+  'unlock.hero.tagline': 'Weer in controle over je digitale leven',
   'unlock.switch': 'Wisselen',
   'unlock.walletsOnDevice': '{count} wallets op dit apparaat',
   'unlock.password': 'Wachtwoord',
@@ -49,8 +49,18 @@ export const nl: Record<string, string> = {
   'unlock.create.newDescription': 'Genereer een nieuwe herstelzin en stel een frisse wallet in.',
   'unlock.create.importTitle': 'Importeer een bestaande wallet',
   'unlock.create.importDescription': 'Gebruik je bestaande herstelzin om een wallet op dit apparaat te herstellen.',
+  'unlock.importMethods.title': 'Wallet importeren',
+  'unlock.importMethods.description': 'Kies hoe je je bestaande wallet wilt importeren.',
+  'unlock.importMethods.back': 'Terug',
+  'unlock.importMethods.seed24Title': 'Importeer 24-woorden-herstelzin',
+  'unlock.importMethods.seed24Description': 'Voer je 24 herstelwoorden in om deze wallet te herstellen.',
+  'unlock.importMethods.textTitle': 'Plak private key of seedtekst',
+  'unlock.importMethods.textDescription':
+    'Plak handmatig een private key, herstelzin of seedtekst.',
+  'unlock.importMethods.seedOnlyHint':
+    'Alleen import via herstelzin is momenteel beschikbaar in deze release.',
 
-  'languageGate.title': 'Kies je taal.',
+  'languageGate.title': 'Kies je taal',
   'languageGate.description': 'Kies de taal die je wilt gebruiken voordat je je wallet maakt.',
   'languageGate.label': 'Taal',
   'languageGate.hint': 'Deze taal wordt gebruikt tijdens het instellen van je wallet.',
@@ -140,6 +150,77 @@ export const nl: Record<string, string> = {
   'wallet.identity.title': 'Identiteit',
   'wallet.addressBook.title': 'Adresboek',
 
+  'walletImport.step1.title': 'Geef je geimporteerde wallet een naam',
+  'walletImport.step1.description': 'Kies een naam, icoon en netwerk voor dit apparaat.',
+  'walletImport.step2.seedTitle': 'Voer herstelzin in',
+  'walletImport.step2.seedDescription': 'Plak je 24 woorden of voer ze een voor een in.',
+  'walletImport.step2.textTitle': 'Plak private key of seedtekst',
+  'walletImport.step2.textDescription':
+    'Plak je private key of seedtekst om deze wallet te importeren.',
+  'walletImport.step3.title': 'Stel lokaal wachtwoord in',
+  'walletImport.step3.description':
+    'Maak een wachtwoord om deze wallet op dit apparaat te versleutelen.',
+  'walletImport.step3.loadingHint': 'Wallet wordt geimporteerd…',
+  'walletImport.step4.title': 'Import wordt afgerond',
+  'walletImport.step4.description': 'Even geduld terwijl we je wallet openen.',
+  'walletImport.button.importing': 'Importeren…',
+  'walletImport.button.import': 'Wallet importeren',
+  'walletImport.button.retryOpen': 'Opnieuw openen',
+  'walletImport.button.opening': 'Openen…',
+  'walletImport.seed.label': 'Herstelzin',
+  'walletImport.seed.modePaste': 'Zin plakken',
+  'walletImport.seed.modeManual': 'Woord voor woord',
+  'walletImport.seed.pastePlaceholder': 'Plak je herstelzin van 24 woorden',
+  'walletImport.seed.slotPlaceholder': 'Klik om toe te voegen',
+  'walletImport.seed.currentWordLabel': 'Woord {index}',
+  'walletImport.seed.currentWordProgress': 'Woord {current} van {total}',
+  'walletImport.seed.currentWordPlaceholder': 'Typ minstens 3 letters…',
+  'walletImport.seed.wordCellEmpty': 'Woord {index}, leeg',
+  'walletImport.seed.wordCellFilled': 'Woord {index}, {word}',
+  'walletImport.seed.addWord': 'Volgende',
+  'walletImport.seed.clearWord': 'Leegmaken',
+  'walletImport.seed.pasteHint': 'Je kunt je volledige herstelzin van 24 woorden in dit veld plakken.',
+  'walletImport.seed.suggestionsLabel': 'Suggesties',
+  'walletImport.seed.loadingWords': 'Woordsuggesties laden…',
+  'walletImport.seed.wordCountLabel': 'Aantal woorden',
+  'walletImport.seed.wordCount': '{current}/{required} woorden',
+  'walletImport.seed.validating': 'Herstelzin wordt gecontroleerd…',
+  'walletImport.seed.valid': 'Herstelzin is geldig.',
+  'walletImport.seed.error.empty': 'Voer je herstelzin van 24 woorden in om door te gaan.',
+  'walletImport.seed.error.wordCount':
+    'Herstelzin moet precies {required} woorden bevatten. Huidig: {current}.',
+  'walletImport.seed.error.invalid':
+    'Herstelzin is ongeldig. Controleer spelling en volgorde.',
+  'walletImport.seed.error.invalidWord': '"{word}" is geen geldig herstelwoord.',
+  'walletImport.seed.error.wordlist':
+    'Woordsuggesties zijn nu niet beschikbaar. Je kunt je volledige herstelzin nog steeds plakken.',
+  'walletImport.text.placeholder': 'Plak private key of seedtekst',
+  'walletImport.text.helper': 'Gebruik dit als je backup geen 24-woorden-formaat heeft.',
+  'walletImport.error.walletExists': 'Er bestaat al een wallet met deze naam.',
+  'walletImport.error.invalidSeed':
+    'Herstelzin is ongeldig. Controleer alle 24 woorden en probeer opnieuw.',
+  'walletImport.error.invalidImportText': 'Voer private key of seedtekst in om door te gaan.',
+  'walletImport.error.invalidName': 'Walletnaam is ongeldig. Pas de naam aan en probeer opnieuw.',
+  'walletImport.error.invalidPassword':
+    'Wachtwoord voldoet niet aan de eisen. Gebruik minimaal 7 tekens.',
+  'walletImport.error.invalidArgs':
+    'Importverzoek was ongeldig. Start de app opnieuw en probeer het nogmaals.',
+  'walletImport.error.importFailed': 'Wallet importeren is mislukt. Probeer opnieuw.',
+  'walletImport.error.openMissingData':
+    'Geimporteerde wallet kon niet worden geopend. Ga terug en probeer opnieuw.',
+  'walletImport.error.openFailed':
+    'Wallet kon niet op dit apparaat worden ontgrendeld. Probeer opnieuw.',
+  'walletImport.error.openInvalidArgs':
+    'Wallet-openverzoek was ongeldig. Start de app opnieuw en probeer het nogmaals.',
+  'walletImport.error.openGeneric': 'Kan wallet nu niet openen. Probeer opnieuw.',
+  'walletImport.complete.statusSeedValidated': 'Herstelzin gecontroleerd',
+  'walletImport.complete.statusInputValidated': 'Importinvoer gecontroleerd',
+  'walletImport.complete.statusImported': 'Wallet geimporteerd',
+  'walletImport.complete.statusOpening': 'Wallet openen',
+  'walletImport.complete.statusOpenFailed': 'Wallet openen mislukt',
+  'walletImport.complete.waitingHint': 'Dit duurt meestal een paar seconden.',
+  'walletImport.complete.loadingHint': 'Openen duurt langer dan verwacht.',
+
   'walletCreation.confirmLeave': 'Weet je zeker dat je terug wilt gaan? Je voortgang bij het maken van de wallet gaat verloren en de herstelzin wordt gewist.',
   'walletCreation.error.walletExists': 'Er bestaat al een wallet met deze naam.',
   'walletCreation.error.createFailed': 'Wallet maken is mislukt. Probeer opnieuw.',
@@ -166,7 +247,7 @@ export const nl: Record<string, string> = {
 
   'walletCreation.step3.title': 'Beveiligingsrichtlijnen',
   'walletCreation.step3.description': 'Iedereen met je herstelzin heeft toegang tot je tegoeden.',
-  'walletCreation.step3.checkbox': 'Ik begrijp het.',
+  'walletCreation.step3.checkbox': 'Ik begrijp het',
   'walletCreation.step3.button': 'Toon herstelzin',
 
   'walletCreation.step4.title': 'Herstelzin',
@@ -221,7 +302,7 @@ export const nl: Record<string, string> = {
   'walletCreation.security.item3': 'Bewaar het offline op een veilige plek.',
   'walletCreation.security.item4': 'Deel het nooit met iemand.',
 
-  'walletCreation.backup.generating': 'Je veilige 24-woorden-backup wordt gegenereerd...',
+  'walletCreation.backup.generating': 'Je veilige 24-woorden-backup wordt gegenereerd…',
   'walletCreation.backup.groupLabel': 'Woorden {start}-{end}',
   'walletCreation.backup.wallet': 'Wallet: {name}',
   'walletCreation.backup.network': 'Netwerk: {network}',

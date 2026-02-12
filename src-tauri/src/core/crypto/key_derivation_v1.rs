@@ -5,10 +5,11 @@
 
 use crate::core::crypto::eth_keys::derive_eth_address;
 use crate::core::crypto::wif_encoding::{
-    encode_wif, generate_p2pkh_address, generate_p2pkh_address_with_version, Network,
+    decode_wif_unchecked_network, encode_wif, generate_p2pkh_address,
+    generate_p2pkh_address_with_version, Network,
 };
 use crate::types::errors::WalletError;
-use crate::types::wallet::DerivedKeys;
+use crate::types::wallet::{DerivedKeys, WalletSecretKind};
 use secp256k1::{PublicKey, Secp256k1, SecretKey};
 use sha2::{Digest, Sha256};
 
@@ -40,8 +41,35 @@ pub fn derive_keys_v1(seed: &str, network: Network) -> Result<DerivedKeys, Walle
     // bytes[31] |= 64  (set second-highest bit)
     priv_bytes[31] |= 64;
 
+    derive_keys_from_private_bytes(&priv_bytes, network)
+}
+
+/// Derive keys from existing secret material format.
+pub fn derive_keys_from_material(
+    secret: &str,
+    secret_kind: WalletSecretKind,
+    network: Network,
+) -> Result<DerivedKeys, WalletError> {
+    match secret_kind {
+        WalletSecretKind::SeedText => derive_keys_v1(secret, network),
+        WalletSecretKind::Wif => {
+            let priv_bytes = decode_wif_unchecked_network(secret)?;
+            derive_keys_from_private_bytes(&priv_bytes, network)
+        }
+        WalletSecretKind::PrivateKeyHex => {
+            let priv_bytes = decode_private_key_hex(secret)?;
+            derive_keys_from_private_bytes(&priv_bytes, network)
+        }
+    }
+}
+
+/// Derive all wallet keys and addresses from a 32-byte private scalar.
+pub fn derive_keys_from_private_bytes(
+    priv_bytes: &[u8; 32],
+    network: Network,
+) -> Result<DerivedKeys, WalletError> {
     // 3. Validate scalar is in range [1, n-1] where n is curve order
-    let scalar = SecretKey::from_slice(&priv_bytes).map_err(|e| {
+    let scalar = SecretKey::from_slice(priv_bytes).map_err(|e| {
         // Never log the actual scalar value
         WalletError::Internal(format!("Invalid scalar: {}", e))
     })?;
@@ -57,13 +85,13 @@ pub fn derive_keys_v1(seed: &str, network: Network) -> Result<DerivedKeys, Walle
     let pub_hex = hex::encode(pub_key.serialize());
 
     // 5. Encode WIF
-    let wif = encode_wif(&priv_bytes, network)?;
+    let wif = encode_wif(priv_bytes, network)?;
 
     // 6. Generate P2PKH address
     let address = generate_p2pkh_address(&pub_key, network)?;
 
     // 7. Derive ETH keys from same scalar
-    let eth_private_key = hex::encode(&priv_bytes);
+    let eth_private_key = hex::encode(priv_bytes);
     let eth_address = derive_eth_address(&pub_key)?;
 
     // 8. Bitcoin P2PKH address (same key, network-matched version byte)
@@ -81,6 +109,26 @@ pub fn derive_keys_v1(seed: &str, network: Network) -> Result<DerivedKeys, Walle
         eth_address,
         btc_address,
     })
+}
+
+fn decode_private_key_hex(secret: &str) -> Result<[u8; 32], WalletError> {
+    let stripped = secret
+        .strip_prefix("0x")
+        .or_else(|| secret.strip_prefix("0X"))
+        .unwrap_or(secret);
+
+    if stripped.len() != 64 {
+        return Err(WalletError::InvalidAddress);
+    }
+
+    let decoded = hex::decode(stripped).map_err(|_| WalletError::InvalidAddress)?;
+    if decoded.len() != 32 {
+        return Err(WalletError::InvalidAddress);
+    }
+
+    let mut priv_bytes = [0u8; 32];
+    priv_bytes.copy_from_slice(&decoded);
+    Ok(priv_bytes)
 }
 
 /// Compute SHA256 digest of input bytes

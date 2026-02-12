@@ -57,6 +57,15 @@ impl WalletManager {
         Ok(is_valid)
     }
 
+    /// Return the BIP39 English word list used for mnemonic validation.
+    pub async fn get_mnemonic_wordlist(&self) -> Result<Vec<String>, WalletError> {
+        Ok(Language::English
+            .word_list()
+            .iter()
+            .map(|word| (*word).to_string())
+            .collect())
+    }
+
     /// Create a new wallet (simplified implementation for now)
     /// TODO: Implement full Stronghold integration using frontend API
     pub async fn create_wallet(
@@ -142,6 +151,34 @@ impl WalletManager {
     ) -> Result<Option<WalletListItem>, WalletError> {
         let list = self.list_wallets().await?;
         Ok(list.into_iter().find(|w| w.account_id == account_id))
+    }
+
+    /// Resolve full account metadata record for an account_id.
+    pub async fn get_account_record_by_account_id(
+        &self,
+        account_id: &str,
+    ) -> Result<Option<AccountRecord>, WalletError> {
+        if let Ok(entries) = std::fs::read_dir(&self.data_directory) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    if let Some(name) = entry.file_name().to_str() {
+                        if name.ends_with("_metadata.json") {
+                            let path = self.data_directory.join(name);
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                if let Ok(account) = serde_json::from_str::<AccountRecord>(&content)
+                                {
+                                    if account.id == account_id {
+                                        return Ok(Some(account));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     /// Returns true if a wallet with the given name already exists (used to prevent duplicate names).

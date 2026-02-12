@@ -13,5 +13,6 @@ pub use transaction::{
 };
 pub use wallet::{
     AccountRecord, ActiveWalletResponse, AddressResponse, CreateWalletRequest, CreateWalletResult,
-    GenerateMnemonicRequest, MnemonicResult, WalletListItem, WalletMetadata,
+    GenerateMnemonicRequest, ImportWalletTextRequest, MnemonicResult, WalletListItem,
+    WalletMetadata, WalletSecretKind,
 };

@@ -101,7 +101,9 @@ pub fn run() {
             // Wallet creation commands
             wallet::generate_mnemonic,
             wallet::validate_mnemonic,
+            wallet::get_mnemonic_wordlist,
             wallet::create_wallet,
+            wallet::import_wallet_text,
             wallet::list_wallets,
             wallet::get_active_wallet,
             // Session management commands

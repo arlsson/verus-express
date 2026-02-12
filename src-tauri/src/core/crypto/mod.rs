@@ -7,12 +7,13 @@ pub mod eth_keys;
 pub mod key_derivation_v1;
 pub mod wif_encoding;
 
-pub use key_derivation_v1::derive_keys_v1;
+pub use key_derivation_v1::{derive_keys_from_material, derive_keys_v1};
 pub use wif_encoding::Network;
 
 #[cfg(test)]
 mod tests {
-    use super::{derive_keys_v1, Network};
+    use super::{derive_keys_from_material, derive_keys_v1, Network};
+    use crate::types::wallet::WalletSecretKind;
     use bs58;
 
     /// Test that key derivation produces consistent results
@@ -108,6 +109,54 @@ mod tests {
             keys.address, keys.btc_address,
             "Verus and Bitcoin testnet receive addresses should not be identical"
         );
+    }
+
+    #[test]
+    fn test_derive_keys_from_wif_material() {
+        let seed = "material-wif-test-seed";
+        let from_seed =
+            derive_keys_v1(seed, Network::Mainnet).expect("Seed derivation should succeed");
+        let from_wif =
+            derive_keys_from_material(&from_seed.wif, WalletSecretKind::Wif, Network::Mainnet)
+                .expect("WIF material derivation should succeed");
+
+        assert_eq!(from_wif.wif, from_seed.wif);
+        assert_eq!(from_wif.address, from_seed.address);
+        assert_eq!(from_wif.eth_address, from_seed.eth_address);
+        assert_eq!(from_wif.btc_address, from_seed.btc_address);
+    }
+
+    #[test]
+    fn test_derive_keys_from_private_hex_material() {
+        let seed = "material-private-hex-test-seed";
+        let from_seed =
+            derive_keys_v1(seed, Network::Mainnet).expect("Seed derivation should succeed");
+        let from_hex = derive_keys_from_material(
+            &format!("0x{}", from_seed.eth_private_key),
+            WalletSecretKind::PrivateKeyHex,
+            Network::Mainnet,
+        )
+        .expect("Private key hex derivation should succeed");
+
+        assert_eq!(from_hex.wif, from_seed.wif);
+        assert_eq!(from_hex.address, from_seed.address);
+        assert_eq!(from_hex.eth_address, from_seed.eth_address);
+        assert_eq!(from_hex.btc_address, from_seed.btc_address);
+    }
+
+    #[test]
+    fn test_derive_keys_from_seed_text_material() {
+        let seed = "custom free-form seed text fallback";
+        let from_seed =
+            derive_keys_v1(seed, Network::Mainnet).expect("Seed derivation should succeed");
+        let from_material =
+            derive_keys_from_material(seed, WalletSecretKind::SeedText, Network::Mainnet)
+                .expect("Seed text material derivation should succeed");
+
+        assert_eq!(from_material.wif, from_seed.wif);
+        assert_eq!(from_material.address, from_seed.address);
+        assert_eq!(from_material.eth_address, from_seed.eth_address);
+        assert_eq!(from_material.btc_address, from_seed.btc_address);
     }
 
     // TODO: Test Verus-Mobile v1 parity (VRSC, ETH, BTC)

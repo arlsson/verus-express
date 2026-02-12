@@ -31,6 +31,24 @@ fn default_wallet_color() -> String {
     "blue".to_string()
 }
 
+fn default_wallet_secret_kind() -> WalletSecretKind {
+    WalletSecretKind::SeedText
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WalletSecretKind {
+    SeedText,
+    Wif,
+    PrivateKeyHex,
+}
+
+impl Default for WalletSecretKind {
+    fn default() -> Self {
+        WalletSecretKind::SeedText
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct WalletMetadata {
     pub id: String,
@@ -58,6 +76,18 @@ pub struct CreateWalletRequest {
     #[serde(default = "default_wallet_color")]
     pub color: String,
     // Note: No password field - will be handled separately for security
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ImportWalletTextRequest {
+    pub wallet_name: String,
+    pub import_text: String,
+    #[serde(default = "default_wallet_network")]
+    pub network: WalletNetwork,
+    #[serde(default = "default_wallet_emoji")]
+    pub emoji: String,
+    #[serde(default = "default_wallet_color")]
+    pub color: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -101,6 +131,8 @@ pub struct AccountRecord {
     pub emoji: String,
     #[serde(default = "default_wallet_color")]
     pub color: String,
+    #[serde(default = "default_wallet_secret_kind")]
+    pub secret_kind: WalletSecretKind,
 }
 
 /// Response containing derived addresses
@@ -151,19 +183,7 @@ impl WalletMetadata {
 
 impl CreateWalletRequest {
     pub fn validate(&self) -> Result<(), crate::types::errors::WalletError> {
-        // Validate wallet name
-        let name = self.wallet_name.trim();
-        if name.is_empty() || name.len() > 50 {
-            return Err(crate::types::errors::WalletError::InvalidWalletName);
-        }
-
-        // Check for filesystem-unsafe characters
-        if name
-            .chars()
-            .any(|c| matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
-        {
-            return Err(crate::types::errors::WalletError::InvalidWalletName);
-        }
+        validate_wallet_name(&self.wallet_name)?;
 
         // Validate seed phrase format (basic check)
         let words: Vec<&str> = self.seed_phrase.split_whitespace().collect();
@@ -173,4 +193,31 @@ impl CreateWalletRequest {
 
         Ok(())
     }
+}
+
+impl ImportWalletTextRequest {
+    pub fn validate(&self) -> Result<(), crate::types::errors::WalletError> {
+        validate_wallet_name(&self.wallet_name)?;
+        if self.import_text.trim().is_empty() {
+            return Err(crate::types::errors::WalletError::InvalidImportText);
+        }
+        Ok(())
+    }
+}
+
+fn validate_wallet_name(wallet_name: &str) -> Result<(), crate::types::errors::WalletError> {
+    let name = wallet_name.trim();
+    if name.is_empty() || name.len() > 50 {
+        return Err(crate::types::errors::WalletError::InvalidWalletName);
+    }
+
+    // Check for filesystem-unsafe characters
+    if name
+        .chars()
+        .any(|c| matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+    {
+        return Err(crate::types::errors::WalletError::InvalidWalletName);
+    }
+
+    Ok(())
 }
