@@ -16,7 +16,7 @@ use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::coins::CoinRegistry;
 use crate::core::crypto::wif_encoding::decode_wif_unchecked_network;
 use crate::core::wallet::WalletManager;
-use crate::core::{PreflightStore, UpdateEngine};
+use crate::core::{GuardSessionManager, PreflightStore, UpdateEngine};
 use crate::types::{
     AccountRecord, ActiveWalletResponse, AddressResponse, CreateWalletRequest, CreateWalletResult,
     GenerateMnemonicRequest, ImportWalletTextRequest, MnemonicResult, WalletError, WalletListItem,
@@ -316,6 +316,7 @@ pub async fn start_update_engine(
 #[tauri::command(rename_all = "snake_case")]
 pub async fn lock_wallet(
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+    guard_session_manager: State<'_, Arc<Mutex<GuardSessionManager>>>,
     preflight_store: State<'_, PreflightStore>,
     update_engine: State<'_, Arc<UpdateEngine>>,
 ) -> Result<(), WalletError> {
@@ -326,6 +327,10 @@ pub async fn lock_wallet(
     let mut session = session_manager.lock().await;
     session.lock();
     preflight_store.clear();
+    drop(session);
+
+    let mut guard = guard_session_manager.lock().await;
+    guard.clear();
 
     println!("[WALLET] Wallet locked successfully");
     Ok(())

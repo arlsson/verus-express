@@ -30,7 +30,7 @@ pub async fn send(
     provider_pool: &VrpcProviderPool,
 ) -> Result<SendResult, WalletError> {
     let record = preflight_store
-        .get(preflight_id)
+        .take(preflight_id)
         .ok_or(WalletError::InvalidPreflight)?;
 
     let session = session_manager.lock().await;
@@ -57,8 +57,6 @@ pub async fn send(
         .map_err(|_| WalletError::OperationFailed)?;
     let public_key = bitcoin::secp256k1::PublicKey::from_secret_key(&secp, &secret_key);
 
-    let script_pubkey = p2pkh_script(&public_key.serialize());
-
     let tx_bytes = hex::decode(payload.hex.trim_start_matches("0x"))
         .or_else(|_| hex::decode(&payload.hex))
         .map_err(|_| WalletError::OperationFailed)?;
@@ -67,7 +65,15 @@ pub async fn send(
     let mut tx: bitcoin::Transaction = bitcoin::Transaction::consensus_decode(&mut cursor)
         .map_err(|_| WalletError::OperationFailed)?;
 
+    let fallback_script_pubkey = p2pkh_script(&public_key.serialize());
     for i in 0..tx.input.len() {
+        let script_pubkey = payload
+            .inputs
+            .get(i)
+            .and_then(|input| input.script_pub_key.clone())
+            .and_then(|raw| hex::decode(raw).ok())
+            .map(ScriptBuf::from_bytes)
+            .unwrap_or_else(|| fallback_script_pubkey.clone());
         let cache = bitcoin::sighash::SighashCache::new(&tx);
         let sighash = cache
             .legacy_signature_hash(i, &script_pubkey, SIGHASH_ALL)

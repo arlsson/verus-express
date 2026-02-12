@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "source": "valu-mobile newsend2",
+  "scenarios": [
+    {
+      "id": "VRPC-SEND-001",
+      "kind": "simple_send",
+      "description": "VRPC simple send to R/i/@ destination",
+      "requestShape": {
+        "coinId": "VRSC",
+        "channelId": "vrpc.<sessionAddress>.<systemId>",
+        "toAddress": "<R-or-i-or-name@>",
+        "amount": "<coins>"
+      },
+      "expectedTxTraits": [
+        "signed server-side only",
+        "broadcast by preflight_id"
+      ]
+    },
+    {
+      "id": "VRPC-RT-101",
+      "kind": "reserve_transfer",
+      "description": "sendcurrency convert only",
+      "requestShape": {
+        "coinId": "<currency>",
+        "channelId": "vrpc.<sessionAddress>.<systemId>",
+        "destination": "<R-or-i-or-name@>",
+        "amount": "<coins>",
+        "convertTo": "<targetCurrency>"
+      },
+      "expectedTxTraits": [
+        "output map includes convertto",
+        "funded by backend"
+      ]
+    },
+    {
+      "id": "ID-REV-202",
+      "kind": "identity",
+      "description": "Identity revoke",
+      "requestShape": {
+        "operation": "revoke",
+        "targetIdentity": "<i-address-or-name>"
+      },
+      "expectedTxTraits": [
+        "preflight persisted with TTL",
+        "single-use preflight consume"
+      ]
+    },
+    {
+      "id": "ID-REC-203",
+      "kind": "identity",
+      "description": "Identity recover with optional patch updates",
+      "requestShape": {
+        "operation": "recover",
+        "targetIdentity": "<i-address-or-name>",
+        "patch": {
+          "primaryAddresses": [
+            "<R-address>"
+          ],
+          "recoveryAuthority": "<optional>",
+          "revocationAuthority": "<optional>",
+          "privateAddress": "<optional>"
+        }
+      },
+      "expectedTxTraits": [
+        "target status must be revoked",
+        "authority identity must be active + single-sig"
+      ]
+    },
+    {
+      "id": "GUARD-REC-302",
+      "kind": "guard",
+      "description": "Signed-out guard recover",
+      "requestShape": {
+        "beginGuardSession": {
+          "importText": "<seed-or-wif-or-hex>",
+          "network": "mainnet|testnet"
+        },
+        "preflightGuardIdentityUpdate": {
+          "operation": "recover"
+        },
+        "sendGuardIdentityUpdate": {
+          "preflightId": "<returned>"
+        }
+      },
+      "expectedTxTraits": [
+        "no persisted wallet/account metadata write",
+        "guard keys removed on end session"
+      ]
+    }
+  ]
+}

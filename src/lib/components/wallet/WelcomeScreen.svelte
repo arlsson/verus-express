@@ -10,6 +10,7 @@
   import WalletCreation from '$lib/components/flows/WalletCreation/WalletCreation.svelte';
   import WalletImport from '$lib/components/flows/WalletImport/WalletImport.svelte';
   import ImportMethodList from '$lib/components/flows/WalletImport/ImportMethodList.svelte';
+  import VerusIdGuardDock from '$lib/components/wallet/VerusIdGuardDock.svelte';
   import { i18nStore } from '$lib/i18n';
   import type { ImportMethod } from '$lib/components/flows/WalletImport/types';
 
@@ -110,6 +111,8 @@
     </section>
   </div>
 </main>
+
+<VerusIdGuardDock context="welcome" defaultNetwork="mainnet" />
 
 {#if showCreateWallet}
   <div class="fixed inset-0 z-50">

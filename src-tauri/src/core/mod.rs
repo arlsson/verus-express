@@ -9,7 +9,7 @@ pub mod crypto;
 pub mod updates;
 pub mod wallet;
 
-pub use auth::{SessionManager, StrongholdStore};
+pub use auth::{GuardSessionManager, SessionManager, StrongholdStore};
 pub use channels::{route_preflight, route_send, PreflightStore, WalletChannel};
 pub use coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
 pub use updates::UpdateEngine;

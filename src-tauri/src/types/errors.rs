@@ -54,6 +54,30 @@ pub enum WalletError {
     #[error("Unsupported channel")]
     UnsupportedChannel,
 
+    #[error("Identity not found")]
+    IdentityNotFound,
+
+    #[error("Identity has an invalid state for this operation")]
+    IdentityInvalidState,
+
+    #[error("Identity authority is unsupported")]
+    IdentityUnsupportedAuthority,
+
+    #[error("Identity request expired")]
+    IdentityRequestExpired,
+
+    #[error("Identity RPC method unsupported by endpoint")]
+    IdentityRpcUnsupported,
+
+    #[error("Failed to build identity transaction")]
+    IdentityBuildFailed,
+
+    #[error("Failed to sign identity transaction")]
+    IdentitySignFailed,
+
+    #[error("Guard session not found or expired")]
+    GuardSessionNotFound,
+
     // Internal errors are mapped to generic ones above
     #[serde(skip)]
     #[error("Internal error: {0}")]

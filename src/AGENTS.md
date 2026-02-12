@@ -1,0 +1,30 @@
+# Frontend agent map (`src`)
+
+This file applies to frontend work under `src/`.
+
+## Core frontend rules
+
+- Use translation keys via `i18n.t(...)` for any user-facing copy.
+- Keep sentence case for user-facing text.
+- Validate light and dark mode for all changed UI states.
+- Default to desktop UX decisions for this app.
+- Keep visual patterns consistent with
+  `src/lib/components/wallet/UnlockScreen.svelte`.
+
+## Start points by task
+
+- General wallet route lifecycle: `src/routes/wallet/+page.svelte`
+- Send flow UI and state machine:
+  `src/lib/components/wallet/sections/Send.svelte`,
+  `src/lib/machines/txMachine.ts`
+- Event updates and stores: `src/lib/services/eventBridge.ts`, `src/lib/stores`
+- Locale and formatting: `src/lib/i18n/index.ts`, `src/lib/i18n/locales/en.ts`,
+  `src/lib/i18n/locales/nl.ts`
+
+## Related docs
+
+- Docs index: [`../docs/index.md`](../docs/index.md)
+- UI + i18n context pack:
+  [`../docs/context-packs/ui-i18n.md`](../docs/context-packs/ui-i18n.md)
+- Send flow context pack:
+  [`../docs/context-packs/send-flow.md`](../docs/context-packs/send-flow.md)

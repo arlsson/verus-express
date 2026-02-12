@@ -7,11 +7,12 @@ mod commands;
 mod core;
 mod types;
 
-use commands::{coins, transaction, wallet};
+use commands::{coins, guard, identity, transaction, vrpc_transfer, wallet};
 use core::channels::btc::BtcProviderPool;
 use core::channels::vrpc::VrpcProviderPool;
 use core::{
-    CoinRegistry, PreflightStore, SessionManager, StrongholdStore, UpdateEngine, WalletManager,
+    CoinRegistry, GuardSessionManager, PreflightStore, SessionManager, StrongholdStore,
+    UpdateEngine, WalletManager,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -81,6 +82,10 @@ pub fn run() {
             app.manage(preflight_store);
             println!("[APP] Preflight store initialized");
 
+            let guard_session_manager = Arc::new(Mutex::new(GuardSessionManager::new()));
+            app.manage(guard_session_manager);
+            println!("[APP] Guard session manager initialized");
+
             let vrpc_provider_pool = Arc::new(VrpcProviderPool::new());
             app.manage(vrpc_provider_pool);
             println!("[APP] VRPC providers initialized");
@@ -120,6 +125,14 @@ pub fn run() {
             transaction::send_transaction,
             transaction::get_balances,
             transaction::get_transaction_history,
+            vrpc_transfer::preflight_vrpc_transfer,
+            // Identity commands
+            identity::preflight_identity_update,
+            identity::send_identity_update,
+            guard::begin_guard_session,
+            guard::end_guard_session,
+            guard::preflight_guard_identity_update,
+            guard::send_guard_identity_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

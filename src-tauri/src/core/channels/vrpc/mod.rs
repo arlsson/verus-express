@@ -2,10 +2,12 @@
 // Module 5: VRPC channel — balance, transactions, preflight, send for Verus (VRSC/VRSCTEST). Allowlist-only endpoints.
 
 mod balance;
+pub mod identity;
 mod preflight;
 mod provider;
 mod send;
 mod transactions;
+mod transfer;
 
 use crate::types::WalletError;
 
@@ -14,6 +16,7 @@ pub use preflight::preflight;
 pub use provider::{VrpcProvider, VrpcProviderPool};
 pub use send::send;
 pub use transactions::get_transactions;
+pub use transfer::preflight_transfer;
 
 #[derive(Debug, Clone)]
 pub struct VrpcCoinContext {

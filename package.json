@@ -13,9 +13,10 @@
     "tauri": "tauri",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "docs:check": "node ./scripts/docs-check.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "pre-commit": "yarn lint && yarn format:check && yarn check"
+    "pre-commit": "yarn lint && yarn format:check && yarn check && yarn docs:check"
   },
   "license": "MIT",
   "resolutions": {

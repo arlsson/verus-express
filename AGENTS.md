@@ -1,0 +1,47 @@
+# Lite wallet agent map
+
+Use this file as a table of contents, not as an encyclopedia.
+
+## Global rules (always apply)
+
+- Use `yarn` for package-manager commands in this repository.
+- Do not use `npm`.
+- Any new user-facing UI text must use translation keys via `i18n.t(...)` from
+  `src/lib/i18n`.
+- Use sentence case for user-facing UI copy.
+- Always verify both light and dark mode for changed UI.
+- Default to desktop UX over mobile parity.
+- Keep cognitive load low: one primary task at a time and minimal simultaneous
+  UI elements.
+- Keep visual language consistent with existing screens (especially
+  `UnlockScreen` input treatment).
+- For parity research against `valu-mobile` (`newsend2`), use
+  `/Users/maxtheyse/dev/valu-mobile` on branch `newsend2`.
+
+## Primary maps
+
+- Repo knowledge map: [`docs/index.md`](docs/index.md)
+- Frontend-local guidance: [`src/AGENTS.md`](src/AGENTS.md)
+- Backend-local guidance: [`src-tauri/AGENTS.md`](src-tauri/AGENTS.md)
+
+## Task-first context packs
+
+- Send flow:
+  [`docs/context-packs/send-flow.md`](docs/context-packs/send-flow.md)
+- Identity + guard flow:
+  [`docs/context-packs/identity-guard.md`](docs/context-packs/identity-guard.md)
+- UI + i18n updates:
+  [`docs/context-packs/ui-i18n.md`](docs/context-packs/ui-i18n.md)
+
+## Source-of-truth docs
+
+- Architecture map: [`docs/architecture/index.md`](docs/architecture/index.md)
+- Product specs index:
+  [`docs/product-specs/index.md`](docs/product-specs/index.md)
+- Plans index: [`docs/plans/index.md`](docs/plans/index.md)
+- References index: [`docs/references/index.md`](docs/references/index.md)
+
+## Drift rule
+
+If docs and code disagree, trust code, then open a docs follow-up update in the
+same change whenever practical.

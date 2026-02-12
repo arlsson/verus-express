@@ -80,6 +80,148 @@ export interface SendResult {
   fromAddress: string;
 }
 
+export type IdentityOperation = 'update' | 'revoke' | 'recover';
+
+export interface IdentityPatch {
+  primaryAddresses?: string[] | null;
+  recoveryAuthority?: string | null;
+  revocationAuthority?: string | null;
+  privateAddress?: string | null;
+}
+
+export interface HighRiskChange {
+  changeType: string;
+  beforeValue?: string | null;
+  afterValue?: string | null;
+}
+
+export interface IdentityWarning {
+  warningType: string;
+  message: string;
+}
+
+export interface IdentityPreflightParams {
+  coinId: string;
+  channelId: string;
+  operation: IdentityOperation;
+  targetIdentity: string;
+  patch?: IdentityPatch | null;
+  memo?: string | null;
+}
+
+export interface IdentityPreflightResult {
+  preflightId: string;
+  operation: IdentityOperation;
+  targetIdentity: string;
+  fromAddress: string;
+  fee: string;
+  feeCurrency: string;
+  highRiskChanges: HighRiskChange[];
+  warnings: IdentityWarning[];
+  memo?: string | null;
+}
+
+export interface IdentitySendRequest {
+  preflightId: string;
+}
+
+export interface IdentitySendResult {
+  txid: string;
+  operation: IdentityOperation;
+  targetIdentity: string;
+  fee: string;
+  fromAddress: string;
+}
+
+export interface VrpcTransferPreflightParams {
+  coinId: string;
+  channelId: string;
+  sourceAddress?: string | null;
+  destination: string;
+  amount: string;
+  convertTo?: string | null;
+  exportTo?: string | null;
+  via?: string | null;
+  feeCurrency?: string | null;
+  feeSatoshis?: string | null;
+  preconvert?: boolean | null;
+  mapTo?: string | null;
+  vdxfTag?: string | null;
+  memo?: string | null;
+}
+
+export interface VrpcTransferPreflightResult {
+  preflightId: string;
+  fee: string;
+  feeCurrency: string;
+  value: string;
+  amountSubmitted: string;
+  amountAdjusted?: string | null;
+  toAddress: string;
+  fromAddress: string;
+  warnings: PreflightWarning[];
+  memo?: string | null;
+}
+
+export interface BeginGuardSessionRequest {
+  importText: string;
+  network: WalletNetwork;
+}
+
+export interface BeginGuardSessionResult {
+  guardSessionId: string;
+  secretKind: 'seed_text' | 'wif' | 'private_key_hex' | string;
+  vrscAddress: string;
+  ethAddress: string;
+  btcAddress: string;
+  network: WalletNetwork;
+}
+
+export interface EndGuardSessionRequest {
+  guardSessionId: string;
+}
+
+export interface EndGuardSessionResult {
+  ended: boolean;
+}
+
+export interface GuardIdentityPreflightRequest {
+  guardSessionId: string;
+  params: IdentityPreflightParams;
+}
+
+export interface GuardIdentitySendRequest {
+  guardSessionId: string;
+  preflightId: string;
+}
+
+export type GuardFlowMode = 'revoke' | 'recover';
+export type GuardFlowStep = 'secret' | 'target' | 'patch' | 'review' | 'result';
+
+export interface GuardRecoverDraft {
+  primaryAddress: string;
+  recoveryAuthority: string;
+  revocationAuthority: string;
+  privateAddress: string;
+}
+
+export type GuardFlowErrorCode =
+  | 'InvalidImportText'
+  | 'GuardSessionNotFound'
+  | 'IdentityNotFound'
+  | 'IdentityInvalidState'
+  | 'IdentityUnsupportedAuthority'
+  | 'InvalidPreflight'
+  | 'InsufficientFunds'
+  | 'NetworkError'
+  | 'OperationFailed'
+  | 'IdentityBuildFailed'
+  | 'IdentitySignFailed'
+  | 'Unknown';
+
+export type GuardPreflightResult = IdentityPreflightResult;
+export type GuardSendResult = IdentitySendResult;
+
 /** Placeholder for wallet://info-updated (Module 7). */
 export interface ChainInfo {
   blocks?: number;

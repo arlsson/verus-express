@@ -7,6 +7,10 @@ yarn.lock
 /.cursor
 /.claude
 AGENTS.md
+src-tauri/AGENTS.md
+!AGENTS.md
+!src/AGENTS.md
+!src-tauri/AGENTS.md
 /package
 .env
 .env.*

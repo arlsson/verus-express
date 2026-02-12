@@ -1,0 +1,87 @@
+<script lang="ts">
+  import * as Accordion from '$lib/components/ui/accordion';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
+  import { i18nStore } from '$lib/i18n';
+  import type { GuardRecoverDraft } from './types';
+
+  type GuardRecoverPatchStepProps = {
+    draft: GuardRecoverDraft;
+    busy?: boolean;
+    onDraftChange?: (next: GuardRecoverDraft) => void;
+  };
+
+  const defaultHandler = (next: GuardRecoverDraft) => {
+    void next;
+  };
+
+  /* eslint-disable prefer-const */
+  let {
+    draft,
+    busy = false,
+    onDraftChange = defaultHandler
+  }: GuardRecoverPatchStepProps = $props();
+  /* eslint-enable prefer-const */
+
+  const i18n = $derived($i18nStore);
+
+  function updateField(field: keyof GuardRecoverDraft, value: string) {
+    onDraftChange({ ...draft, [field]: value });
+  }
+</script>
+
+<div class="mx-auto w-full max-w-[560px] space-y-6 py-4">
+  <div class="space-y-2 text-center">
+    <h2 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+      {i18n.t('guard.flow.patch.title')}
+    </h2>
+    <p class="text-muted-foreground text-sm">{i18n.t('guard.flow.patch.description')}</p>
+  </div>
+
+  <div class="bg-muted/20 border-border/70 rounded-xl border p-5">
+    <Accordion.Root type="single" class="w-full">
+      <Accordion.Item value="advanced">
+        <Accordion.Trigger>{i18n.t('guard.flow.patch.advancedTitle')}</Accordion.Trigger>
+        <Accordion.Content>
+          <div class="space-y-4 pt-2">
+            <div class="space-y-2">
+              <Label for="guard-recovery-authority">{i18n.t('guard.flow.patch.recoveryAuthorityLabel')}</Label>
+              <Input
+                id="guard-recovery-authority"
+                value={draft.recoveryAuthority}
+                oninput={(event) => updateField('recoveryAuthority', (event.target as HTMLInputElement).value)}
+                placeholder={i18n.t('guard.flow.patch.recoveryAuthorityPlaceholder')}
+                autocapitalize="off"
+                spellcheck="false"
+              />
+            </div>
+
+            <div class="space-y-2">
+              <Label for="guard-revocation-authority">{i18n.t('guard.flow.patch.revocationAuthorityLabel')}</Label>
+              <Input
+                id="guard-revocation-authority"
+                value={draft.revocationAuthority}
+                oninput={(event) => updateField('revocationAuthority', (event.target as HTMLInputElement).value)}
+                placeholder={i18n.t('guard.flow.patch.revocationAuthorityPlaceholder')}
+                autocapitalize="off"
+                spellcheck="false"
+              />
+            </div>
+
+            <div class="space-y-2">
+              <Label for="guard-private-address">{i18n.t('guard.flow.patch.privateAddressLabel')}</Label>
+              <Input
+                id="guard-private-address"
+                value={draft.privateAddress}
+                oninput={(event) => updateField('privateAddress', (event.target as HTMLInputElement).value)}
+                placeholder={i18n.t('guard.flow.patch.privateAddressPlaceholder')}
+                autocapitalize="off"
+                spellcheck="false"
+              />
+            </div>
+          </div>
+        </Accordion.Content>
+      </Accordion.Item>
+    </Accordion.Root>
+  </div>
+</div>

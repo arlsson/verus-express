@@ -3,14 +3,27 @@
 // Last Updated: Added transaction module and Module 8 preflight/send types
 
 pub mod errors;
+pub mod guard;
+pub mod identity;
 pub mod transaction;
+pub mod vrpc_transfer;
 pub mod wallet;
 
 pub use errors::WalletError;
+pub use guard::{
+    BeginGuardSessionRequest, BeginGuardSessionResult, EndGuardSessionRequest,
+    EndGuardSessionResult, GuardIdentityPreflightRequest, GuardIdentitySendRequest,
+    GuardPreflightResult, GuardSendResult,
+};
+pub use identity::{
+    HighRiskChange, IdentityOperation, IdentityPatch, IdentityPreflightParams,
+    IdentityPreflightResult, IdentitySendRequest, IdentitySendResult, IdentityWarning,
+};
 pub use transaction::{
     BalanceResult, PreflightParams, PreflightResult, PreflightWarning, SendRequest, SendResult,
     Transaction,
 };
+pub use vrpc_transfer::{VrpcTransferPreflightParams, VrpcTransferPreflightResult};
 pub use wallet::{
     AccountRecord, ActiveWalletResponse, AddressResponse, CreateWalletRequest, CreateWalletResult,
     GenerateMnemonicRequest, ImportWalletTextRequest, MnemonicResult, WalletListItem,

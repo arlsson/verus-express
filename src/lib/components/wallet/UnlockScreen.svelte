@@ -19,6 +19,7 @@
   import WalletCreation from '$lib/components/flows/WalletCreation/WalletCreation.svelte';
   import WalletImport from '$lib/components/flows/WalletImport/WalletImport.svelte';
   import ImportMethodList from '$lib/components/flows/WalletImport/ImportMethodList.svelte';
+  import VerusIdGuardDock from '$lib/components/wallet/VerusIdGuardDock.svelte';
   import type { ImportMethod } from '$lib/components/flows/WalletImport/types';
 
   export type WalletListItem = {
@@ -335,6 +336,11 @@
     </section>
   </div>
 </main>
+
+<VerusIdGuardDock
+  context="unlock"
+  defaultNetwork={selectedWallet?.network === 'testnet' ? 'testnet' : 'mainnet'}
+/>
 
 <Sheet.Root bind:open={showWalletSwitcherDrawer}>
   <Sheet.Content side="right" class="w-[360px] max-w-[92vw] p-6">

@@ -94,7 +94,7 @@ pub async fn send(
     provider_pool: &BtcProviderPool,
 ) -> Result<SendResult, WalletError> {
     let record = preflight_store
-        .get(preflight_id)
+        .take(preflight_id)
         .ok_or(WalletError::InvalidPreflight)?;
 
     let session = session_manager.lock().await;

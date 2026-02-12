@@ -23,6 +23,7 @@ const TTL_DELTAS: u64 = 10;
 const TTL_MEMPOOL: u64 = 10;
 const TTL_UTXOS: u64 = 5;
 const TTL_GETINFO: u64 = 1;
+const TTL_GETIDENTITY: u64 = 5;
 const TTL_CURRENCY: u64 = 60;
 const TTL_LISTCURRENCIES: u64 = 600;
 const READ_RETRY_ATTEMPTS: u8 = 3;
@@ -282,6 +283,83 @@ impl VrpcProvider {
         Err(WalletError::NetworkError)
     }
 
+    async fn call_without_cache_with_error_mapping(
+        &self,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, WalletError> {
+        let body = serde_json::json!({
+            "jsonrpc": "1.0",
+            "id": "verus-express",
+            "method": method,
+            "params": params
+        });
+
+        let res = self
+            .client
+            .post(&self.base_url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|_| WalletError::NetworkError)?;
+
+        if !res.status().is_success() {
+            return Err(WalletError::OperationFailed);
+        }
+
+        let json: Value = res.json().await.map_err(|_| WalletError::NetworkError)?;
+        if let Some(error_obj) = json.get("error").filter(|e| !e.is_null()) {
+            let code = error_obj.get("code").and_then(|c| c.as_i64());
+            if code == Some(-32601) {
+                return Err(WalletError::IdentityRpcUnsupported);
+            }
+            return Err(WalletError::IdentityBuildFailed);
+        }
+
+        json.get("result")
+            .filter(|v| !v.is_null())
+            .cloned()
+            .ok_or(WalletError::IdentityBuildFailed)
+    }
+
+    async fn call_without_cache(&self, method: &str, params: Value) -> Result<Value, WalletError> {
+        let body = serde_json::json!({
+            "jsonrpc": "1.0",
+            "id": "verus-express",
+            "method": method,
+            "params": params
+        });
+
+        let res = self
+            .client
+            .post(&self.base_url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|_| WalletError::NetworkError)?;
+
+        if !res.status().is_success() {
+            return Err(WalletError::OperationFailed);
+        }
+
+        let json: Value = res.json().await.map_err(|_| WalletError::NetworkError)?;
+        if let Some(error_obj) = json.get("error").filter(|e| !e.is_null()) {
+            let code = error_obj.get("code").and_then(|c| c.as_i64());
+            if code == Some(-32601) {
+                return Err(WalletError::UnsupportedChannel);
+            }
+            if code == Some(-5) {
+                return Err(WalletError::InvalidAddress);
+            }
+            return Err(WalletError::OperationFailed);
+        }
+
+        json.get("result")
+            .filter(|v| !v.is_null())
+            .cloned()
+            .ok_or(WalletError::OperationFailed)
+    }
+
     async fn call(&self, method: &str, params: Value, ttl_secs: u64) -> Result<Value, WalletError> {
         let key = Self::cache_key(method, &params);
         if let Some(cached) = self.get_cached(&key) {
@@ -410,6 +488,71 @@ impl VrpcProvider {
     /// getinfo: chain sync status
     pub async fn getinfo(&self) -> Result<Value, WalletError> {
         self.call("getinfo", serde_json::json!([]), TTL_GETINFO)
+            .await
+    }
+
+    /// getcurrency: resolve by i-address or fully-qualified currency name.
+    pub async fn getcurrency(&self, currency: &str) -> Result<Value, WalletError> {
+        if currency.trim().is_empty() {
+            return Err(WalletError::InvalidAddress);
+        }
+        let params = serde_json::json!([currency]);
+        self.call("getcurrency", params, TTL_CURRENCY).await
+    }
+
+    /// listcurrencies: returns known currencies from the endpoint.
+    pub async fn listcurrencies(&self) -> Result<Value, WalletError> {
+        self.call("listcurrencies", serde_json::json!([]), TTL_LISTCURRENCIES)
+            .await
+    }
+
+    /// sendcurrency: build and optionally return unsigned tx template.
+    /// Params follow verusd RPC signature.
+    pub async fn sendcurrency(
+        &self,
+        source: &str,
+        outputs: &[Value],
+        min_conf: u32,
+        fee: f64,
+        return_tx: bool,
+    ) -> Result<Value, WalletError> {
+        if source.trim().is_empty() {
+            return Err(WalletError::InvalidAddress);
+        }
+        if outputs.is_empty() {
+            return Err(WalletError::OperationFailed);
+        }
+        let params = serde_json::json!([source, outputs, min_conf, fee, return_tx]);
+        self.call_without_cache("sendcurrency", params).await
+    }
+
+    /// getidentity: resolve by i-address or name.
+    pub async fn getidentity(&self, identity: &str) -> Result<Value, WalletError> {
+        if identity.trim().is_empty() {
+            return Err(WalletError::InvalidAddress);
+        }
+        let params = serde_json::json!([identity]);
+        self.call("getidentity", params, TTL_GETIDENTITY).await
+    }
+
+    /// getrawtransaction: return raw tx hex (verbosity = 0) or tx object.
+    pub async fn getrawtransaction(&self, txid: &str, verbosity: u8) -> Result<Value, WalletError> {
+        if txid.trim().is_empty() {
+            return Err(WalletError::OperationFailed);
+        }
+        let params = serde_json::json!([txid, verbosity]);
+        self.call("getrawtransaction", params, 0).await
+    }
+
+    /// updateidentity: build identity update tx template.
+    /// Maps RPC -32601 to IdentityRpcUnsupported.
+    pub async fn updateidentity(
+        &self,
+        identity_json: &Value,
+        return_tx_hex: bool,
+    ) -> Result<Value, WalletError> {
+        let params = serde_json::json!([identity_json, return_tx_hex]);
+        self.call_without_cache_with_error_mapping("updateidentity", params)
             .await
     }
 }
