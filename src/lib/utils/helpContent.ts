@@ -23,6 +23,11 @@ const buildVerusIdGuardTopic = (t: TranslateFn): HelpTopic => ({
   title: t('help.topic.verusIdGuard'),
   qas: [
     {
+      id: 'verus-id-guard-overview',
+      question: t('help.verusIdGuard.overviewQuestion'),
+      answer: t('help.verusIdGuard.overviewAnswer')
+    },
+    {
       id: 'verus-id-guard-revoke',
       question: t('help.verusIdGuard.revokeQuestion'),
       answer: t('help.verusIdGuard.revokeAnswer')
