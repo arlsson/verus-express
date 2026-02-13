@@ -20,8 +20,8 @@
 	{...restProps}
 >
 	{#snippet children()}
-		<div class={cn('border-border/60 mx-3 border-t pb-3 pt-2', className)}>
-			<div class="text-muted-foreground text-xs leading-relaxed">
+		<div class={cn('text-muted-foreground pb-4 pt-0 text-sm leading-relaxed', className)}>
+			<div>
 				{@render children?.()}
 			</div>
 		</div>

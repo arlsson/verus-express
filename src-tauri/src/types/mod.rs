@@ -12,7 +12,8 @@ pub mod wallet;
 pub use errors::WalletError;
 pub use guard::{
     BeginGuardSessionRequest, BeginGuardSessionResult, EndGuardSessionRequest,
-    EndGuardSessionResult, GuardIdentityPreflightRequest, GuardIdentitySendRequest,
+    EndGuardSessionResult, GuardIdentityLookupRequest, GuardIdentityLookupResult,
+    GuardIdentityPreflightRequest, GuardIdentitySendRequest, GuardImportMode,
     GuardPreflightResult, GuardSendResult,
 };
 pub use identity::{

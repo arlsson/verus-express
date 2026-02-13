@@ -7,6 +7,8 @@
 
   type SeedPhraseStepProps = {
     seedPhraseInput?: string;
+    entryMode?: EntryMode;
+    showEntryModeTabs?: boolean;
     onInputChanged?: typeof defaultOnInputChanged;
     onNormalizedChanged?: typeof defaultOnNormalizedChanged;
     onValidityChanged?: typeof defaultOnValidityChanged;
@@ -31,6 +33,8 @@
   /* eslint-disable prefer-const */
   let {
     seedPhraseInput = '',
+    entryMode: controlledEntryMode = undefined,
+    showEntryModeTabs = true,
     onInputChanged = defaultOnInputChanged,
     onNormalizedChanged = defaultOnNormalizedChanged,
     onValidityChanged = defaultOnValidityChanged
@@ -54,6 +58,7 @@
   let isInputFocused = $state(false);
   let highlightedSuggestionIndex = $state(-1);
   let blurTimer: ReturnType<typeof setTimeout> | null = null;
+  let previousEntryMode = $state<EntryMode>('paste');
 
   const i18n = $derived($i18nStore);
   const wordCount = $derived(words.filter((word) => word.length > 0).length);
@@ -79,6 +84,22 @@
           ? i18n.t(validationErrorKey)
           : ''
   );
+
+  $effect(() => {
+    if (!controlledEntryMode) return;
+    if (entryMode === controlledEntryMode) return;
+    entryMode = controlledEntryMode;
+  });
+
+  $effect(() => {
+    if (entryMode === previousEntryMode) return;
+    if (entryMode === 'paste') {
+      pasteInput = normalizedSeed;
+    } else {
+      currentWordInput = words[currentWordIndex] || '';
+    }
+    previousEntryMode = entryMode;
+  });
 
   function createEmptyWords(): string[] {
     return Array(REQUIRED_WORDS).fill('');
@@ -408,28 +429,20 @@
 
 <div class="mx-auto w-full max-w-[560px] space-y-5">
   <Tabs.Root bind:value={entryMode}>
-    <div class="flex justify-center">
-      <Tabs.List>
-        <Tabs.Trigger
-          value="paste"
-          onclick={() => {
-            pasteInput = normalizedSeed;
-          }}
-        >
-          {i18n.t('walletImport.seed.modePaste')}
-        </Tabs.Trigger>
-        <Tabs.Trigger
-          value="manual"
-          onclick={() => {
-            currentWordInput = words[currentWordIndex] || '';
-          }}
-        >
-          {i18n.t('walletImport.seed.modeManual')}
-        </Tabs.Trigger>
-      </Tabs.List>
-    </div>
+    {#if showEntryModeTabs}
+      <div class="flex justify-center">
+        <Tabs.List>
+          <Tabs.Trigger value="paste">
+            {i18n.t('walletImport.seed.modePaste')}
+          </Tabs.Trigger>
+          <Tabs.Trigger value="manual">
+            {i18n.t('walletImport.seed.modeManual')}
+          </Tabs.Trigger>
+        </Tabs.List>
+      </div>
+    {/if}
 
-    <Tabs.Content value="paste" class="mt-4 space-y-3">
+    <Tabs.Content value="paste" class={showEntryModeTabs ? 'mt-4 space-y-3' : 'space-y-3'}>
       <textarea
         id="wallet-import-seed-paste"
         value={pasteInput}
@@ -447,7 +460,7 @@
       ></textarea>
     </Tabs.Content>
 
-    <Tabs.Content value="manual" class="mt-4 space-y-4">
+    <Tabs.Content value="manual" class={showEntryModeTabs ? 'mt-4 space-y-4' : 'space-y-4'}>
       <div class="grid grid-cols-8 gap-1.5">
         {#each words as word, index}
           <button

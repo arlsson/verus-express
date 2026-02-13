@@ -1,15 +1,18 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { Button } from '$lib/components/ui/button';
+  import { Spinner } from '$lib/components/ui/spinner';
   import StepperLayout from '$lib/components/shared/StepperLayout.svelte';
   import { i18nStore } from '$lib/i18n';
   import {
     beginGuardSession,
     endGuardSession,
+    lookupGuardTargetIdentity,
     preflightGuardIdentityUpdate,
     sendGuardIdentityUpdate
   } from '$lib/services/guardService';
   import type {
+    GuardImportMode,
     GuardPreflightResult,
     GuardSendResult,
     IdentityPatch,
@@ -23,6 +26,7 @@
   import type {
     GuardFlowErrorCode,
     GuardFlowMode,
+    GuardSecretInputMode,
     GuardFlowStep,
     GuardRecoverDraft,
     GuardReviewContext
@@ -44,7 +48,12 @@
   /* eslint-enable prefer-const */
 
   let step = $state<GuardFlowStep>('secret');
-  let importText = $state('');
+  let secretMode = $state<GuardSecretInputMode>('pastePhrase');
+  let seedPhraseInput = $state('');
+  let seedPhraseNormalized = $state('');
+  let seedPhraseValid = $state(false);
+  let textImportInput = $state('');
+  let textImportValid = $state(false);
   let network = $state<WalletNetwork>('mainnet');
   let guardSessionId = $state<string | null>(null);
   let authorityAddress = $state('');
@@ -53,6 +62,8 @@
   let sendResult = $state<GuardSendResult | null>(null);
   let errorMessage = $state('');
   let busy = $state(false);
+  let targetLookupBusy = $state(false);
+  let targetErrorShakeNonce = $state(0);
   let copyFeedback = $state('');
   let recoverDraft = $state<GuardRecoverDraft>({
     primaryAddress: '',
@@ -73,9 +84,16 @@
   const currentStepIndex = $derived(Math.max(steps.indexOf(step), 0) + 1);
   const totalSteps = $derived(steps.length);
   const hasResultSuccess = $derived(!!sendResult && !errorMessage);
-  const canContinueTarget = $derived(
-    !!targetIdentity.trim() && (mode === 'revoke' || !!recoverDraft.primaryAddress.trim())
+  const isSeedSecretMode = $derived(secretMode === 'pastePhrase' || secretMode === 'typeOneByOne');
+  const resolvedImportMode = $derived<GuardImportMode>(isSeedSecretMode ? 'mnemonic24' : 'textAuto');
+  const resolvedImportText = $derived(
+    isSeedSecretMode ? seedPhraseNormalized.trim() : textImportInput.trim()
   );
+  const canBeginSession = $derived(
+    isSeedSecretMode ? seedPhraseValid && !!seedPhraseNormalized.trim() : textImportValid && !!textImportInput.trim()
+  );
+  const canContinueTarget = $derived(!!targetIdentity.trim());
+  const isWorking = $derived(busy || targetLookupBusy);
 
   const reviewContext = $derived<GuardReviewContext | null>(
     preflight
@@ -168,6 +186,11 @@
     errorMessage = '';
   }
 
+  function setTargetFieldError(message: string) {
+    errorMessage = message;
+    targetErrorShakeNonce += 1;
+  }
+
   function clearCopyFeedback() {
     copyFeedback = '';
     if (copyFeedbackTimer) {
@@ -176,8 +199,33 @@
     }
   }
 
-  function handleImportTextChange(value: string) {
-    importText = value;
+  function handleSecretModeChange(value: GuardSecretInputMode) {
+    secretMode = value;
+    clearError();
+  }
+
+  function handleSeedPhraseInputChange(value: string) {
+    seedPhraseInput = value;
+    clearError();
+  }
+
+  function handleSeedPhraseNormalizedChange(value: string) {
+    seedPhraseNormalized = value;
+    clearError();
+  }
+
+  function handleSeedPhraseValidityChange(valid: boolean) {
+    seedPhraseValid = valid;
+    clearError();
+  }
+
+  function handleTextImportInputChange(value: string) {
+    textImportInput = value;
+    clearError();
+  }
+
+  function handleTextImportValidityChange(valid: boolean) {
+    textImportValid = valid;
     clearError();
   }
 
@@ -188,11 +236,6 @@
 
   function handleTargetIdentityChange(value: string) {
     targetIdentity = value;
-    clearError();
-  }
-
-  function handlePrimaryAddressChange(value: string) {
-    recoverDraft = { ...recoverDraft, primaryAddress: value };
     clearError();
   }
 
@@ -253,7 +296,7 @@
   }
 
   async function closeFlow() {
-    if (busy) return;
+    if (isWorking) return;
     await cleanupGuardSession();
     onClose();
   }
@@ -262,7 +305,7 @@
     clearError();
     clearCopyFeedback();
 
-    if (!importText.trim()) {
+    if (!canBeginSession || !resolvedImportText) {
       errorMessage = i18n.t('guard.error.invalidImportText');
       return;
     }
@@ -272,7 +315,8 @@
       await cleanupGuardSession();
 
       const result = await beginGuardSession({
-        importText: importText.trim(),
+        importText: resolvedImportText,
+        importMode: resolvedImportMode,
         network
       });
 
@@ -322,21 +366,56 @@
     }
   }
 
+  async function ensureTargetIdentityExists(): Promise<boolean> {
+    if (!guardSessionId) {
+      setTargetFieldError(i18n.t('guard.error.guardSessionNotFound'));
+      return false;
+    }
+
+    const trimmedTargetIdentity = targetIdentity.trim();
+    if (!trimmedTargetIdentity) {
+      return false;
+    }
+
+    targetLookupBusy = true;
+    clearError();
+
+    try {
+      const lookupResult = await lookupGuardTargetIdentity({
+        guardSessionId,
+        targetIdentity: trimmedTargetIdentity
+      });
+
+      if (!lookupResult.exists) {
+        setTargetFieldError(i18n.t('guard.error.identityNotFound'));
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      setMappedError(error);
+      targetErrorShakeNonce += 1;
+      return false;
+    } finally {
+      targetLookupBusy = false;
+    }
+  }
+
   async function handleTargetContinue() {
     clearError();
 
     if (!targetIdentity.trim()) {
-      errorMessage = i18n.t('guard.error.targetRequired');
+      setTargetFieldError(i18n.t('guard.error.targetRequired'));
+      return;
+    }
+
+    const exists = await ensureTargetIdentityExists();
+    if (!exists) {
       return;
     }
 
     if (mode === 'revoke') {
       await preflightIdentity('revoke', null);
-      return;
-    }
-
-    if (!recoverDraft.primaryAddress.trim()) {
-      errorMessage = i18n.t('guard.error.primaryRequired');
       return;
     }
 
@@ -416,6 +495,8 @@
   }
 
   function handleBack() {
+    if (isWorking) return;
+
     clearError();
     clearCopyFeedback();
 
@@ -439,6 +520,7 @@
 
   function handleWindowKeyDown(event: KeyboardEvent) {
     if (event.key !== 'Escape') return;
+    if (isWorking) return;
 
     if (step === 'secret') {
       void closeFlow();
@@ -464,24 +546,36 @@
   currentStep={currentStepIndex}
   totalSteps={totalSteps}
   onClose={handleHeaderClose}
-  closeDisabled={busy}
+  closeDisabled={isWorking}
   showNetworkToggle={step === 'secret'}
   network={network}
   networkLabel={i18n.t('guard.flow.secret.networkLabel')}
-  networkToggleDisabled={busy}
+  networkToggleDisabled={isWorking}
   onNetworkChange={handleNetworkChange}
 >
   {#snippet children()}
     {#if step === 'secret'}
-      <GuardSecretStep {mode} {importText} onImportTextChange={handleImportTextChange} />
+      <GuardSecretStep
+        {mode}
+        {busy}
+        {secretMode}
+        {seedPhraseInput}
+        {textImportInput}
+        onSecretModeChange={handleSecretModeChange}
+        onSeedPhraseInputChange={handleSeedPhraseInputChange}
+        onSeedPhraseNormalizedChange={handleSeedPhraseNormalizedChange}
+        onSeedPhraseValidityChange={handleSeedPhraseValidityChange}
+        onTextImportInputChange={handleTextImportInputChange}
+        onTextImportValidityChange={handleTextImportValidityChange}
+      />
     {:else if step === 'target'}
       <GuardTargetStep
         {mode}
-        {busy}
+        busy={isWorking}
         {targetIdentity}
-        primaryAddress={recoverDraft.primaryAddress}
+        errorMessage={errorMessage}
+        shakeNonce={targetErrorShakeNonce}
         onTargetIdentityChange={handleTargetIdentityChange}
-        onPrimaryAddressChange={handlePrimaryAddressChange}
       />
     {:else if step === 'patch'}
       <GuardRecoverPatchStep draft={recoverDraft} {busy} onDraftChange={handleRecoverDraftChange} />
@@ -499,7 +593,7 @@
   {/snippet}
 
   {#snippet footer()}
-    {#if step !== 'result' && errorMessage}
+    {#if step !== 'result' && step !== 'target' && errorMessage}
       <p class="text-destructive mb-2 text-right text-sm" aria-live="polite">
         {errorMessage}
       </p>
@@ -510,7 +604,7 @@
         {#if hasResultSuccess}
           <div class="min-w-48 px-6"></div>
         {:else}
-          <Button variant="secondary" onclick={handleTryAgain} disabled={busy} class="min-w-48 px-6">
+          <Button variant="secondary" onclick={handleTryAgain} disabled={isWorking} class="min-w-48 px-6">
             {i18n.t('guard.flow.result.tryAgain')}
           </Button>
         {/if}
@@ -518,7 +612,7 @@
         <Button
           variant="secondary"
           onclick={step === 'secret' ? closeFlow : handleBack}
-          disabled={busy}
+          disabled={isWorking}
           class="min-w-48 px-6"
         >
           {step === 'secret' ? i18n.t('common.cancel') : i18n.t('common.back')}
@@ -526,27 +620,43 @@
       {/if}
 
       {#if step === 'secret'}
-        <Button onclick={handleBeginSession} disabled={busy || !importText.trim()} class="min-w-48 px-6">
+        <Button onclick={handleBeginSession} disabled={isWorking || !canBeginSession} class="min-w-48 px-6">
           {busy ? i18n.t('guard.flow.secret.continueBusy') : i18n.t('guard.flow.secret.continue')}
         </Button>
       {:else if step === 'target'}
-        <Button onclick={handleTargetContinue} disabled={busy || !canContinueTarget} class="min-w-48 px-6">
-          {busy
-            ? i18n.t('guard.flow.target.preflightBusy')
-            : mode === 'recover'
-              ? i18n.t('guard.flow.target.preflightRecover')
-              : i18n.t('guard.flow.target.preflightRevoke')}
+        <Button onclick={handleTargetContinue} disabled={isWorking || !canContinueTarget} class="min-w-48 px-6">
+          <span class="grid w-full grid-cols-[1fr_auto_1fr] items-center">
+            <span class="flex items-center justify-end pr-2">
+              <span class="inline-flex h-4 w-4 items-center justify-center">
+                {#if targetLookupBusy || busy}
+                  <Spinner class="size-4" />
+                {/if}
+              </span>
+            </span>
+            <span>{mode === 'recover' ? i18n.t('guard.flow.target.preflightRecover') : i18n.t('guard.flow.target.preflightRevoke')}</span>
+            <span aria-hidden="true"></span>
+          </span>
         </Button>
       {:else if step === 'patch'}
         <Button
           onclick={handlePatchContinue}
-          disabled={busy || !recoverDraft.primaryAddress.trim()}
+          disabled={isWorking || !recoverDraft.primaryAddress.trim()}
           class="min-w-48 px-6"
         >
-          {busy ? i18n.t('guard.flow.patch.continueBusy') : i18n.t('guard.flow.patch.continue')}
+          <span class="grid w-full grid-cols-[1fr_auto_1fr] items-center">
+            <span class="flex items-center justify-end pr-2">
+              <span class="inline-flex h-4 w-4 items-center justify-center">
+                {#if busy}
+                  <Spinner class="size-4" />
+                {/if}
+              </span>
+            </span>
+            <span>{i18n.t('guard.flow.patch.continue')}</span>
+            <span aria-hidden="true"></span>
+          </span>
         </Button>
       {:else if step === 'review'}
-        <Button onclick={handleSubmit} disabled={busy || !preflight} class="min-w-48 px-6">
+        <Button onclick={handleSubmit} disabled={isWorking || !preflight} class="min-w-48 px-6">
           {busy
             ? i18n.t('guard.flow.review.submitBusy')
             : mode === 'revoke'
@@ -554,7 +664,7 @@
               : i18n.t('guard.flow.review.submitRecover')}
         </Button>
       {:else}
-        <Button onclick={closeFlow} disabled={busy} class="min-w-48 px-6">
+        <Button onclick={closeFlow} disabled={isWorking} class="min-w-48 px-6">
           {i18n.t('common.done')}
         </Button>
       {/if}

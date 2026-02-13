@@ -101,8 +101,9 @@
         </div>
 
         {#if canRenderNetworkToggle}
-          <div class="absolute top-[58px] right-6 z-20 sm:right-8">
-            <div class="flex items-center gap-1 opacity-70 transition-opacity hover:opacity-100">
+          <div class="absolute top-[58px] right-3 z-20 sm:right-4">
+            <div class="flex min-w-[150px] justify-end">
+              <div class="flex items-center gap-1 opacity-70 transition-opacity hover:opacity-100">
               {#if networkLabel}
                 <span class="sr-only">{networkLabel}</span>
               {/if}
@@ -110,7 +111,7 @@
                 type="button"
                 onclick={() => onNetworkChange('mainnet')}
                 disabled={networkToggleDisabled}
-                class="h-5 rounded border px-2 text-[10px] font-medium transition-colors {network === 'mainnet'
+                class="h-5 w-[70px] rounded border px-2 text-[10px] font-medium transition-colors {network === 'mainnet'
                   ? 'border-border bg-muted/70 text-foreground'
                   : 'border-transparent bg-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/40'}"
               >
@@ -120,12 +121,13 @@
                 type="button"
                 onclick={() => onNetworkChange('testnet')}
                 disabled={networkToggleDisabled}
-                class="h-5 rounded border px-2 text-[10px] font-medium transition-colors {network === 'testnet'
+                class="h-5 w-[70px] rounded border px-2 text-[10px] font-medium transition-colors {network === 'testnet'
                   ? 'border-border bg-muted/70 text-foreground'
                   : 'border-transparent bg-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/40'}"
               >
                 {i18n.t('common.network.testnet')}
               </button>
+              </div>
             </div>
           </div>
         {/if}

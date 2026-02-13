@@ -165,6 +165,7 @@ export interface VrpcTransferPreflightResult {
 
 export interface BeginGuardSessionRequest {
   importText: string;
+  importMode: GuardImportMode;
   network: WalletNetwork;
 }
 
@@ -190,11 +191,21 @@ export interface GuardIdentityPreflightRequest {
   params: IdentityPreflightParams;
 }
 
+export interface GuardIdentityLookupRequest {
+  guardSessionId: string;
+  targetIdentity: string;
+}
+
+export interface GuardIdentityLookupResult {
+  exists: boolean;
+}
+
 export interface GuardIdentitySendRequest {
   guardSessionId: string;
   preflightId: string;
 }
 
+export type GuardImportMode = 'mnemonic24' | 'textAuto';
 export type GuardFlowMode = 'revoke' | 'recover';
 export type GuardFlowStep = 'secret' | 'target' | 'patch' | 'review' | 'result';
 

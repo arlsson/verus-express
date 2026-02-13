@@ -15,6 +15,6 @@
 <AccordionPrimitive.Root
 	bind:ref
 	data-slot="accordion-root"
-	class={cn('w-full space-y-2', className)}
+	class={cn('w-full', className)}
 	{...restProps}
 />

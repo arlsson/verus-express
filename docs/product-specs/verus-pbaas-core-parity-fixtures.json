@@ -74,6 +74,7 @@
       "requestShape": {
         "beginGuardSession": {
           "importText": "<seed-or-wif-or-hex>",
+          "importMode": "mnemonic24|textAuto",
           "network": "mainnet|testnet"
         },
         "preflightGuardIdentityUpdate": {

@@ -14,13 +14,17 @@
     importTextInput?: string;
     onInputChanged?: typeof defaultOnInputChanged;
     onValidityChanged?: typeof defaultOnValidityChanged;
+    placeholderKey?: string;
+    helperKey?: string;
   };
 
   /* eslint-disable prefer-const */
   let {
     importTextInput = '',
     onInputChanged = defaultOnInputChanged,
-    onValidityChanged = defaultOnValidityChanged
+    onValidityChanged = defaultOnValidityChanged,
+    placeholderKey = 'walletImport.text.placeholder',
+    helperKey = 'walletImport.text.helper'
   }: TextImportStepProps = $props();
   /* eslint-enable prefer-const */
 
@@ -45,10 +49,10 @@
       localValue = (event.target as HTMLInputElement).value;
       onInputChanged(localValue);
     }}
-    placeholder={i18n.t('walletImport.text.placeholder')}
+    placeholder={i18n.t(placeholderKey)}
     autocomplete="off"
     autocapitalize="off"
     spellcheck="false"
   />
-  <p class="text-muted-foreground text-xs">{i18n.t('walletImport.text.helper')}</p>
+  <p class="text-muted-foreground text-xs">{i18n.t(helperKey)}</p>
 </div>

@@ -45,13 +45,13 @@
       {/if}
     </div>
 
-    <h2 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+    <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
       {#if hasSuccess}
         {i18n.t('guard.flow.result.successTitle', { action: actionLabel })}
       {:else}
         {i18n.t('guard.flow.result.errorTitle', { action: actionLabel })}
       {/if}
-    </h2>
+    </h1>
 
     <p class="text-muted-foreground text-sm">
       {#if hasSuccess}

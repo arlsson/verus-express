@@ -131,6 +131,7 @@ pub fn run() {
             identity::send_identity_update,
             guard::begin_guard_session,
             guard::end_guard_session,
+            guard::lookup_guard_target_identity,
             guard::preflight_guard_identity_update,
             guard::send_guard_identity_update,
         ])

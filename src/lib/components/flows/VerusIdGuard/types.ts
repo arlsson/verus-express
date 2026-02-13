@@ -1,6 +1,7 @@
 import type { GuardPreflightResult, GuardSendResult, WalletNetwork } from '$lib/types/wallet.js';
 
 export type GuardFlowMode = 'revoke' | 'recover';
+export type GuardSecretInputMode = 'pastePhrase' | 'typeOneByOne' | 'textAuto';
 
 export type GuardFlowStep = 'secret' | 'target' | 'patch' | 'review' | 'result';
 

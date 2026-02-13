@@ -37,26 +37,55 @@
   let selectedImportMethod = $state<ImportMethod>('seed24');
 
   const walletHelpContent = $derived({
-    sections: [
+    topics: [
       {
-        heading: i18n.t('welcome.help.title'),
-        text: i18n.t('welcome.help.intro')
+        id: 'wallet-different',
+        label: i18n.t('help.topic.walletDifferent'),
+        title: i18n.t('help.topic.walletDifferent'),
+        qas: [
+          {
+            id: 'wallet-different-accounts',
+            question: i18n.t('help.walletDifferent.accountsQuestion'),
+            answer: i18n.t('help.walletDifferent.accountsAnswer')
+          },
+          {
+            id: 'wallet-different-identity',
+            question: i18n.t('help.walletDifferent.identityQuestion'),
+            answer: i18n.t('help.walletDifferent.identityAnswer')
+          },
+          {
+            id: 'wallet-different-payments',
+            question: i18n.t('help.walletDifferent.paymentsQuestion'),
+            answer: i18n.t('help.walletDifferent.paymentsAnswer')
+          },
+          {
+            id: 'wallet-different-trust',
+            question: i18n.t('help.walletDifferent.trustQuestion'),
+            answer: i18n.t('help.walletDifferent.trustAnswer')
+          }
+        ]
       },
       {
-        heading: i18n.t('welcome.help.privateKeysHeading'),
-        text: i18n.t('welcome.help.privateKeysText')
-      },
-      {
-        heading: i18n.t('welcome.help.completeControlHeading'),
-        text: i18n.t('welcome.help.completeControlText')
-      },
-      {
-        heading: i18n.t('welcome.help.paymentsHeading'),
-        text: i18n.t('welcome.help.paymentsText')
-      },
-      {
-        heading: i18n.t('welcome.help.trustHeading'),
-        text: i18n.t('welcome.help.trustText')
+        id: 'keep-safe',
+        label: i18n.t('help.topic.keepSafe'),
+        title: i18n.t('help.topic.keepSafe'),
+        qas: [
+          {
+            id: 'keep-safe-items',
+            question: i18n.t('help.keepSafe.itemsQuestion'),
+            answer: i18n.t('help.keepSafe.itemsAnswer')
+          },
+          {
+            id: 'keep-safe-phone',
+            question: i18n.t('help.keepSafe.phoneQuestion'),
+            answer: i18n.t('help.keepSafe.phoneAnswer')
+          },
+          {
+            id: 'keep-safe-compromised',
+            question: i18n.t('help.keepSafe.compromisedQuestion'),
+            answer: i18n.t('help.keepSafe.compromisedAnswer')
+          }
+        ]
       }
     ]
   });
@@ -109,8 +138,8 @@
 
         <div class="text-muted-foreground text-xs">
           <HelpDrawerLink
-            linkText={i18n.t('welcome.help.link')}
-            title={i18n.t('welcome.help.title')}
+            linkText={i18n.t('help.link.needHelp')}
+            title={i18n.t('help.sheet.title')}
             content={walletHelpContent}
           />
         </div>

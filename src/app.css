@@ -200,10 +200,7 @@
   }
 
   .guard-dock-button {
-    --guard-dock-bg: color-mix(in oklab, var(--primary) 14%, var(--background) 86%);
-    --guard-dock-bg-hover: color-mix(in oklab, var(--primary) 22%, var(--background) 78%);
-    --guard-dock-fg: var(--primary);
-    --guard-dock-fg-hover: var(--primary);
+    @apply bg-primary/14 text-primary hover:bg-primary/22 dark:bg-primary/28 dark:text-primary-foreground dark:hover:bg-primary/36;
     position: fixed;
     right: 0;
     bottom: 0;
@@ -219,24 +216,10 @@
     border-bottom-right-radius: 0;
     border-bottom-left-radius: 0;
     padding: 0.7rem 1rem 0.6rem 1.05rem;
-    background: var(--guard-dock-bg);
-    color: var(--guard-dock-fg);
     backdrop-filter: blur(8px);
     transition:
       background-color 140ms ease,
       color 140ms ease;
-  }
-
-  .guard-dock-button:hover {
-    background: var(--guard-dock-bg-hover);
-    color: var(--guard-dock-fg-hover);
-  }
-
-  .dark .guard-dock-button {
-    --guard-dock-bg: color-mix(in oklab, var(--primary) 28%, var(--background) 72%);
-    --guard-dock-bg-hover: color-mix(in oklab, var(--primary) 36%, var(--background) 64%);
-    --guard-dock-fg: var(--primary-foreground);
-    --guard-dock-fg-hover: var(--primary-foreground);
   }
 
   .guard-dock-button:focus-visible {

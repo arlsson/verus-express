@@ -19,9 +19,9 @@
 
 <div class="mx-auto w-full max-w-[560px] space-y-6 py-4">
   <div class="space-y-2 text-center">
-    <h2 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+    <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
       {i18n.t('guard.flow.review.title')}
-    </h2>
+    </h1>
     <p class="text-muted-foreground text-sm">
       {i18n.t('guard.flow.review.description', { action: actionLabel })}
     </p>

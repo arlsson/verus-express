@@ -32,13 +32,27 @@
 
 <div class="mx-auto w-full max-w-[560px] space-y-6 py-4">
   <div class="space-y-2 text-center">
-    <h2 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
+    <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">
       {i18n.t('guard.flow.patch.title')}
-    </h2>
+    </h1>
     <p class="text-muted-foreground text-sm">{i18n.t('guard.flow.patch.description')}</p>
   </div>
 
-  <div class="bg-muted/20 border-border/70 rounded-xl border p-5">
+  <div class="space-y-5">
+    <div class="space-y-2">
+      <Label for="guard-primary-address">{i18n.t('guard.flow.patch.primaryAddressLabel')}</Label>
+      <Input
+        id="guard-primary-address"
+        value={draft.primaryAddress}
+        oninput={(event) => updateField('primaryAddress', (event.target as HTMLInputElement).value)}
+        placeholder={i18n.t('guard.flow.target.primaryPlaceholder')}
+        disabled={busy}
+        autocapitalize="off"
+        spellcheck="false"
+      />
+      <p class="text-muted-foreground text-xs">{i18n.t('guard.flow.target.primaryHelp')}</p>
+    </div>
+
     <Accordion.Root type="single" class="w-full">
       <Accordion.Item value="advanced">
         <Accordion.Trigger>{i18n.t('guard.flow.patch.advancedTitle')}</Accordion.Trigger>
@@ -51,6 +65,7 @@
                 value={draft.recoveryAuthority}
                 oninput={(event) => updateField('recoveryAuthority', (event.target as HTMLInputElement).value)}
                 placeholder={i18n.t('guard.flow.patch.recoveryAuthorityPlaceholder')}
+                disabled={busy}
                 autocapitalize="off"
                 spellcheck="false"
               />
@@ -63,6 +78,7 @@
                 value={draft.revocationAuthority}
                 oninput={(event) => updateField('revocationAuthority', (event.target as HTMLInputElement).value)}
                 placeholder={i18n.t('guard.flow.patch.revocationAuthorityPlaceholder')}
+                disabled={busy}
                 autocapitalize="off"
                 spellcheck="false"
               />
@@ -75,6 +91,7 @@
                 value={draft.privateAddress}
                 oninput={(event) => updateField('privateAddress', (event.target as HTMLInputElement).value)}
                 placeholder={i18n.t('guard.flow.patch.privateAddressPlaceholder')}
+                disabled={busy}
                 autocapitalize="off"
                 spellcheck="false"
               />

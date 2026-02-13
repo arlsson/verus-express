@@ -8,6 +8,8 @@ import type {
   BeginGuardSessionResult,
   EndGuardSessionRequest,
   EndGuardSessionResult,
+  GuardIdentityLookupRequest,
+  GuardIdentityLookupResult,
   GuardIdentityPreflightRequest,
   GuardIdentitySendRequest,
   GuardPreflightResult,
@@ -20,6 +22,7 @@ export async function beginGuardSession(
   return invoke<BeginGuardSessionResult>('begin_guard_session', {
     request: {
       importText: request.importText,
+      importMode: request.importMode,
       network: request.network
     }
   });
@@ -40,6 +43,17 @@ export async function preflightGuardIdentityUpdate(
     request: {
       guardSessionId: request.guardSessionId,
       params: request.params
+    }
+  });
+}
+
+export async function lookupGuardTargetIdentity(
+  request: GuardIdentityLookupRequest
+): Promise<GuardIdentityLookupResult> {
+  return invoke<GuardIdentityLookupResult>('lookup_guard_target_identity', {
+    request: {
+      guardSessionId: request.guardSessionId,
+      targetIdentity: request.targetIdentity
     }
   });
 }

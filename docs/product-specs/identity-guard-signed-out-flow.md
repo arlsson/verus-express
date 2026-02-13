@@ -1,6 +1,6 @@
 ---
 owner: lite-wallet-team
-last_reviewed: 2026-02-12
+last_reviewed: 2026-02-13
 ---
 
 # Identity guard signed-out flow
@@ -37,7 +37,10 @@ Both screens include a fixed bottom-right dock control labeled `VerusID Guard`.
 
 ## Revoke flow
 
-1. Import authority secret (seed/WIF/hex) and choose network.
+1. Import authority secret and choose network using one of:
+   - `Paste phrase` (24-word mnemonic)
+   - `Type one by one` (24-word mnemonic)
+   - `WIF, private key, or seed text`
 2. Enter target VerusID.
 3. Run preflight with operation `revoke`.
 4. Review warnings/high-risk changes and fee.
@@ -45,9 +48,12 @@ Both screens include a fixed bottom-right dock control labeled `VerusID Guard`.
 
 ## Recover flow
 
-1. Import authority secret and choose network.
-2. Enter target VerusID and required new primary address.
-3. Optional advanced patch fields:
+1. Import authority secret and choose network using one of:
+   - `Paste phrase` (24-word mnemonic)
+   - `Type one by one` (24-word mnemonic)
+   - `WIF, private key, or seed text`
+2. Enter target VerusID.
+3. Enter required new primary address and optional advanced patch fields:
    - recovery authority
    - revocation authority
    - private address
@@ -69,6 +75,9 @@ No UI-supplied transaction hex is accepted.
 ## Safety and lifecycle requirements
 
 - Guard session is in-memory only.
+- Step-1 import mode is strict:
+  - mnemonic options require valid 24-word English BIP39
+  - text option allows WIF/private-key-hex/seed-text auto classification
 - Session is ended on:
   - explicit close/cancel
   - flow unmount

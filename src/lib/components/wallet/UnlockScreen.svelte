@@ -102,18 +102,78 @@
     showWalletImport = true;
   }
 
-  const lostAccessHelpContent = $derived({
-    sections: [
+  const unlockHelpContent = $derived({
+    topics: [
       {
-        text: i18n.t('unlock.lostAccess.intro')
+        id: 'wallet-different',
+        label: i18n.t('help.topic.walletDifferent'),
+        title: i18n.t('help.topic.walletDifferent'),
+        qas: [
+          {
+            id: 'wallet-different-accounts',
+            question: i18n.t('help.walletDifferent.accountsQuestion'),
+            answer: i18n.t('help.walletDifferent.accountsAnswer')
+          },
+          {
+            id: 'wallet-different-identity',
+            question: i18n.t('help.walletDifferent.identityQuestion'),
+            answer: i18n.t('help.walletDifferent.identityAnswer')
+          },
+          {
+            id: 'wallet-different-payments',
+            question: i18n.t('help.walletDifferent.paymentsQuestion'),
+            answer: i18n.t('help.walletDifferent.paymentsAnswer')
+          },
+          {
+            id: 'wallet-different-trust',
+            question: i18n.t('help.walletDifferent.trustQuestion'),
+            answer: i18n.t('help.walletDifferent.trustAnswer')
+          }
+        ]
       },
       {
-        heading: i18n.t('unlock.lostAccess.howHeading'),
-        text: i18n.t('unlock.lostAccess.howText')
+        id: 'keep-safe',
+        label: i18n.t('help.topic.keepSafe'),
+        title: i18n.t('help.topic.keepSafe'),
+        qas: [
+          {
+            id: 'keep-safe-items',
+            question: i18n.t('help.keepSafe.itemsQuestion'),
+            answer: i18n.t('help.keepSafe.itemsAnswer')
+          },
+          {
+            id: 'keep-safe-phone',
+            question: i18n.t('help.keepSafe.phoneQuestion'),
+            answer: i18n.t('help.keepSafe.phoneAnswer')
+          },
+          {
+            id: 'keep-safe-compromised',
+            question: i18n.t('help.keepSafe.compromisedQuestion'),
+            answer: i18n.t('help.keepSafe.compromisedAnswer')
+          }
+        ]
       },
       {
-        heading: i18n.t('unlock.lostAccess.needHeading'),
-        text: i18n.t('unlock.lostAccess.needText')
+        id: 'lost-access',
+        label: i18n.t('help.topic.lostAccess'),
+        title: i18n.t('help.topic.lostAccess'),
+        qas: [
+          {
+            id: 'lost-access-password',
+            question: i18n.t('help.lostAccess.passwordQuestion'),
+            answer: i18n.t('help.lostAccess.passwordAnswer')
+          },
+          {
+            id: 'lost-access-regain',
+            question: i18n.t('help.lostAccess.regainQuestion'),
+            answer: i18n.t('help.lostAccess.regainAnswer')
+          },
+          {
+            id: 'lost-access-need',
+            question: i18n.t('help.lostAccess.needQuestion'),
+            answer: i18n.t('help.lostAccess.needAnswer')
+          }
+        ]
       }
     ]
   });
@@ -158,6 +218,17 @@
   $effect(() => {
     if (!showCreateOptionsDrawer) {
       createDrawerView = 'root';
+    }
+  });
+
+  $effect(() => {
+    if (password.trim().length > 0) return;
+    if (!errorMessage && !shakePasswordField) return;
+    errorMessage = '';
+    shakePasswordField = false;
+    if (shakeResetTimer) {
+      clearTimeout(shakeResetTimer);
+      shakeResetTimer = null;
     }
   });
 
@@ -269,45 +340,49 @@
         {/if}
 
         <div class="space-y-2">
-          <Label for="unlock-password" class="sr-only">{i18n.t('unlock.password')}</Label>
-          <div class={shakePasswordField ? 'unlock-error-shake' : ''}>
-            <Input
-              id="unlock-password"
-              type="password"
-              bind:value={password}
-              placeholder={i18n.t('unlock.password')}
-              autocomplete="current-password"
-              class={errorMessage ? 'border-destructive' : ''}
-              onkeydown={(e) => e.key === 'Enter' && handleUnlock()}
+          <div class="space-y-2">
+            <Label for="unlock-password" class="sr-only">{i18n.t('unlock.password')}</Label>
+            <div class={shakePasswordField ? 'unlock-error-shake' : ''}>
+              <Input
+                id="unlock-password"
+                type="password"
+                bind:value={password}
+                placeholder={i18n.t('unlock.password')}
+                autocomplete="current-password"
+                class={errorMessage ? 'border-destructive' : ''}
+                onkeydown={(e) => e.key === 'Enter' && handleUnlock()}
+              />
+            </div>
+            <p class="text-destructive min-h-8 text-sm leading-5" aria-live="polite">
+              {errorMessage || ' '}
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            <Button
+              class="w-full"
+              onclick={handleUnlock}
+              disabled={!effectiveAccountId || !password.trim() || isLoading}
+            >
+              {isLoading ? i18n.t('unlock.button.unlocking') : i18n.t('unlock.button.unlock')}
+            </Button>
+
+            <Button
+              variant="secondary"
+              class="w-full"
+              onclick={handleCreateWallet}
+            >
+              {i18n.t('unlock.button.createWallet')}
+            </Button>
+          </div>
+
+          <div class="text-muted-foreground text-xs">
+            <HelpDrawerLink
+              linkText={i18n.t('help.link.needHelp')}
+              title={i18n.t('help.sheet.title')}
+              content={unlockHelpContent}
             />
           </div>
-          <p class="text-destructive min-h-10 text-sm leading-5" aria-live="polite">{errorMessage}</p>
-        </div>
-
-        <div class="flex justify-end">
-          <HelpDrawerLink
-            linkText={i18n.t('unlock.lostAccess.link')}
-            title={i18n.t('unlock.lostAccess.title')}
-            content={lostAccessHelpContent}
-          />
-        </div>
-
-        <div class="space-y-2">
-          <Button
-            class="w-full"
-            onclick={handleUnlock}
-            disabled={!effectiveAccountId || !password.trim() || isLoading}
-          >
-            {isLoading ? i18n.t('unlock.button.unlocking') : i18n.t('unlock.button.unlock')}
-          </Button>
-
-          <Button
-            variant="secondary"
-            class="w-full"
-            onclick={handleCreateWallet}
-          >
-            {i18n.t('unlock.button.createWallet')}
-          </Button>
         </div>
       </div>
     </section>

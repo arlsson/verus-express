@@ -8,15 +8,24 @@
   import HelpLink from '$lib/components/common/HelpLink.svelte';
   import HelpSidebar from '$lib/components/common/HelpSidebar.svelte';
 
-  type HelpSection = {
-    heading?: string;
-    text: string;
+  type HelpQa = {
+    id: string;
+    question: string;
+    answer: string;
   };
 
-  interface HelpContent {
-    sections: Array<HelpSection>;
-  }
+  type HelpTopic = {
+    id: string;
+    label: string;
+    title: string;
+    qas: Array<HelpQa>;
+  };
 
+  type HelpContent = {
+    topics: Array<HelpTopic>;
+  };
+
+  /* eslint-disable prefer-const */
   let {
     linkText,
     title,
@@ -28,6 +37,7 @@
     content: HelpContent;
     class?: string;
   } = $props();
+  /* eslint-enable prefer-const */
 
   let isOpen = $state(false);
 </script>

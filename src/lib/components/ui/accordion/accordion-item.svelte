@@ -17,7 +17,7 @@
 	bind:ref
 	data-slot="accordion-item"
 	class={cn(
-		'border-border/70 bg-muted/10 data-[state=open]:bg-muted/20 data-[state=open]:border-border overflow-hidden rounded-md border transition-colors',
+		'border-border border-b last:border-b-0',
 		className
 	)}
 	{value}

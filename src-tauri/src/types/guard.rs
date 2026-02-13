@@ -8,10 +8,18 @@ use crate::types::identity::{
 };
 use crate::types::wallet::WalletNetwork;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GuardImportMode {
+    Mnemonic24,
+    TextAuto,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BeginGuardSessionRequest {
     pub import_text: String,
+    pub import_mode: GuardImportMode,
     pub network: WalletNetwork,
 }
 
@@ -50,6 +58,19 @@ pub struct GuardIdentityPreflightRequest {
 pub struct GuardIdentitySendRequest {
     pub guard_session_id: String,
     pub preflight_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuardIdentityLookupRequest {
+    pub guard_session_id: String,
+    pub target_identity: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuardIdentityLookupResult {
+    pub exists: bool,
 }
 
 pub type GuardPreflightResult = IdentityPreflightResult;
