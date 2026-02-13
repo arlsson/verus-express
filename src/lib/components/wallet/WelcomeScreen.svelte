@@ -13,6 +13,7 @@
   import VerusIdGuardDock from '$lib/components/wallet/VerusIdGuardDock.svelte';
   import { i18nStore } from '$lib/i18n';
   import type { ImportMethod } from '$lib/components/flows/WalletImport/types';
+  import { buildNeedHelpContent } from '$lib/utils/helpContent';
 
   const i18n = $derived($i18nStore);
 
@@ -36,59 +37,7 @@
   let showImportOptionsDrawer = $state(false);
   let selectedImportMethod = $state<ImportMethod>('seed24');
 
-  const walletHelpContent = $derived({
-    topics: [
-      {
-        id: 'wallet-different',
-        label: i18n.t('help.topic.walletDifferent'),
-        title: i18n.t('help.topic.walletDifferent'),
-        qas: [
-          {
-            id: 'wallet-different-accounts',
-            question: i18n.t('help.walletDifferent.accountsQuestion'),
-            answer: i18n.t('help.walletDifferent.accountsAnswer')
-          },
-          {
-            id: 'wallet-different-identity',
-            question: i18n.t('help.walletDifferent.identityQuestion'),
-            answer: i18n.t('help.walletDifferent.identityAnswer')
-          },
-          {
-            id: 'wallet-different-payments',
-            question: i18n.t('help.walletDifferent.paymentsQuestion'),
-            answer: i18n.t('help.walletDifferent.paymentsAnswer')
-          },
-          {
-            id: 'wallet-different-trust',
-            question: i18n.t('help.walletDifferent.trustQuestion'),
-            answer: i18n.t('help.walletDifferent.trustAnswer')
-          }
-        ]
-      },
-      {
-        id: 'keep-safe',
-        label: i18n.t('help.topic.keepSafe'),
-        title: i18n.t('help.topic.keepSafe'),
-        qas: [
-          {
-            id: 'keep-safe-items',
-            question: i18n.t('help.keepSafe.itemsQuestion'),
-            answer: i18n.t('help.keepSafe.itemsAnswer')
-          },
-          {
-            id: 'keep-safe-phone',
-            question: i18n.t('help.keepSafe.phoneQuestion'),
-            answer: i18n.t('help.keepSafe.phoneAnswer')
-          },
-          {
-            id: 'keep-safe-compromised',
-            question: i18n.t('help.keepSafe.compromisedQuestion'),
-            answer: i18n.t('help.keepSafe.compromisedAnswer')
-          }
-        ]
-      }
-    ]
-  });
+  const walletHelpContent = $derived(buildNeedHelpContent(i18n.t));
 </script>
 
 <main class="bg-background relative flex min-h-screen overflow-hidden">

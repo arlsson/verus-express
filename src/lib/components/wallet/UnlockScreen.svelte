@@ -22,6 +22,7 @@
   import VerusIdGuardDock from '$lib/components/wallet/VerusIdGuardDock.svelte';
   import type { ImportMethod } from '$lib/components/flows/WalletImport/types';
   import { getWalletColorHex } from '$lib/constants/walletColors';
+  import { buildNeedHelpContent } from '$lib/utils/helpContent';
 
   export type WalletListItem = {
     account_id: string;
@@ -102,81 +103,7 @@
     showWalletImport = true;
   }
 
-  const unlockHelpContent = $derived({
-    topics: [
-      {
-        id: 'wallet-different',
-        label: i18n.t('help.topic.walletDifferent'),
-        title: i18n.t('help.topic.walletDifferent'),
-        qas: [
-          {
-            id: 'wallet-different-accounts',
-            question: i18n.t('help.walletDifferent.accountsQuestion'),
-            answer: i18n.t('help.walletDifferent.accountsAnswer')
-          },
-          {
-            id: 'wallet-different-identity',
-            question: i18n.t('help.walletDifferent.identityQuestion'),
-            answer: i18n.t('help.walletDifferent.identityAnswer')
-          },
-          {
-            id: 'wallet-different-payments',
-            question: i18n.t('help.walletDifferent.paymentsQuestion'),
-            answer: i18n.t('help.walletDifferent.paymentsAnswer')
-          },
-          {
-            id: 'wallet-different-trust',
-            question: i18n.t('help.walletDifferent.trustQuestion'),
-            answer: i18n.t('help.walletDifferent.trustAnswer')
-          }
-        ]
-      },
-      {
-        id: 'keep-safe',
-        label: i18n.t('help.topic.keepSafe'),
-        title: i18n.t('help.topic.keepSafe'),
-        qas: [
-          {
-            id: 'keep-safe-items',
-            question: i18n.t('help.keepSafe.itemsQuestion'),
-            answer: i18n.t('help.keepSafe.itemsAnswer')
-          },
-          {
-            id: 'keep-safe-phone',
-            question: i18n.t('help.keepSafe.phoneQuestion'),
-            answer: i18n.t('help.keepSafe.phoneAnswer')
-          },
-          {
-            id: 'keep-safe-compromised',
-            question: i18n.t('help.keepSafe.compromisedQuestion'),
-            answer: i18n.t('help.keepSafe.compromisedAnswer')
-          }
-        ]
-      },
-      {
-        id: 'lost-access',
-        label: i18n.t('help.topic.lostAccess'),
-        title: i18n.t('help.topic.lostAccess'),
-        qas: [
-          {
-            id: 'lost-access-password',
-            question: i18n.t('help.lostAccess.passwordQuestion'),
-            answer: i18n.t('help.lostAccess.passwordAnswer')
-          },
-          {
-            id: 'lost-access-regain',
-            question: i18n.t('help.lostAccess.regainQuestion'),
-            answer: i18n.t('help.lostAccess.regainAnswer')
-          },
-          {
-            id: 'lost-access-need',
-            question: i18n.t('help.lostAccess.needQuestion'),
-            answer: i18n.t('help.lostAccess.needAnswer')
-          }
-        ]
-      }
-    ]
-  });
+  const unlockHelpContent = $derived(buildNeedHelpContent(i18n.t, { includeLostAccess: true }));
 
   function extractWalletErrorType(error: unknown): string | null {
     if (typeof error === 'string') {

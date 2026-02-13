@@ -10,6 +10,11 @@ This file applies to frontend work under `src/`.
 - Default to desktop UX decisions for this app.
 - Keep visual patterns consistent with
   `src/lib/components/wallet/UnlockScreen.svelte`.
+- Treat repeated user-facing content (for example, Need help Q&A blocks) as shared
+  sources instead of duplicated inline arrays in multiple screens.
+- Prefer shared utilities under `src/lib` (for example, `src/lib/utils/*`) that
+  accept `i18n.t(...)` and return localized content, then compose per-screen
+  variations in one place.
 
 ## Start points by task
 

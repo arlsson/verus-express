@@ -19,6 +19,8 @@ Use this file as a table of contents, not as an encyclopedia.
   inline SVG icons when a Lucide equivalent exists.
 - For parity research against `valu-mobile` (`newsend2`), use
   `/Users/maxtheyse/dev/valu-mobile` on branch `newsend2`.
+- Centralize repeated user-facing content definitions instead of duplicating them across screens.
+- For shared help topics, FAQs, and copy blocks used in more than one screen, create a shared helper in `src/lib` and consume it from all screens.
 
 ## Primary maps
 

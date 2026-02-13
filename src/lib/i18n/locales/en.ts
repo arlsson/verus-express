@@ -76,9 +76,9 @@ export const en: Record<string, string> = {
   'guard.sheet.title': 'VerusID Guard',
   'guard.sheet.description': 'Choose what you need to do with your VerusID authority key.',
   'guard.sheet.revokeTitle': 'Revoke VerusID',
-  'guard.sheet.revokeDescription': 'Revoke a compromised or lost VerusID from signed-out mode.',
+  'guard.sheet.revokeDescription': 'Freeze your VerusID immediately. Prevents all spending until you recover it.',
   'guard.sheet.recoverTitle': 'Recover VerusID',
-  'guard.sheet.recoverDescription': 'Recover a revoked VerusID and optionally set new identity fields.',
+  'guard.sheet.recoverDescription': 'Restore access to a revoked VerusID and secure it with new keys.',
   'guard.flow.secret.title': 'Import {action} authority key',
   'guard.flow.secret.description': 'Import the secret that has authority to {action} this identity.',
   'guard.flow.secret.inputLabel': 'Authority secret',
@@ -454,6 +454,7 @@ export const en: Record<string, string> = {
   'help.sheet.title': 'Need help?',
   'help.topic.walletDifferent': 'How is this wallet different?',
   'help.topic.keepSafe': 'What do I need to keep safe?',
+  'help.topic.verusIdGuard': 'What is VerusID Guard?',
   'help.topic.lostAccess': 'Lost access?',
   'help.walletDifferent.accountsQuestion': 'How is this different from regular app accounts?',
   'help.walletDifferent.accountsAnswer':
@@ -476,6 +477,18 @@ export const en: Record<string, string> = {
   'help.keepSafe.compromisedQuestion': 'What if my keys are compromised?',
   'help.keepSafe.compromisedAnswer':
     'Use the revoke and recover flow as soon as possible. Then move to fresh keys and keep the new recovery phrase offline.',
+  'help.verusIdGuard.revokeQuestion': 'What does revoking do?',
+  'help.verusIdGuard.revokeAnswer':
+    "It immediately freezes your VerusID. No one can spend funds from it until it's recovered. Your funds stay on the identity, safe. Like freezing a credit card, but without a bank.",
+  'help.verusIdGuard.fundsQuestion': 'Will I lose my funds?',
+  'help.verusIdGuard.fundsAnswer':
+    "No. Revoking doesn't move or delete anything. Your funds, name, and data all stay on the identity. Once you recover, you regain full access.",
+  'help.verusIdGuard.recoverQuestion': 'What does recovering do?',
+  'help.verusIdGuard.recoverAnswer':
+    'It restores full control of a revoked VerusID. You can assign new primary keys during recovery, so even if someone had your old keys, they are locked out.',
+  'help.verusIdGuard.authorityQuestion': 'Who can revoke or recover my VerusID?',
+  'help.verusIdGuard.authorityAnswer':
+    'Only the VerusIDs you assigned as your revocation and recovery authorities. No company or third party can do this unless you explicitly gave them that authority.',
   'help.lostAccess.passwordQuestion': 'Can I recover a forgotten password?',
   'help.lostAccess.passwordAnswer':
     "You can't recover forgotten passwords in a self-custody wallet.",
