@@ -14,6 +14,8 @@
   import Receive from './sections/Receive.svelte';
   import Conversions from './sections/Conversions.svelte';
   import Identity from './sections/Identity.svelte';
+  import Apps from './sections/Apps.svelte';
+  import Activity from './sections/Activity.svelte';
   import AddressBook from './sections/AddressBook.svelte';
   import { dismissWalletError, walletErrorsStore } from '$lib/stores/walletErrors.js';
   import { i18nStore } from '$lib/i18n';
@@ -25,7 +27,15 @@
     network?: 'mainnet' | 'testnet';
   }
 
-  type SectionId = 'overview' | 'send' | 'receive' | 'conversions' | 'identity' | 'address-book';
+  type SectionId =
+    | 'overview'
+    | 'send'
+    | 'receive'
+    | 'conversions'
+    | 'identity'
+    | 'apps'
+    | 'activity'
+    | 'address-book';
 
   const { walletData }: { walletData: WalletData } = $props();
   let activeSection = $state<SectionId>('overview');
@@ -35,11 +45,11 @@
 </script>
 
 <div class="relative min-h-screen">
-  <div class="absolute top-0 left-0 z-40 h-11 w-[16rem]" data-tauri-drag-region aria-hidden="true"></div>
+  <div class="absolute top-0 left-0 z-40 h-11 w-[15.25rem]" data-tauri-drag-region aria-hidden="true"></div>
   <Sidebar.Provider>
-    <AppSidebar bind:activeSection />
-    <Sidebar.Inset>
-      <TopBar {walletData} />
+    <AppSidebar bind:activeSection {walletData} />
+    <Sidebar.Inset class="dark:bg-[#111111]">
+      <TopBar />
       {#if latestError}
         <div class="mx-6 mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <div class="flex items-start justify-between gap-3">
@@ -56,6 +66,7 @@
             {walletData}
             onNavigateToSend={() => (activeSection = 'send')}
             onNavigateToReceive={() => (activeSection = 'receive')}
+            onNavigateToConvert={() => (activeSection = 'conversions')}
           />
         {:else if activeSection === 'send'}
           <Send />
@@ -65,6 +76,10 @@
           <Conversions />
         {:else if activeSection === 'identity'}
           <Identity />
+        {:else if activeSection === 'apps'}
+          <Apps />
+        {:else if activeSection === 'activity'}
+          <Activity />
         {:else if activeSection === 'address-book'}
           <AddressBook />
         {/if}
