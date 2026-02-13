@@ -333,7 +333,7 @@ export const en: Record<string, string> = {
   'walletCreation.verify.enterWord': 'Enter word',
   'walletCreation.verify.incorrect': 'Incorrect word, please try again',
 
-  'walletCreation.password.choose': 'Choose Password',
+  'walletCreation.password.choose': 'Choose password',
   'walletCreation.password.placeholder': 'Enter password',
   'walletCreation.password.strength': 'Strength: {label}',
   'walletCreation.password.level.strength': 'Strength',
@@ -341,8 +341,7 @@ export const en: Record<string, string> = {
   'walletCreation.password.level.mediocre': 'Okay',
   'walletCreation.password.level.good': 'Good',
   'walletCreation.password.level.excellent': 'Strong',
-  'walletCreation.password.stronger': 'Password is too weak. Add more variety.',
-  'walletCreation.password.confirm': 'Confirm Password',
+  'walletCreation.password.confirm': 'Confirm password',
   'walletCreation.password.confirmPlaceholder': 'Confirm password',
   'walletCreation.password.mismatch': "Passwords don't match",
 

@@ -349,7 +349,6 @@ export const nl: Record<string, string> = {
   'walletCreation.password.level.mediocre': 'Redelijk',
   'walletCreation.password.level.good': 'Goed',
   'walletCreation.password.level.excellent': 'Sterk',
-  'walletCreation.password.stronger': 'Wachtwoord is te zwak. Gebruik meer variatie.',
   'walletCreation.password.confirm': 'Bevestig wachtwoord',
   'walletCreation.password.confirmPlaceholder': 'Bevestig wachtwoord',
   'walletCreation.password.mismatch': 'Wachtwoorden komen niet overeen',

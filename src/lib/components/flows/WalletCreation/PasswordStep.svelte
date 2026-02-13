@@ -118,11 +118,6 @@
       {/if}
     </div>
 
-    <p class="min-h-5 text-xs text-destructive">
-      {#if walletData.password && !passwordValid}
-        {i18n.t('walletCreation.password.stronger')}
-      {/if}
-    </p>
   </div>
 
   {#if showConfirmField}

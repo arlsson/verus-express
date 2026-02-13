@@ -38,12 +38,12 @@
   <div class="space-y-3">
     <button
       type="button"
-      class="group border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      class="group w-full rounded-lg bg-muted/65 p-4 text-left transition-colors hover:bg-[#D4313E]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-muted/55 dark:hover:bg-[#D4313E]/[0.14]"
       onclick={() => handleSelect('revoke')}
     >
       <div class="flex items-start gap-3">
         <ShieldXIcon
-          class="mt-0.5 h-7 w-7 shrink-0 text-foreground opacity-30 transition-[color,opacity] duration-150 group-hover:text-foreground group-hover:opacity-55 dark:opacity-45 dark:group-hover:text-white dark:group-hover:opacity-100"
+          class="mt-0.5 h-7 w-7 shrink-0 text-[#D4313E] opacity-30 transition-opacity duration-150 group-hover:opacity-100 dark:opacity-45 dark:group-hover:opacity-100"
           absoluteStrokeWidth
           stroke-linecap="butt"
           aria-hidden="true"
@@ -57,12 +57,12 @@
 
     <button
       type="button"
-      class="group border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      class="group w-full rounded-lg bg-muted/65 p-4 text-left transition-colors hover:bg-[#4AA658]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-muted/55 dark:hover:bg-[#4AA658]/[0.14]"
       onclick={() => handleSelect('recover')}
     >
       <div class="flex items-start gap-3">
         <ShieldCheckIcon
-          class="mt-0.5 h-7 w-7 shrink-0 text-foreground opacity-30 transition-[color,opacity] duration-150 group-hover:text-foreground group-hover:opacity-55 dark:opacity-45 dark:group-hover:text-white dark:group-hover:opacity-100"
+          class="mt-0.5 h-7 w-7 shrink-0 text-[#4AA658] opacity-30 transition-opacity duration-150 group-hover:opacity-100 dark:opacity-45 dark:group-hover:opacity-100"
           absoluteStrokeWidth
           stroke-linecap="butt"
           aria-hidden="true"

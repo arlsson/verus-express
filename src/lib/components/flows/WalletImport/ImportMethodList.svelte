@@ -51,12 +51,12 @@
   <div class="{showHeader ? 'mt-5' : ''} space-y-3">
     <button
       type="button"
-      class="group border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      class="group w-full rounded-lg bg-muted/65 p-4 text-left transition-colors hover:bg-muted/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-muted/55 dark:hover:bg-muted/65"
       onclick={() => onSelect('seed24')}
     >
       <div class="flex items-start gap-3">
         <BookOpenIcon
-          class="mt-0.5 h-7 w-7 shrink-0 text-foreground opacity-30 transition-[color,opacity] duration-150 group-hover:text-foreground group-hover:opacity-55 dark:opacity-45 dark:group-hover:text-white dark:group-hover:opacity-100"
+          class="mt-0.5 h-6 w-6 shrink-0 text-foreground opacity-30 transition-opacity duration-150 group-hover:opacity-100 dark:opacity-45 dark:group-hover:opacity-100"
           absoluteStrokeWidth
           stroke-linecap="butt"
           aria-hidden="true"
@@ -72,12 +72,12 @@
 
     <button
       type="button"
-      class="group border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      class="group w-full rounded-lg bg-muted/65 p-4 text-left transition-colors hover:bg-muted/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-muted/55 dark:hover:bg-muted/65"
       onclick={() => onSelect('text')}
     >
       <div class="flex items-start gap-3">
         <SquarePenIcon
-          class="mt-0.5 h-7 w-7 shrink-0 text-foreground opacity-30 transition-[color,opacity] duration-150 group-hover:text-foreground group-hover:opacity-55 dark:opacity-45 dark:group-hover:text-white dark:group-hover:opacity-100"
+          class="mt-0.5 h-6 w-6 shrink-0 text-foreground opacity-30 transition-opacity duration-150 group-hover:opacity-100 dark:opacity-45 dark:group-hover:opacity-100"
           absoluteStrokeWidth
           stroke-linecap="butt"
           aria-hidden="true"
