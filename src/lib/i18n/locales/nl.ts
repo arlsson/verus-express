@@ -243,7 +243,7 @@ export const nl: Record<string, string> = {
   'wallet.identity.title': 'Identiteit',
   'wallet.addressBook.title': 'Adresboek',
 
-  'walletImport.step1.title': 'Geef je geimporteerde wallet een naam',
+  'walletImport.step1.title': 'Personaliseer je wallet',
   'walletImport.step1.description': 'Kies een naam, icoon en netwerk voor dit apparaat.',
   'walletImport.step2.seedTitle': 'Voer herstelzin in',
   'walletImport.step2.seedDescription': 'Plak je 24 woorden of voer ze een voor een in.',

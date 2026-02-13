@@ -2,6 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { goto } from '$app/navigation';
   import { Button } from '$lib/components/ui/button';
+  import StepperLayout from '$lib/components/shared/StepperLayout.svelte';
   import NameStep from '$lib/components/flows/WalletCreation/NameStep.svelte';
   import PasswordStep from '$lib/components/flows/WalletCreation/PasswordStep.svelte';
   import { i18nStore } from '$lib/i18n';
@@ -209,223 +210,161 @@
   });
 </script>
 
-<main class="flex h-screen flex-col overflow-hidden">
-  <div class="bg-background absolute inset-0"></div>
-  <div class="absolute top-0 right-0 left-0 z-30 h-11" data-tauri-drag-region aria-hidden="true"></div>
-
-  <div class="relative z-10 flex min-h-0 flex-1 w-full">
-    <section class="flex min-w-0 flex-1">
-      <div class="flex min-h-0 flex-1 flex-col">
-        <div class="border-border/80 shrink-0 border-b">
-          <div class="flex h-[50px] items-center justify-center px-6">
-            <div class="flex items-center gap-4">
-              <span class="text-muted-foreground text-sm font-medium">
-                {i18n.t('shared.stepOf', { current: currentStep, total: TOTAL_STEPS })}
-              </span>
-
-              <div class="flex items-center gap-2">
-                {#each [...Array(TOTAL_STEPS).keys()] as stepIndex}
-                  {@const stepNum = stepIndex + 1}
-                  <div
-                    class="h-2 w-2 rounded-full transition-all duration-200
-                           {stepNum === currentStep
-                      ? 'bg-primary scale-125'
-                      : stepNum < currentStep
-                        ? 'bg-primary/60'
-                        : 'bg-muted-foreground/30'}"
-                  ></div>
-                {/each}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {#if currentStep === 1}
-          <div class="absolute top-[58px] right-6 z-20 sm:right-8">
-            <div class="flex items-center gap-1 opacity-70 transition-opacity hover:opacity-100">
-              <span class="sr-only">{i18n.t('walletCreation.name.network')}</span>
-              <button
-                type="button"
-                onclick={() => {
-                  walletData = { ...walletData, network: 'mainnet' };
-                }}
-                class="h-5 rounded border px-2 text-[10px] font-medium transition-colors {walletData.network ===
-                'mainnet'
-                  ? 'border-border bg-muted/70 text-foreground'
-                  : 'border-transparent bg-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/40'}"
-              >
-                {i18n.t('walletCreation.name.mainnetTitle')}
-              </button>
-              <button
-                type="button"
-                onclick={() => {
-                  walletData = { ...walletData, network: 'testnet' };
-                }}
-                class="h-5 rounded border px-2 text-[10px] font-medium transition-colors {walletData.network ===
-                'testnet'
-                  ? 'border-border bg-muted/70 text-foreground'
-                  : 'border-transparent bg-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/40'}"
-              >
-                {i18n.t('walletCreation.name.testnetTitle')}
-              </button>
-            </div>
-          </div>
-        {/if}
-
-        <div
-          class="flex-1 overflow-y-auto px-6 sm:px-8 {currentStep === 2 ? 'py-6' : 'py-10'}"
-        >
-          <div class="mx-auto w-full max-w-[620px] {currentStep === 2 ? 'space-y-4' : 'space-y-6'}">
-            {#if currentStep === 1}
-              <div class="space-y-3 text-center">
-                <h1 class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
-                  {i18n.t('walletImport.step1.title')}
-                </h1>
-                <p class="text-muted-foreground text-sm">{i18n.t('walletImport.step1.description')}</p>
-              </div>
-              <NameStep
-                walletData={walletData}
-                onUpdate={(data: WalletUpdate) => {
-                  walletData = { ...walletData, ...data };
-                }}
-                errorMessage=""
-              />
-            {:else if currentStep === 2}
-              <div class="space-y-2 text-center">
-                <h1 class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
-                  {selectedMethod === 'seed24'
-                    ? i18n.t('walletImport.step2.seedTitle')
-                    : i18n.t('walletImport.step2.textTitle')}
-                </h1>
-                <p class="text-muted-foreground text-sm">
-                  {selectedMethod === 'seed24'
-                    ? i18n.t('walletImport.step2.seedDescription')
-                    : i18n.t('walletImport.step2.textDescription')}
-                </p>
-              </div>
-              {#if selectedMethod === 'seed24'}
-                <SeedPhraseStep
-                  seedPhraseInput={seedPhraseInput}
-                  onInputChanged={(value: string) => {
-                    seedPhraseInput = value;
-                  }}
-                  onNormalizedChanged={(value: string) => {
-                    seedPhraseNormalized = value;
-                  }}
-                  onValidityChanged={(valid: boolean) => {
-                    seedPhraseValid = valid;
-                  }}
-                />
-              {:else}
-                <TextImportStep
-                  importTextInput={textImportInput}
-                  onInputChanged={(value: string) => {
-                    textImportInput = value;
-                  }}
-                  onValidityChanged={(valid: boolean) => {
-                    textImportValid = valid;
-                  }}
-                />
-              {/if}
-            {:else if currentStep === 3}
-              <div class="space-y-3 text-center">
-                <h1 class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
-                  {i18n.t('walletImport.step3.title')}
-                </h1>
-                <p class="text-muted-foreground text-sm">{i18n.t('walletImport.step3.description')}</p>
-              </div>
-              <PasswordStep
-                walletData={walletData}
-                onUpdate={(data: WalletUpdate) => {
-                  walletData = { ...walletData, ...data };
-                }}
-                onCanCreateChanged={(canCreate: boolean) => {
-                  canImportWallet = canCreate;
-                }}
-              />
-            {:else if currentStep === 4}
-              <div class="space-y-3 text-center">
-                <h1 class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
-                  {i18n.t('walletImport.step4.title')}
-                </h1>
-                <p class="text-muted-foreground text-sm">{i18n.t('walletImport.step4.description')}</p>
-              </div>
-              <ImportCompleteStep method={selectedMethod} isOpening={openWalletLoading} openError={openWalletError} />
-            {/if}
-          </div>
-        </div>
-
-        <div class="border-black/10 bg-muted/10 dark:border-white/20 shrink-0 border-t">
-          <div class="flex w-full items-center justify-between gap-4 px-6 py-4 sm:px-8">
-            <Button variant="secondary" onclick={handleBack} class="min-w-48 px-6">
-              {i18n.t('common.back')}
-            </Button>
-
-            {#if currentStep === 1}
-              <Button
-                onclick={nextStep}
-                disabled={!walletData.name.trim() || /[/\\:*?"<>|]/.test(walletData.name)}
-                class="min-w-48 px-6"
-              >
-                {i18n.t('common.continue')}
-              </Button>
-            {:else if currentStep === 2}
-              <Button
-                onclick={nextStep}
-                disabled={selectedMethod === 'seed24' ? !seedPhraseValid : !textImportValid}
-                class="min-w-48 px-6"
-              >
-                {i18n.t('common.continue')}
-              </Button>
-            {:else if currentStep === 3}
-              <div class="flex flex-col items-end gap-2">
-                {#if submitError}
-                  <p class="text-destructive text-sm" aria-live="polite">{submitError}</p>
-                {/if}
-                {#if isSubmitting}
-                  <p class="text-muted-foreground text-xs">{i18n.t('walletImport.step3.loadingHint')}</p>
-                {/if}
-                <Button
-                  onclick={handleImportWallet}
-                  disabled={selectedMethod === 'seed24'
-                    ? !canImportWallet || !seedPhraseValid || !seedPhraseNormalized || isSubmitting
-                    : !canImportWallet || !textImportValid || isSubmitting}
-                  class="min-w-48 px-6"
-                >
-                  {isSubmitting
-                    ? i18n.t('walletImport.button.importing')
-                    : i18n.t('walletImport.button.import')}
-                </Button>
-              </div>
-            {:else if currentStep === 4}
-              <div class="flex flex-col items-end gap-2">
-                <div class="min-h-5">
-                  {#if openWalletError}
-                    <p class="text-destructive text-sm" aria-live="polite">{openWalletError}</p>
-                  {/if}
-                </div>
-                {#if openWalletError}
-                  <Button
-                    onclick={() => {
-                      openWalletError = '';
-                      openWalletAttempted = true;
-                      handleOpenWallet();
-                    }}
-                    disabled={openWalletLoading}
-                    class="min-w-48 px-6"
-                  >
-                    {i18n.t('walletImport.button.retryOpen')}
-                  </Button>
-                {:else}
-                  <Button disabled={true} class="min-w-48 px-6">
-                    {i18n.t('walletImport.button.opening')}
-                  </Button>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        </div>
+<StepperLayout
+  currentStep={currentStep}
+  totalSteps={TOTAL_STEPS}
+  onClose={handleGoHome}
+  showNetworkToggle={currentStep === 1}
+  network={walletData.network}
+  networkLabel={i18n.t('walletCreation.name.network')}
+  onNetworkChange={(value) => {
+    walletData = { ...walletData, network: value };
+  }}
+  contentClass={`flex-1 overflow-y-auto px-6 sm:px-8 ${currentStep === 2 ? 'py-6' : 'py-10'}`}
+  contentInnerClass={`mx-auto w-full max-w-[620px] ${currentStep === 2 ? 'space-y-4' : 'space-y-6'}`}
+>
+  {#snippet children()}
+    {#if currentStep === 1}
+      <div class="text-center">
+        <h1 class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
+          {i18n.t('walletImport.step1.title')}
+        </h1>
       </div>
-    </section>
-  </div>
-</main>
+      <NameStep
+        walletData={walletData}
+        onUpdate={(data: WalletUpdate) => {
+          walletData = { ...walletData, ...data };
+        }}
+        errorMessage=""
+      />
+    {:else if currentStep === 2}
+      <div class="space-y-2 text-center">
+        <h1 class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
+          {selectedMethod === 'seed24'
+            ? i18n.t('walletImport.step2.seedTitle')
+            : i18n.t('walletImport.step2.textTitle')}
+        </h1>
+        {#if selectedMethod !== 'seed24'}
+          <p class="text-muted-foreground text-sm">{i18n.t('walletImport.step2.textDescription')}</p>
+        {/if}
+      </div>
+      {#if selectedMethod === 'seed24'}
+        <SeedPhraseStep
+          seedPhraseInput={seedPhraseInput}
+          onInputChanged={(value: string) => {
+            seedPhraseInput = value;
+          }}
+          onNormalizedChanged={(value: string) => {
+            seedPhraseNormalized = value;
+          }}
+          onValidityChanged={(valid: boolean) => {
+            seedPhraseValid = valid;
+          }}
+        />
+      {:else}
+        <TextImportStep
+          importTextInput={textImportInput}
+          onInputChanged={(value: string) => {
+            textImportInput = value;
+          }}
+          onValidityChanged={(valid: boolean) => {
+            textImportValid = valid;
+          }}
+        />
+      {/if}
+    {:else if currentStep === 3}
+      <div class="space-y-3 text-center">
+        <h1 class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
+          {i18n.t('walletImport.step3.title')}
+        </h1>
+        <p class="text-muted-foreground text-sm">{i18n.t('walletImport.step3.description')}</p>
+      </div>
+      <PasswordStep
+        walletData={walletData}
+        onUpdate={(data: WalletUpdate) => {
+          walletData = { ...walletData, ...data };
+        }}
+        onCanCreateChanged={(canCreate: boolean) => {
+          canImportWallet = canCreate;
+        }}
+      />
+    {:else if currentStep === 4}
+      <div class="space-y-3 text-center">
+        <h1 class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
+          {i18n.t('walletImport.step4.title')}
+        </h1>
+        <p class="text-muted-foreground text-sm">{i18n.t('walletImport.step4.description')}</p>
+      </div>
+      <ImportCompleteStep method={selectedMethod} isOpening={openWalletLoading} openError={openWalletError} />
+    {/if}
+  {/snippet}
+
+  {#snippet footer()}
+    <div class="flex w-full items-center justify-between gap-4">
+      <Button variant="secondary" onclick={handleBack} class="min-w-48 px-6">
+        {currentStep === 1 ? i18n.t('common.cancel') : i18n.t('common.back')}
+      </Button>
+
+      {#if currentStep === 1}
+        <Button
+          onclick={nextStep}
+          disabled={!walletData.name.trim() || /[/\\:*?"<>|]/.test(walletData.name)}
+          class="min-w-48 px-6"
+        >
+          {i18n.t('common.continue')}
+        </Button>
+      {:else if currentStep === 2}
+        <Button
+          onclick={nextStep}
+          disabled={selectedMethod === 'seed24' ? !seedPhraseValid : !textImportValid}
+          class="min-w-48 px-6"
+        >
+          {i18n.t('common.continue')}
+        </Button>
+      {:else if currentStep === 3}
+        <div class="flex flex-col items-end gap-2">
+          {#if submitError}
+            <p class="text-destructive text-sm" aria-live="polite">{submitError}</p>
+          {/if}
+          {#if isSubmitting}
+            <p class="text-muted-foreground text-xs">{i18n.t('walletImport.step3.loadingHint')}</p>
+          {/if}
+          <Button
+            onclick={handleImportWallet}
+            disabled={selectedMethod === 'seed24'
+              ? !canImportWallet || !seedPhraseValid || !seedPhraseNormalized || isSubmitting
+              : !canImportWallet || !textImportValid || isSubmitting}
+            class="min-w-48 px-6"
+          >
+            {isSubmitting ? i18n.t('walletImport.button.importing') : i18n.t('walletImport.button.import')}
+          </Button>
+        </div>
+      {:else if currentStep === 4}
+        <div class="flex flex-col items-end gap-2">
+          <div class="min-h-5">
+            {#if openWalletError}
+              <p class="text-destructive text-sm" aria-live="polite">{openWalletError}</p>
+            {/if}
+          </div>
+          {#if openWalletError}
+            <Button
+              onclick={() => {
+                openWalletError = '';
+                openWalletAttempted = true;
+                handleOpenWallet();
+              }}
+              disabled={openWalletLoading}
+              class="min-w-48 px-6"
+            >
+              {i18n.t('walletImport.button.retryOpen')}
+            </Button>
+          {:else}
+            <Button disabled={true} class="min-w-48 px-6">
+              {i18n.t('walletImport.button.opening')}
+            </Button>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  {/snippet}
+</StepperLayout>

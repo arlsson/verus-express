@@ -15,6 +15,7 @@
   import SettingsIcon from '@lucide/svelte/icons/settings';
   import LockIcon from '@lucide/svelte/icons/lock';
   import { i18nStore } from '$lib/i18n';
+  import { getWalletColorHex } from '$lib/constants/walletColors';
 
   interface WalletData {
     name: string;
@@ -26,19 +27,7 @@
   let { walletData }: { walletData: WalletData } = $props();
   const i18n = $derived($i18nStore);
 
-  // Color class lookup (matching CompleteStep pattern)
-  const colorOptions = [
-    { name: 'blue', class: 'bg-blue-100 dark:bg-blue-900' },
-    { name: 'green', class: 'bg-green-100 dark:bg-green-900' },
-    { name: 'purple', class: 'bg-purple-100 dark:bg-purple-900' },
-    { name: 'orange', class: 'bg-orange-100 dark:bg-orange-900' },
-    { name: 'pink', class: 'bg-pink-100 dark:bg-pink-900' },
-    { name: 'yellow', class: 'bg-yellow-100 dark:bg-yellow-900' }
-  ];
-
-  const colorClass = $derived(
-    colorOptions.find(c => c.name === walletData.color)?.class || colorOptions[0].class
-  );
+  const colorHex = $derived(getWalletColorHex(walletData.color));
 
   async function handleLock() {
     try {
@@ -54,7 +43,7 @@
   <!-- Left: Wallet Display -->
   <div class="flex items-center gap-3">
     <Avatar.Root class="h-10 w-10">
-      <Avatar.Fallback class={colorClass}>
+      <Avatar.Fallback class="text-white" style={`background-color: ${colorHex};`}>
         <span class="text-xl">{walletData.emoji}</span>
       </Avatar.Fallback>
     </Avatar.Root>

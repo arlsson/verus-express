@@ -445,7 +445,6 @@
         spellcheck="false"
         class="bg-muted/90 dark:bg-muted/65 text-foreground selection:bg-primary selection:text-primary-foreground ring-offset-background placeholder:text-foreground/55 dark:placeholder:text-foreground/60 min-h-24 w-full min-w-0 rounded-md border border-transparent px-4 py-3 text-sm shadow-none transition-[border-color,box-shadow,background-color] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/60"
       ></textarea>
-      <p class="text-muted-foreground text-xs">{i18n.t('walletImport.seed.pasteHint')}</p>
     </Tabs.Content>
 
     <Tabs.Content value="manual" class="mt-4 space-y-4">

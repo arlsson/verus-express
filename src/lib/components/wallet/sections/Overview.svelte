@@ -13,10 +13,11 @@
   import DownloadIcon from '@lucide/svelte/icons/download';
   import ArrowDownUpIcon from '@lucide/svelte/icons/arrow-down-up';
   import { balanceStore } from '$lib/stores/balances.js';
-  import { transactionStore, getTransactions } from '$lib/stores/transactions.js';
+  import { getTransactions, transactionStore } from '$lib/stores/transactions.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { i18nStore } from '$lib/i18n';
+  import { getWalletColorHex } from '$lib/constants/walletColors';
 
   interface WalletData {
     name: string;
@@ -35,18 +36,7 @@
     onNavigateToReceive?: () => void;
   } = $props();
 
-  const colorOptions = [
-    { name: 'blue', class: 'bg-blue-100 dark:bg-blue-900' },
-    { name: 'green', class: 'bg-green-100 dark:bg-green-900' },
-    { name: 'purple', class: 'bg-purple-100 dark:bg-purple-900' },
-    { name: 'orange', class: 'bg-orange-100 dark:bg-orange-900' },
-    { name: 'pink', class: 'bg-pink-100 dark:bg-pink-900' },
-    { name: 'yellow', class: 'bg-yellow-100 dark:bg-yellow-900' }
-  ];
-
-  const colorClass = $derived(
-    colorOptions.find((c) => c.name === walletData.color)?.class ?? colorOptions[0].class
-  );
+  const colorHex = $derived(getWalletColorHex(walletData.color));
 
   const coins = $derived($coinsStore);
   const i18n = $derived($i18nStore);
@@ -83,7 +73,7 @@
     <Card.Header>
       <Card.Title class="flex items-center gap-3">
         <Avatar.Root class="h-12 w-12">
-          <Avatar.Fallback class={colorClass}>
+          <Avatar.Fallback class="text-white" style={`background-color: ${colorHex};`}>
             <span class="text-2xl">{walletData.emoji}</span>
           </Avatar.Fallback>
         </Avatar.Root>

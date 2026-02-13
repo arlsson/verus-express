@@ -21,6 +21,7 @@
   import ImportMethodList from '$lib/components/flows/WalletImport/ImportMethodList.svelte';
   import VerusIdGuardDock from '$lib/components/wallet/VerusIdGuardDock.svelte';
   import type { ImportMethod } from '$lib/components/flows/WalletImport/types';
+  import { getWalletColorHex } from '$lib/constants/walletColors';
 
   export type WalletListItem = {
     account_id: string;
@@ -71,32 +72,8 @@
     return i18n.t(networkLocaleKey(network));
   }
 
-  const colorClasses: Record<string, string> = {
-    blue: 'bg-blue-500 dark:bg-blue-600',
-    indigo: 'bg-indigo-500 dark:bg-indigo-600',
-    sky: 'bg-sky-500 dark:bg-sky-600',
-    cyan: 'bg-cyan-500 dark:bg-cyan-600',
-    green: 'bg-green-500 dark:bg-green-600',
-    emerald: 'bg-emerald-500 dark:bg-emerald-600',
-    teal: 'bg-teal-500 dark:bg-teal-600',
-    lime: 'bg-lime-500 dark:bg-lime-600',
-    red: 'bg-red-500 dark:bg-red-600',
-    orange: 'bg-orange-500 dark:bg-orange-600',
-    amber: 'bg-amber-500 dark:bg-amber-600',
-    yellow: 'bg-yellow-500 dark:bg-yellow-600',
-    purple: 'bg-purple-500 dark:bg-purple-600',
-    violet: 'bg-violet-500 dark:bg-violet-600',
-    pink: 'bg-pink-500 dark:bg-pink-600',
-    rose: 'bg-rose-500 dark:bg-rose-600',
-    slate: 'bg-slate-500 dark:bg-slate-600',
-    gray: 'bg-gray-500 dark:bg-gray-600',
-    zinc: 'bg-zinc-500 dark:bg-zinc-600',
-    stone: 'bg-stone-500 dark:bg-stone-600'
-  };
-
-  function walletColorClass(color?: string): string {
-    if (!color) return colorClasses.blue;
-    return colorClasses[color] ?? colorClasses.blue;
+  function walletColorHex(color?: string): string {
+    return getWalletColorHex(color);
   }
 
   function walletEmoji(emoji?: string): string {
@@ -265,8 +242,8 @@
             <div class="flex items-center justify-between">
               <div class="min-w-0 flex items-center gap-3">
                 <div
-                  class={"flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg text-white " +
-                    walletColorClass(selectedWallet.color)}
+                  class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg text-white"
+                  style={`background-color: ${walletColorHex(selectedWallet.color)};`}
                 >
                   {walletEmoji(selectedWallet.emoji)}
                 </div>
@@ -365,8 +342,8 @@
               }}
             >
               <div
-                class={"flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base text-white " +
-                  walletColorClass(wallet.color)}
+                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base text-white"
+                style={`background-color: ${walletColorHex(wallet.color)};`}
               >
                 {walletEmoji(wallet.emoji)}
               </div>

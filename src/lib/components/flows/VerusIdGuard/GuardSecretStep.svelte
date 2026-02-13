@@ -3,21 +3,15 @@
   import { Label } from '$lib/components/ui/label';
   import { i18nStore } from '$lib/i18n';
   import type { GuardFlowMode } from './types';
-  import type { WalletNetwork } from '$lib/types/wallet.js';
 
   type GuardSecretStepProps = {
     mode: GuardFlowMode;
     importText: string;
-    network: WalletNetwork;
-    busy?: boolean;
+    // eslint-disable-next-line no-unused-vars
     onImportTextChange?: (value: string) => void;
-    onNetworkChange?: (value: WalletNetwork) => void;
   };
 
   const defaultStringHandler = (value: string) => {
-    void value;
-  };
-  const defaultNetworkHandler = (value: WalletNetwork) => {
     void value;
   };
 
@@ -25,10 +19,7 @@
   let {
     mode,
     importText,
-    network,
-    busy = false,
-    onImportTextChange = defaultStringHandler,
-    onNetworkChange = defaultNetworkHandler
+    onImportTextChange = defaultStringHandler
   }: GuardSecretStepProps = $props();
   /* eslint-enable prefer-const */
 
@@ -60,38 +51,6 @@
         spellcheck="false"
       />
       <p class="text-muted-foreground text-xs">{i18n.t('guard.flow.secret.inputHelp')}</p>
-    </div>
-
-    <div class="space-y-2">
-      <span class="text-sm font-medium text-foreground">{i18n.t('guard.flow.secret.networkLabel')}</span>
-      <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class={
-            'h-9 rounded border px-3 text-xs font-medium transition-colors ' +
-            (network === 'mainnet'
-              ? 'border-border bg-muted/70 text-foreground'
-              : 'border-transparent bg-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/40')
-          }
-          onclick={() => onNetworkChange('mainnet')}
-          disabled={busy}
-        >
-          {i18n.t('common.network.mainnet')}
-        </button>
-        <button
-          type="button"
-          class={
-            'h-9 rounded border px-3 text-xs font-medium transition-colors ' +
-            (network === 'testnet'
-              ? 'border-border bg-muted/70 text-foreground'
-              : 'border-transparent bg-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/40')
-          }
-          onclick={() => onNetworkChange('testnet')}
-          disabled={busy}
-        >
-          {i18n.t('common.network.testnet')}
-        </button>
-      </div>
     </div>
   </div>
 </div>

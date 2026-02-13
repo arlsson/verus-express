@@ -241,7 +241,7 @@ export const en: Record<string, string> = {
   'wallet.identity.title': 'Identity',
   'wallet.addressBook.title': 'Address Book',
 
-  'walletImport.step1.title': 'Name your imported wallet',
+  'walletImport.step1.title': 'Personalise your wallet',
   'walletImport.step1.description': 'Choose a name, icon, and network for this device.',
   'walletImport.step2.seedTitle': 'Enter recovery phrase',
   'walletImport.step2.seedDescription': 'Paste your 24 words or enter them one by one.',

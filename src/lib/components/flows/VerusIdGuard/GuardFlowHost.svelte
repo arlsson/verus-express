@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { Button } from '$lib/components/ui/button';
+  import StepperLayout from '$lib/components/shared/StepperLayout.svelte';
   import { i18nStore } from '$lib/i18n';
   import {
     beginGuardSession,
@@ -392,8 +393,14 @@
   async function handleCopyTxid() {
     if (!sendResult?.txid) return;
 
+    const clipboard = globalThis.navigator?.clipboard;
+    if (!clipboard) {
+      copyFeedback = i18n.t('guard.flow.result.copyFailed');
+      return;
+    }
+
     try {
-      await navigator.clipboard.writeText(sendResult.txid);
+      await clipboard.writeText(sendResult.txid);
       copyFeedback = i18n.t('guard.flow.result.copySuccess');
     } catch {
       copyFeedback = i18n.t('guard.flow.result.copyFailed');
@@ -441,6 +448,10 @@
     handleBack();
   }
 
+  function handleHeaderClose() {
+    void closeFlow();
+  }
+
   onDestroy(() => {
     clearCopyFeedback();
     void cleanupGuardSession();
@@ -449,138 +460,104 @@
 
 <svelte:window onkeydown={handleWindowKeyDown} />
 
-<main class="h-screen flex flex-col overflow-hidden">
-  <div class="absolute inset-0 bg-[#fbfbfb] dark:bg-[#111111]"></div>
-  <div class="absolute top-0 right-0 left-0 z-30 h-11" data-tauri-drag-region aria-hidden="true"></div>
+<StepperLayout
+  currentStep={currentStepIndex}
+  totalSteps={totalSteps}
+  onClose={handleHeaderClose}
+  closeDisabled={busy}
+  showNetworkToggle={step === 'secret'}
+  network={network}
+  networkLabel={i18n.t('guard.flow.secret.networkLabel')}
+  networkToggleDisabled={busy}
+  onNetworkChange={handleNetworkChange}
+>
+  {#snippet children()}
+    {#if step === 'secret'}
+      <GuardSecretStep {mode} {importText} onImportTextChange={handleImportTextChange} />
+    {:else if step === 'target'}
+      <GuardTargetStep
+        {mode}
+        {busy}
+        {targetIdentity}
+        primaryAddress={recoverDraft.primaryAddress}
+        onTargetIdentityChange={handleTargetIdentityChange}
+        onPrimaryAddressChange={handlePrimaryAddressChange}
+      />
+    {:else if step === 'patch'}
+      <GuardRecoverPatchStep draft={recoverDraft} {busy} onDraftChange={handleRecoverDraftChange} />
+    {:else if step === 'review' && reviewContext}
+      <GuardReviewStep context={reviewContext} />
+    {:else}
+      <GuardResultStep
+        {mode}
+        {sendResult}
+        {errorMessage}
+        {copyFeedback}
+        onCopyTxid={handleCopyTxid}
+      />
+    {/if}
+  {/snippet}
 
-  <div class="relative z-10 flex min-h-0 flex-1 w-full">
-    <section class="flex min-w-0 flex-1">
-      <div class="flex min-h-0 flex-1 flex-col">
-        <div class="shrink-0 border-b border-border/80">
-          <div class="flex h-[50px] items-center justify-center px-6">
-            <div class="flex items-center gap-4">
-              <span class="text-sm text-muted-foreground font-medium" aria-live="polite">
-                {i18n.t('shared.stepOf', { current: currentStepIndex, total: totalSteps })}
-              </span>
+  {#snippet footer()}
+    {#if step !== 'result' && errorMessage}
+      <p class="text-destructive mb-2 text-right text-sm" aria-live="polite">
+        {errorMessage}
+      </p>
+    {/if}
 
-              <div class="flex items-center gap-2">
-                {#each Array(totalSteps) as _, index}
-                  {@const stepNum = index + 1}
-                  <div
-                    class="w-2 h-2 rounded-full transition-all duration-200
-                           {stepNum === currentStepIndex
-                             ? 'bg-primary scale-125'
-                             : stepNum < currentStepIndex
-                               ? 'bg-primary/60'
-                               : 'bg-muted-foreground/30'}"
-                  ></div>
-                {/each}
-              </div>
-            </div>
-          </div>
-        </div>
+    <div class="flex w-full items-center justify-between gap-4">
+      {#if step === 'result'}
+        {#if hasResultSuccess}
+          <div class="min-w-48 px-6"></div>
+        {:else}
+          <Button variant="secondary" onclick={handleTryAgain} disabled={busy} class="min-w-48 px-6">
+            {i18n.t('guard.flow.result.tryAgain')}
+          </Button>
+        {/if}
+      {:else}
+        <Button
+          variant="secondary"
+          onclick={step === 'secret' ? closeFlow : handleBack}
+          disabled={busy}
+          class="min-w-48 px-6"
+        >
+          {step === 'secret' ? i18n.t('common.cancel') : i18n.t('common.back')}
+        </Button>
+      {/if}
 
-        <div class="flex-1 overflow-y-auto px-6 py-10 sm:px-8">
-          <div class="mx-auto w-full max-w-[620px] space-y-6">
-            {#if step === 'secret'}
-              <GuardSecretStep
-                {mode}
-                {importText}
-                {network}
-                {busy}
-                onImportTextChange={handleImportTextChange}
-                onNetworkChange={handleNetworkChange}
-              />
-            {:else if step === 'target'}
-              <GuardTargetStep
-                {mode}
-                {busy}
-                {targetIdentity}
-                primaryAddress={recoverDraft.primaryAddress}
-                onTargetIdentityChange={handleTargetIdentityChange}
-                onPrimaryAddressChange={handlePrimaryAddressChange}
-              />
-            {:else if step === 'patch'}
-              <GuardRecoverPatchStep draft={recoverDraft} {busy} onDraftChange={handleRecoverDraftChange} />
-            {:else if step === 'review' && reviewContext}
-              <GuardReviewStep context={reviewContext} />
-            {:else}
-              <GuardResultStep
-                {mode}
-                {sendResult}
-                {errorMessage}
-                {copyFeedback}
-                onCopyTxid={handleCopyTxid}
-              />
-            {/if}
-          </div>
-        </div>
-
-        <div class="shrink-0 border-t border-black/10 bg-muted/10 dark:border-white/20">
-          <div class="px-6 py-4 sm:px-8">
-            {#if step !== 'result' && errorMessage}
-              <p class="text-destructive mb-2 text-right text-sm" aria-live="polite">
-                {errorMessage}
-              </p>
-            {/if}
-
-            <div class="flex w-full items-center justify-between gap-4">
-              {#if step === 'result'}
-                {#if hasResultSuccess}
-                  <div class="min-w-48 px-6"></div>
-                {:else}
-                  <Button variant="secondary" onclick={handleTryAgain} disabled={busy} class="min-w-48 px-6">
-                    {i18n.t('guard.flow.result.tryAgain')}
-                  </Button>
-                {/if}
-              {:else}
-                <Button
-                  variant="secondary"
-                  onclick={step === 'secret' ? closeFlow : handleBack}
-                  disabled={busy}
-                  class="min-w-48 px-6"
-                >
-                  {step === 'secret' ? i18n.t('common.cancel') : i18n.t('common.back')}
-                </Button>
-              {/if}
-
-              {#if step === 'secret'}
-                <Button onclick={handleBeginSession} disabled={busy || !importText.trim()} class="min-w-48 px-6">
-                  {busy ? i18n.t('guard.flow.secret.continueBusy') : i18n.t('guard.flow.secret.continue')}
-                </Button>
-              {:else if step === 'target'}
-                <Button onclick={handleTargetContinue} disabled={busy || !canContinueTarget} class="min-w-48 px-6">
-                  {busy
-                    ? i18n.t('guard.flow.target.preflightBusy')
-                    : mode === 'recover'
-                      ? i18n.t('guard.flow.target.preflightRecover')
-                      : i18n.t('guard.flow.target.preflightRevoke')}
-                </Button>
-              {:else if step === 'patch'}
-                <Button
-                  onclick={handlePatchContinue}
-                  disabled={busy || !recoverDraft.primaryAddress.trim()}
-                  class="min-w-48 px-6"
-                >
-                  {busy ? i18n.t('guard.flow.patch.continueBusy') : i18n.t('guard.flow.patch.continue')}
-                </Button>
-              {:else if step === 'review'}
-                <Button onclick={handleSubmit} disabled={busy || !preflight} class="min-w-48 px-6">
-                  {busy
-                    ? i18n.t('guard.flow.review.submitBusy')
-                    : mode === 'revoke'
-                      ? i18n.t('guard.flow.review.submitRevoke')
-                      : i18n.t('guard.flow.review.submitRecover')}
-                </Button>
-              {:else}
-                <Button onclick={closeFlow} disabled={busy} class="min-w-48 px-6">
-                  {i18n.t('common.done')}
-                </Button>
-              {/if}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  </div>
-</main>
+      {#if step === 'secret'}
+        <Button onclick={handleBeginSession} disabled={busy || !importText.trim()} class="min-w-48 px-6">
+          {busy ? i18n.t('guard.flow.secret.continueBusy') : i18n.t('guard.flow.secret.continue')}
+        </Button>
+      {:else if step === 'target'}
+        <Button onclick={handleTargetContinue} disabled={busy || !canContinueTarget} class="min-w-48 px-6">
+          {busy
+            ? i18n.t('guard.flow.target.preflightBusy')
+            : mode === 'recover'
+              ? i18n.t('guard.flow.target.preflightRecover')
+              : i18n.t('guard.flow.target.preflightRevoke')}
+        </Button>
+      {:else if step === 'patch'}
+        <Button
+          onclick={handlePatchContinue}
+          disabled={busy || !recoverDraft.primaryAddress.trim()}
+          class="min-w-48 px-6"
+        >
+          {busy ? i18n.t('guard.flow.patch.continueBusy') : i18n.t('guard.flow.patch.continue')}
+        </Button>
+      {:else if step === 'review'}
+        <Button onclick={handleSubmit} disabled={busy || !preflight} class="min-w-48 px-6">
+          {busy
+            ? i18n.t('guard.flow.review.submitBusy')
+            : mode === 'revoke'
+              ? i18n.t('guard.flow.review.submitRevoke')
+              : i18n.t('guard.flow.review.submitRecover')}
+        </Button>
+      {:else}
+        <Button onclick={closeFlow} disabled={busy} class="min-w-48 px-6">
+          {i18n.t('common.done')}
+        </Button>
+      {/if}
+    </div>
+  {/snippet}
+</StepperLayout>

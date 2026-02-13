@@ -8,6 +8,7 @@
 <script lang="ts">
   import { i18nStore } from '$lib/i18n';
   import { Input } from '$lib/components/ui/input';
+  import { getWalletColor, WALLET_COLOR_OPTIONS } from '$lib/constants/walletColors';
   import { cn } from '$lib/utils.js';
 
   type WalletData = {
@@ -16,11 +17,6 @@
     color: string;
     password: string;
     network: 'mainnet' | 'testnet';
-  };
-
-  type ColorOption = {
-    name: string;
-    class: string;
   };
 
   // Props
@@ -46,42 +42,7 @@
   // Better emoji options (money, crypto, identity themed)
   const emojiOptions: string[] = ['💰', '💎', '🪙', '🔐', '⚡', '🔥', '🚀', '🌟', '🛡️', '🔑', '👑', '⭐'];
 
-  // Extended color palette (grouped by color family)
-  const colorOptions: ColorOption[] = [
-    // Blues
-    { name: 'blue', class: 'bg-blue-500 dark:bg-blue-600' },
-    { name: 'indigo', class: 'bg-indigo-500 dark:bg-indigo-600' },
-    { name: 'sky', class: 'bg-sky-500 dark:bg-sky-600' },
-    { name: 'cyan', class: 'bg-cyan-500 dark:bg-cyan-600' },
-
-    // Greens
-    { name: 'green', class: 'bg-green-500 dark:bg-green-600' },
-    { name: 'emerald', class: 'bg-emerald-500 dark:bg-emerald-600' },
-    { name: 'teal', class: 'bg-teal-500 dark:bg-teal-600' },
-    { name: 'lime', class: 'bg-lime-500 dark:bg-lime-600' },
-
-    // Warm colors
-    { name: 'red', class: 'bg-red-500 dark:bg-red-600' },
-    { name: 'orange', class: 'bg-orange-500 dark:bg-orange-600' },
-    { name: 'amber', class: 'bg-amber-500 dark:bg-amber-600' },
-    { name: 'yellow', class: 'bg-yellow-500 dark:bg-yellow-600' },
-
-    // Purples & pinks
-    { name: 'purple', class: 'bg-purple-500 dark:bg-purple-600' },
-    { name: 'violet', class: 'bg-violet-500 dark:bg-violet-600' },
-    { name: 'pink', class: 'bg-pink-500 dark:bg-pink-600' },
-    { name: 'rose', class: 'bg-rose-500 dark:bg-rose-600' },
-
-    // Neutrals
-    { name: 'slate', class: 'bg-slate-500 dark:bg-slate-600' },
-    { name: 'gray', class: 'bg-gray-500 dark:bg-gray-600' },
-    { name: 'zinc', class: 'bg-zinc-500 dark:bg-zinc-600' },
-    { name: 'stone', class: 'bg-stone-500 dark:bg-stone-600' }
-  ];
-
-  const selectedColorClass = $derived(
-    colorOptions.find((c) => c.name === walletData.color)?.class || colorOptions[0].class
-  );
+  const selectedColor = $derived(getWalletColor(walletData.color));
 </script>
 
 <!-- Content centered in available space -->
@@ -91,7 +52,8 @@
     <div class="relative">
       <!-- Main Icon Display -->
       <div
-        class="{selectedColorClass} mx-auto flex h-28 w-28 items-center justify-center rounded-3xl border-4 border-white/20 shadow-xl"
+        class="mx-auto flex h-28 w-28 items-center justify-center rounded-3xl border-4 border-black/10 shadow-xl dark:border-white/20"
+        style={`background-color: ${selectedColor.hex};`}
       >
         <span class="text-6xl" role="img">{walletData.emoji}</span>
       </div>
@@ -121,7 +83,10 @@
           title={i18n.t('walletCreation.name.changeColor')}
           aria-label={i18n.t('walletCreation.name.changeColor')}
         >
-          <div class="{selectedColorClass} w-4 h-4 rounded-full"></div>
+          <div
+            class="h-4 w-4 rounded-full border border-black/10 dark:border-white/25"
+            style={`background-color: ${selectedColor.hex};`}
+          ></div>
         </button>
       </div>
     </div>
@@ -236,20 +201,26 @@
       aria-modal="true"
       aria-label={i18n.t('walletCreation.name.colorPicker')}
     >
-      <div class="grid grid-cols-10 gap-2">
-        {#each colorOptions as color}
-          {@const colorOption = color as ColorOption}
+      <div class="grid grid-cols-7 gap-2">
+        {#each WALLET_COLOR_OPTIONS as colorOption}
           <button
             onclick={() => {
               onUpdate({ color: colorOption.name });
               showColorPicker = false;
             }}
-            class="w-8 h-8 rounded-full hover:scale-110 transition-all duration-200 
-                   {colorOption.name === walletData.color ? 'ring-2 ring-white scale-110' : ''}"
+            class={cn(
+              'h-8 w-8 rounded-full transition-all duration-200 hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+              colorOption.name === selectedColor.name
+                ? 'scale-110 ring-2 ring-slate-900/70 ring-offset-2 ring-offset-background dark:ring-slate-100/90'
+                : 'ring-1 ring-black/10 dark:ring-white/25'
+            )}
             title={colorOption.name}
             aria-label={i18n.t('walletCreation.name.selectColor', { color: colorOption.name })}
           >
-            <div class="{colorOption.class} w-full h-full rounded-full shadow-lg"></div>
+            <div
+              class="h-full w-full rounded-full border border-black/10 shadow-lg dark:border-white/25"
+              style={`background-color: ${colorOption.hex};`}
+            ></div>
           </button>
         {/each}
       </div>
