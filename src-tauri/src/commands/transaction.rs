@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 
 use crate::core::auth::SessionManager;
 use crate::core::channels::btc::BtcProviderPool;
+use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::channels::{
     route_get_balances, route_get_transactions, route_preflight, route_send, PreflightStore,
@@ -29,6 +30,7 @@ pub async fn preflight_send(
     coin_registry: State<'_, Arc<CoinRegistry>>,
     vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
     btc_provider_pool: State<'_, Arc<BtcProviderPool>>,
+    eth_provider_pool: State<'_, Arc<EthProviderPool>>,
 ) -> Result<PreflightResult, WalletError> {
     let session = session_manager.lock().await;
     if !session.is_unlocked() {
@@ -46,6 +48,7 @@ pub async fn preflight_send(
         coin_registry.as_ref(),
         vrpc_provider_pool.inner().as_ref(),
         btc_provider_pool.inner().as_ref(),
+        eth_provider_pool.inner().as_ref(),
     )
     .await
 }
@@ -58,6 +61,7 @@ pub async fn send_transaction(
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
     btc_provider_pool: State<'_, Arc<BtcProviderPool>>,
+    eth_provider_pool: State<'_, Arc<EthProviderPool>>,
 ) -> Result<SendResult, WalletError> {
     let session = session_manager.lock().await;
     if !session.is_unlocked() {
@@ -72,6 +76,7 @@ pub async fn send_transaction(
         &session_manager,
         vrpc_provider_pool.inner().as_ref(),
         btc_provider_pool.inner().as_ref(),
+        eth_provider_pool.inner().as_ref(),
     )
     .await
 }
@@ -84,6 +89,7 @@ pub async fn get_balances(
     coin_registry: State<'_, Arc<CoinRegistry>>,
     vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
     btc_provider_pool: State<'_, Arc<BtcProviderPool>>,
+    eth_provider_pool: State<'_, Arc<EthProviderPool>>,
 ) -> Result<BalanceResult, WalletError> {
     let session = session_manager.lock().await;
     if !session.is_unlocked() {
@@ -97,6 +103,7 @@ pub async fn get_balances(
         coin_registry.as_ref(),
         vrpc_provider_pool.inner().as_ref(),
         btc_provider_pool.inner().as_ref(),
+        eth_provider_pool.inner().as_ref(),
     )
     .await
 }
@@ -110,6 +117,7 @@ pub async fn get_transaction_history(
     coin_registry: State<'_, Arc<CoinRegistry>>,
     vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
     btc_provider_pool: State<'_, Arc<BtcProviderPool>>,
+    eth_provider_pool: State<'_, Arc<EthProviderPool>>,
 ) -> Result<Vec<Transaction>, WalletError> {
     let session = session_manager.lock().await;
     if !session.is_unlocked() {
@@ -123,6 +131,7 @@ pub async fn get_transaction_history(
         coin_registry.as_ref(),
         vrpc_provider_pool.inner().as_ref(),
         btc_provider_pool.inner().as_ref(),
+        eth_provider_pool.inner().as_ref(),
     )
     .await?;
     if let Some(warning) = res.warning {

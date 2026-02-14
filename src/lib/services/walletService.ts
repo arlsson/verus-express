@@ -35,8 +35,8 @@ export async function lockWallet(): Promise<void> {
   await invoke('lock_wallet');
 }
 
-export async function startUpdateEngine(): Promise<void> {
-  await invoke('start_update_engine');
+export async function startUpdateEngine(includeTransactions = false): Promise<void> {
+  await invoke('start_update_engine', { include_transactions: includeTransactions });
 }
 
 export async function isUnlocked(): Promise<boolean> {

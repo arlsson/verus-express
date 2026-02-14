@@ -9,11 +9,13 @@ mod types;
 
 use commands::{coins, guard, identity, transaction, vrpc_transfer, wallet};
 use core::channels::btc::BtcProviderPool;
+use core::channels::eth::EthProviderPool;
 use core::channels::vrpc::VrpcProviderPool;
 use core::{
     CoinRegistry, GuardSessionManager, PreflightStore, SessionManager, StrongholdStore,
     UpdateEngine, WalletManager,
 };
+use std::path::Path;
 use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::Mutex;
@@ -24,8 +26,25 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+fn load_runtime_env_files() {
+    // Load local env files for desktop dev/runtime convenience without committing secrets.
+    // Existing process environment variables keep precedence.
+    for candidate in [".env.local", ".env", "../.env.local", "../.env"] {
+        if !Path::new(candidate).exists() {
+            continue;
+        }
+
+        match dotenvy::from_filename(candidate) {
+            Ok(_) => println!("[APP] Loaded runtime env file: {}", candidate),
+            Err(err) => eprintln!("[APP] Failed to load runtime env file {}: {}", candidate, err),
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    load_runtime_env_files();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -93,6 +112,14 @@ pub fn run() {
             let btc_provider_pool = Arc::new(BtcProviderPool::new());
             app.manage(btc_provider_pool);
             println!("[APP] BTC providers initialized");
+
+            let eth_provider_pool = Arc::new(EthProviderPool::new());
+            if let Some(reason) = eth_provider_pool.disabled_reason() {
+                println!("[APP] ETH providers disabled: {}", reason);
+            } else {
+                println!("[APP] ETH providers initialized");
+            }
+            app.manage(eth_provider_pool);
 
             let update_engine = Arc::new(UpdateEngine::new());
             app.manage(update_engine);

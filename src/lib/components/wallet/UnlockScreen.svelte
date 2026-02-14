@@ -6,6 +6,8 @@
 -->
 
 <script lang="ts">
+  import CirclePlusIcon from '@lucide/svelte/icons/circle-plus';
+  import DownloadIcon from '@lucide/svelte/icons/download';
   import { onDestroy, tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { invoke } from '@tauri-apps/api/core';
@@ -368,33 +370,24 @@
         {#if createDrawerView === 'root'}
           <Sheet.Header>
             <Sheet.Title>{i18n.t('unlock.create.title')}</Sheet.Title>
-            <Sheet.Description>{i18n.t('unlock.create.description')}</Sheet.Description>
           </Sheet.Header>
 
           <div class="mt-5 space-y-3">
             <button
               type="button"
-              class="border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors"
+              class="group w-full rounded-lg bg-muted/65 p-4 text-left transition-colors hover:bg-muted/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-muted/55 dark:hover:bg-muted/65"
               onclick={handleStartNewWalletFlow}
             >
               <div class="flex items-start gap-3">
-                <svg
-                  class="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
+                <CirclePlusIcon
+                  class="mt-0.5 h-6 w-6 shrink-0 text-foreground opacity-30 transition-opacity duration-150 group-hover:opacity-100 dark:opacity-45 dark:group-hover:opacity-100"
+                  absoluteStrokeWidth
+                  stroke-linecap="butt"
                   aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="9"></circle>
-                  <path d="M12 8v8"></path>
-                  <path d="M8 12h8"></path>
-                </svg>
+                />
                 <div class="min-w-0">
-                  <p class="text-sm font-semibold text-foreground">{i18n.t('unlock.create.newTitle')}</p>
-                  <p class="text-xs text-muted-foreground mt-1">
+                  <p class="text-foreground text-sm font-semibold">{i18n.t('unlock.create.newTitle')}</p>
+                  <p class="text-muted-foreground mt-1 text-xs">
                     {i18n.t('unlock.create.newDescription')}
                   </p>
                 </div>
@@ -403,27 +396,19 @@
 
             <button
               type="button"
-              class="border-input hover:bg-muted/60 w-full rounded-lg border p-4 text-left transition-colors"
+              class="group w-full rounded-lg bg-muted/65 p-4 text-left transition-colors hover:bg-muted/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-muted/55 dark:hover:bg-muted/65"
               onclick={handleShowImportMethods}
             >
               <div class="flex items-start gap-3">
-                <svg
-                  class="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
+                <DownloadIcon
+                  class="mt-0.5 h-6 w-6 shrink-0 text-foreground opacity-30 transition-opacity duration-150 group-hover:opacity-100 dark:opacity-45 dark:group-hover:opacity-100"
+                  absoluteStrokeWidth
+                  stroke-linecap="butt"
                   aria-hidden="true"
-                >
-                  <path d="M12 3v11"></path>
-                  <path d="m8 10 4 4 4-4"></path>
-                  <path d="M4 20h16"></path>
-                </svg>
-                <div class="min-w-0 flex-1">
-                  <p class="text-sm font-semibold text-foreground">{i18n.t('unlock.create.importTitle')}</p>
-                  <p class="text-xs text-muted-foreground mt-1">
+                />
+                <div class="min-w-0">
+                  <p class="text-foreground text-sm font-semibold">{i18n.t('unlock.create.importTitle')}</p>
+                  <p class="text-muted-foreground mt-1 text-xs">
                     {i18n.t('unlock.create.importDescription')}
                   </p>
                 </div>

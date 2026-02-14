@@ -1,6 +1,6 @@
 ---
 owner: lite-wallet-team
-last_reviewed: 2026-02-12
+last_reviewed: 2026-02-14
 ---
 
 # Context pack: send flow
@@ -13,6 +13,9 @@ Read this before touching transaction send behavior.
 - Send uses `preflight_id` only.
 - Preflight payload is backend-owned and session-scoped.
 - Preflight records are single-use and must expire/clear correctly.
+- ETH preflight enforces a minimum gas floor of `1 gwei` and may adjust send value downward when balance cannot cover `amount + fee`.
+- ERC20 preflight must enforce both token balance and ETH-fee balance checks before send.
+- ETH/ERC20 send must reject missing/expired preflight and consume preflight records exactly once.
 
 ## Open these files first
 
@@ -26,6 +29,9 @@ Read this before touching transaction send behavior.
 - `src-tauri/src/core/channels/vrpc/send.rs`
 - `src-tauri/src/core/channels/btc/preflight.rs`
 - `src-tauri/src/core/channels/btc/send.rs`
+- `src-tauri/src/core/channels/eth/preflight.rs`
+- `src-tauri/src/core/channels/eth/send.rs`
+- `src-tauri/src/core/channels/eth/transactions.rs`
 
 ## Verification checklist
 
@@ -34,3 +40,6 @@ Read this before touching transaction send behavior.
 - Confirm no UI pathway can submit tx hex/signing material.
 - Confirm lock still clears preflight state.
 - Confirm user-facing errors remain safe.
+- Confirm ETH/ERC20 route IDs use canonical prefixes:
+  `eth.<coinId>` and `erc20.<coinId>`.
+- Confirm ETH/ERC20 phase-1 scope is core wallet behavior only (no bridge convert/cross-chain or add-token persistence UX).

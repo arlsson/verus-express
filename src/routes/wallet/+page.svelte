@@ -57,7 +57,7 @@
       const channels = buildWalletChannels(coins, addresses?.vrsc_address ?? null);
       walletChannelsStore.set(channels);
       teardownEventBridge = await setupWalletEventBridge();
-      await walletService.startUpdateEngine();
+      await walletService.startUpdateEngine(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : i18n.t('common.unknownError');
       pushWalletError(message);

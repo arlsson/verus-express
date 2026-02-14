@@ -202,6 +202,8 @@ export const en: Record<string, string> = {
   'wallet.receive.copy': 'Copy',
   'wallet.receive.vrscAddress': 'VRSC address',
   'wallet.receive.vrscAddressTestnet': 'VRSCTEST address',
+  'wallet.receive.ethAddress': 'ETH address',
+  'wallet.receive.ethAddressTestnet': 'GETH address',
   'wallet.receive.btcAddress': 'BTC address',
   'wallet.receive.btcAddressTestnet': 'BTCTEST address',
   'wallet.receive.errorLoad': 'Could not load addresses',

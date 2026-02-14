@@ -17,6 +17,7 @@ const ELECTRUM_TESTNET: &[&str] = &["https://electrum.blockstream.info/testnet"]
 
 /// Verus mainnet system ID (i-address format).
 const VRSC_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
+const ETH_ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 
 /// Registry of coins: static defaults plus dynamically added PBaaS currencies.
 pub struct CoinRegistry {
@@ -45,6 +46,13 @@ impl CoinRegistry {
         self.get_all()
             .into_iter()
             .find(|c| c.system_id == system_id && c.is_testnet == is_testnet)
+    }
+
+    /// Find a coin by ID and network.
+    pub fn find_by_id(&self, id: &str, is_testnet: bool) -> Option<CoinDefinition> {
+        self.get_all()
+            .into_iter()
+            .find(|c| c.id.eq_ignore_ascii_case(id) && c.is_testnet == is_testnet)
     }
 
     /// Adds a PBaaS currency. Validates proto (Vrsc) and required fields.
@@ -144,7 +152,7 @@ impl CoinRegistry {
             // ETH mainnet
             CoinDefinition {
                 id: "ETH".to_string(),
-                currency_id: String::new(),
+                currency_id: ETH_ZERO_ADDRESS.to_string(),
                 system_id: "ETH".to_string(),
                 display_ticker: "ETH".to_string(),
                 display_name: "Ethereum".to_string(),
@@ -156,6 +164,22 @@ impl CoinRegistry {
                 seconds_per_block: 12,
                 mapped_to: None,
                 is_testnet: false,
+            },
+            // GETH testnet
+            CoinDefinition {
+                id: "GETH".to_string(),
+                currency_id: ETH_ZERO_ADDRESS.to_string(),
+                system_id: "GETH".to_string(),
+                display_ticker: "GETH".to_string(),
+                display_name: "Ethereum Testnet".to_string(),
+                proto: Protocol::Eth,
+                compatible_channels: vec![Channel::Eth],
+                decimals: 18,
+                vrpc_endpoints: vec![],
+                electrum_endpoints: None,
+                seconds_per_block: 12,
+                mapped_to: None,
+                is_testnet: true,
             },
             // ERC20 example: USDC on Ethereum
             CoinDefinition {

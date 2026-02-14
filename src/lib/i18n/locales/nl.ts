@@ -204,6 +204,8 @@ export const nl: Record<string, string> = {
   'wallet.receive.copy': 'Kopiëren',
   'wallet.receive.vrscAddress': 'VRSC-adres',
   'wallet.receive.vrscAddressTestnet': 'VRSCTEST-adres',
+  'wallet.receive.ethAddress': 'ETH-adres',
+  'wallet.receive.ethAddressTestnet': 'GETH-adres',
   'wallet.receive.btcAddress': 'BTC-adres',
   'wallet.receive.btcAddressTestnet': 'BTCTEST-adres',
   'wallet.receive.errorLoad': 'Adressen konden niet worden geladen',

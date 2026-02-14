@@ -42,3 +42,5 @@ uuid = { version = "1.11", features = ["v4", "serde"] }  # UUID generation for a
 async-trait = "0.1"  # Async trait for WalletChannel (Module 4)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }  # VRPC HTTP JSON-RPC (Module 5)
 blake2b_simd = "1.0"
+ethers = { version = "2.0", default-features = false, features = ["rustls"] }  # ETH/ERC20 channel support
+dotenvy = "0.15"

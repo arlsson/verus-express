@@ -54,6 +54,9 @@ pub enum WalletError {
     #[error("Unsupported channel")]
     UnsupportedChannel,
 
+    #[error("Ethereum channels are not configured")]
+    EthNotConfigured,
+
     #[error("Identity not found")]
     IdentityNotFound,
 

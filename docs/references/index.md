@@ -1,6 +1,6 @@
 ---
 owner: lite-wallet-team
-last_reviewed: 2026-02-12
+last_reviewed: 2026-02-14
 ---
 
 # References index
@@ -15,6 +15,8 @@ External references and source repos used for parity or implementation checks.
   [`./verus-identity-rust-parity.md`](./verus-identity-rust-parity.md)
 - Valu coin catalog parity and sync workflow:
   [`./valu-coin-catalog-parity.md`](./valu-coin-catalog-parity.md)
+- ETH/ERC20 runtime config and phase-1 parity boundaries:
+  [`./eth-erc20-runtime-config.md`](./eth-erc20-runtime-config.md)
 
 ## Notes
 

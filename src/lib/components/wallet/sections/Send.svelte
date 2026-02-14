@@ -27,7 +27,13 @@
   const i18n = $derived($i18nStore);
 
   const sendableCoins = $derived(
-    coins.filter((c) => c.compatibleChannels.includes('vrpc') || c.compatibleChannels.includes('btc'))
+    coins.filter(
+      (c) =>
+        c.compatibleChannels.includes('vrpc') ||
+        c.compatibleChannels.includes('btc') ||
+        c.compatibleChannels.includes('eth') ||
+        c.compatibleChannels.includes('erc20')
+    )
   );
   const sendableCoinOptions = $derived(
     sendableCoins.map((coin) => {

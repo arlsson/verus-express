@@ -1,5 +1,6 @@
 /**
- * Helpers for channel_id used by backend (vrpc.<address>.<systemId>, btc.<coinId>).
+ * Helpers for channel_id used by backend
+ * (vrpc.<address>.<systemId>, btc.<coinId>, eth.<coinId>, erc20.<coinId>).
  * Store keys match these IDs for pull and future event push.
  */
 
@@ -51,6 +52,12 @@ export function channelIdForCoin(coin: CoinDefinition, vrpcAddress?: string): st
   if (coin.compatibleChannels.includes('btc')) {
     return `btc.${coin.id}`;
   }
+  if (coin.compatibleChannels.includes('eth')) {
+    return `eth.${coin.id}`;
+  }
+  if (coin.compatibleChannels.includes('erc20')) {
+    return `erc20.${coin.id}`;
+  }
   return null;
 }
 
@@ -72,5 +79,9 @@ export function primaryChannelId(coins: CoinDefinition[], vrpcAddress?: string):
   if (vrpc) return channelIdForCoin(vrpc, vrpcAddress);
   const btc = coins.find((c) => c.compatibleChannels.includes('btc'));
   if (btc) return channelIdForCoin(btc, vrpcAddress);
+  const eth = coins.find((c) => c.compatibleChannels.includes('eth'));
+  if (eth) return channelIdForCoin(eth, vrpcAddress);
+  const erc20 = coins.find((c) => c.compatibleChannels.includes('erc20'));
+  if (erc20) return channelIdForCoin(erc20, vrpcAddress);
   return null;
 }

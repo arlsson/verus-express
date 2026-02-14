@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::core::auth::SessionManager;
 use crate::core::channels::btc::BtcProviderPool;
+use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::coins::CoinRegistry;
 use crate::core::crypto::wif_encoding::decode_wif_unchecked_network;
@@ -286,10 +287,12 @@ pub async fn unlock_wallet(
 /// Start update engine polling after frontend event listeners are registered.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn start_update_engine(
+    include_transactions: Option<bool>,
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     coin_registry: State<'_, Arc<CoinRegistry>>,
     vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
     btc_provider_pool: State<'_, Arc<BtcProviderPool>>,
+    eth_provider_pool: State<'_, Arc<EthProviderPool>>,
     update_engine: State<'_, Arc<UpdateEngine>>,
     app_handle: AppHandle,
 ) -> Result<(), WalletError> {
@@ -299,6 +302,8 @@ pub async fn start_update_engine(
     }
     drop(session);
 
+    let poll_transactions = include_transactions.unwrap_or(false);
+
     update_engine
         .start(
             app_handle,
@@ -306,6 +311,8 @@ pub async fn start_update_engine(
             coin_registry.inner().clone(),
             vrpc_provider_pool.inner().clone(),
             btc_provider_pool.inner().clone(),
+            eth_provider_pool.inner().clone(),
+            poll_transactions,
         )
         .await;
 

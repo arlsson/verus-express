@@ -8,8 +8,9 @@ use tokio::sync::Mutex;
 
 use crate::core::auth::SessionManager;
 use crate::core::channels::btc::BtcProviderPool;
+use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
-use crate::core::coins::CoinRegistry;
+use crate::core::coins::{CoinDefinition, CoinRegistry};
 use crate::types::transaction::{
     BalanceResult, PreflightParams, PreflightResult, SendResult, Transaction,
 };
@@ -17,6 +18,7 @@ use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
 
 pub mod btc;
+pub mod eth;
 mod store;
 pub mod vrpc;
 
@@ -59,6 +61,17 @@ fn resolve_vrpc_coin_context(
     })
 }
 
+fn resolve_coin_by_channel(
+    coin_registry: &CoinRegistry,
+    coin_id: &str,
+    network: WalletNetwork,
+) -> Result<CoinDefinition, WalletError> {
+    let is_testnet = matches!(network, WalletNetwork::Testnet);
+    coin_registry
+        .find_by_id(coin_id, is_testnet)
+        .ok_or(WalletError::UnsupportedChannel)
+}
+
 /// Route preflight by channel_id prefix. VRPC and BTC use session addresses and providers.
 pub async fn route_preflight(
     channel_id: &str,
@@ -68,6 +81,7 @@ pub async fn route_preflight(
     coin_registry: &CoinRegistry,
     vrpc_provider_pool: &VrpcProviderPool,
     btc_provider_pool: &BtcProviderPool,
+    eth_provider_pool: &EthProviderPool,
 ) -> Result<PreflightResult, WalletError> {
     let prefix = channel_id.split('.').next().unwrap_or("");
     match prefix {
@@ -121,7 +135,64 @@ pub async fn route_preflight(
             )
             .await
         }
-        "eth" | "erc20" => Err(WalletError::UnsupportedChannel),
+        "eth" => {
+            let session = session_manager.lock().await;
+            let account_id = session
+                .active_account_id()
+                .ok_or(WalletError::WalletLocked)?
+                .to_string();
+            let (_, from_address, _) = session.get_addresses()?;
+            let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+            drop(session);
+
+            let coin_id = eth::parse_coin_channel_id(channel_id, "eth")?;
+            let coin = resolve_coin_by_channel(coin_registry, &coin_id, network)?;
+            if !coin.compatible_channels.iter().any(|ch| matches!(ch, crate::core::coins::Channel::Eth))
+            {
+                return Err(WalletError::UnsupportedChannel);
+            }
+
+            eth::preflight_eth(
+                params,
+                preflight_store,
+                &account_id,
+                &from_address,
+                channel_id,
+                eth_provider_pool.for_network(network)?,
+            )
+            .await
+        }
+        "erc20" => {
+            let session = session_manager.lock().await;
+            let account_id = session
+                .active_account_id()
+                .ok_or(WalletError::WalletLocked)?
+                .to_string();
+            let (_, from_address, _) = session.get_addresses()?;
+            let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+            drop(session);
+
+            let coin_id = eth::parse_coin_channel_id(channel_id, "erc20")?;
+            let coin = resolve_coin_by_channel(coin_registry, &coin_id, network)?;
+            if !coin
+                .compatible_channels
+                .iter()
+                .any(|ch| matches!(ch, crate::core::coins::Channel::Erc20))
+            {
+                return Err(WalletError::UnsupportedChannel);
+            }
+
+            eth::preflight_erc20(
+                params,
+                preflight_store,
+                &account_id,
+                &from_address,
+                channel_id,
+                &coin,
+                eth_provider_pool.for_network(network)?,
+            )
+            .await
+        }
         _ => Err(WalletError::UnsupportedChannel),
     }
 }
@@ -133,6 +204,7 @@ pub async fn route_send(
     session_manager: &Arc<Mutex<SessionManager>>,
     vrpc_provider_pool: &VrpcProviderPool,
     btc_provider_pool: &BtcProviderPool,
+    eth_provider_pool: &EthProviderPool,
 ) -> Result<SendResult, WalletError> {
     let record = preflight_store
         .get(preflight_id)
@@ -157,7 +229,15 @@ pub async fn route_send(
             )
             .await
         }
-        "eth" | "erc20" => Err(WalletError::UnsupportedChannel),
+        "eth" | "erc20" => {
+            eth::send(
+                preflight_id,
+                preflight_store,
+                session_manager,
+                eth_provider_pool,
+            )
+            .await
+        }
         _ => Err(WalletError::UnsupportedChannel),
     }
 }
@@ -169,6 +249,7 @@ pub async fn route_get_balances(
     coin_registry: &CoinRegistry,
     vrpc_provider_pool: &VrpcProviderPool,
     btc_provider_pool: &BtcProviderPool,
+    eth_provider_pool: &EthProviderPool,
 ) -> Result<BalanceResult, WalletError> {
     let prefix = channel_id.split('.').next().unwrap_or("");
     match prefix {
@@ -190,7 +271,39 @@ pub async fn route_get_balances(
             drop(session);
             btc::get_balances_btc(btc_provider_pool.for_network(network), &[from_address]).await
         }
-        "eth" | "erc20" => Err(WalletError::UnsupportedChannel),
+        "eth" => {
+            let session = session_manager.lock().await;
+            let (_, eth_address, _) = session.get_addresses()?;
+            let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+            drop(session);
+
+            let coin_id = eth::parse_coin_channel_id(channel_id, "eth")?;
+            let coin = resolve_coin_by_channel(coin_registry, &coin_id, network)?;
+            if !coin.compatible_channels.iter().any(|ch| matches!(ch, crate::core::coins::Channel::Eth))
+            {
+                return Err(WalletError::UnsupportedChannel);
+            }
+
+            eth::get_eth_balance(eth_provider_pool.for_network(network)?, &eth_address).await
+        }
+        "erc20" => {
+            let session = session_manager.lock().await;
+            let (_, eth_address, _) = session.get_addresses()?;
+            let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+            drop(session);
+
+            let coin_id = eth::parse_coin_channel_id(channel_id, "erc20")?;
+            let coin = resolve_coin_by_channel(coin_registry, &coin_id, network)?;
+            if !coin
+                .compatible_channels
+                .iter()
+                .any(|ch| matches!(ch, crate::core::coins::Channel::Erc20))
+            {
+                return Err(WalletError::UnsupportedChannel);
+            }
+
+            eth::get_erc20_balance(eth_provider_pool.for_network(network)?, &eth_address, &coin).await
+        }
         _ => Err(WalletError::UnsupportedChannel),
     }
 }
@@ -202,6 +315,7 @@ pub async fn route_get_transactions(
     coin_registry: &CoinRegistry,
     vrpc_provider_pool: &VrpcProviderPool,
     btc_provider_pool: &BtcProviderPool,
+    eth_provider_pool: &EthProviderPool,
 ) -> Result<TransactionsFetchResult, WalletError> {
     let prefix = channel_id.split('.').next().unwrap_or("");
     match prefix {
@@ -235,7 +349,58 @@ pub async fn route_get_transactions(
                 warning: None,
             })
         }
-        "eth" | "erc20" => Err(WalletError::UnsupportedChannel),
+        "eth" => {
+            let session = session_manager.lock().await;
+            let (_, eth_address, _) = session.get_addresses()?;
+            let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+            drop(session);
+
+            let coin_id = eth::parse_coin_channel_id(channel_id, "eth")?;
+            let coin = resolve_coin_by_channel(coin_registry, &coin_id, network)?;
+            if !coin.compatible_channels.iter().any(|ch| matches!(ch, crate::core::coins::Channel::Eth))
+            {
+                return Err(WalletError::UnsupportedChannel);
+            }
+
+            let txs = eth::get_eth_transactions(
+                eth_provider_pool.for_network(network)?,
+                network,
+                &eth_address,
+            )
+            .await?;
+            Ok(TransactionsFetchResult {
+                transactions: txs,
+                warning: None,
+            })
+        }
+        "erc20" => {
+            let session = session_manager.lock().await;
+            let (_, eth_address, _) = session.get_addresses()?;
+            let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+            drop(session);
+
+            let coin_id = eth::parse_coin_channel_id(channel_id, "erc20")?;
+            let coin = resolve_coin_by_channel(coin_registry, &coin_id, network)?;
+            if !coin
+                .compatible_channels
+                .iter()
+                .any(|ch| matches!(ch, crate::core::coins::Channel::Erc20))
+            {
+                return Err(WalletError::UnsupportedChannel);
+            }
+
+            let txs = eth::get_erc20_transactions(
+                eth_provider_pool.for_network(network)?,
+                network,
+                &eth_address,
+                &coin,
+            )
+            .await?;
+            Ok(TransactionsFetchResult {
+                transactions: txs,
+                warning: None,
+            })
+        }
         _ => Err(WalletError::UnsupportedChannel),
     }
 }

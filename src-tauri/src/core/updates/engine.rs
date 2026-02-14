@@ -12,6 +12,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::core::auth::SessionManager;
 use crate::core::channels::btc::BtcProviderPool;
+use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::channels::{route_get_balances, route_get_transactions};
 use crate::core::coins::Channel;
@@ -37,7 +38,7 @@ struct ChannelState {
     last_tx_fetch: Option<Instant>,
 }
 
-/// Update engine: polls VRPC and BTC channels when unlocked, emits Tauri events.
+/// Update engine: polls VRPC, BTC, ETH and ERC20 channels when unlocked, emits Tauri events.
 /// Hold in tauri::State; start() from start_update_engine, stop() from lock_wallet.
 pub struct UpdateEngine {
     cancel_token: Mutex<Option<CancellationToken>>,
@@ -54,8 +55,8 @@ impl UpdateEngine {
         }
     }
 
-    /// Start polling. Call after successful unlock. Spawns a single task that runs
-    /// balance and transaction passes with jitter; stops when cancel token is triggered.
+    /// Start polling. Call after successful unlock. Spawns a single task that always runs
+    /// balance polling and can optionally run transaction polling.
     pub async fn start(
         &self,
         app_handle: AppHandle,
@@ -63,6 +64,8 @@ impl UpdateEngine {
         coin_registry: Arc<CoinRegistry>,
         vrpc_provider_pool: Arc<VrpcProviderPool>,
         btc_provider_pool: Arc<BtcProviderPool>,
+        eth_provider_pool: Arc<EthProviderPool>,
+        poll_transactions: bool,
     ) {
         self.stop().await;
 
@@ -78,6 +81,8 @@ impl UpdateEngine {
                 coin_registry,
                 vrpc_provider_pool,
                 btc_provider_pool,
+                eth_provider_pool,
+                poll_transactions,
             )
             .await;
         });
@@ -104,11 +109,12 @@ impl UpdateEngine {
     }
 }
 
-/// Build list of (coin_id, channel_id) for coins that support Vrpc or Btc.
+/// Build list of (coin_id, channel_id) for active channels.
 fn active_channels(
     coin_registry: &CoinRegistry,
     is_testnet: bool,
     vrpc_address: &str,
+    eth_enabled: bool,
 ) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for c in coin_registry.get_all() {
@@ -126,6 +132,12 @@ fn active_channels(
                 Channel::Btc => {
                     out.push((c.id.clone(), format!("btc.{}", c.id)));
                 }
+                Channel::Eth if eth_enabled => {
+                    out.push((c.id.clone(), format!("eth.{}", c.id)));
+                }
+                Channel::Erc20 if eth_enabled => {
+                    out.push((c.id.clone(), format!("erc20.{}", c.id)));
+                }
                 _ => {}
             }
         }
@@ -140,6 +152,8 @@ async fn run_update_loop(
     coin_registry: Arc<CoinRegistry>,
     vrpc_provider_pool: Arc<VrpcProviderPool>,
     btc_provider_pool: Arc<BtcProviderPool>,
+    eth_provider_pool: Arc<EthProviderPool>,
+    poll_transactions: bool,
 ) {
     let mut channel_state: HashMap<String, ChannelState> = HashMap::new();
 
@@ -171,7 +185,12 @@ async fn run_update_loop(
         let is_testnet = matches!(session.active_network(), Some(WalletNetwork::Testnet));
         drop(session);
 
-        let channels = active_channels(&coin_registry, is_testnet, &session_vrpc_address);
+        let channels = active_channels(
+            &coin_registry,
+            is_testnet,
+            &session_vrpc_address,
+            eth_provider_pool.is_enabled(),
+        );
         if channels.is_empty() {
             tokio::time::sleep(jitter_duration(30)).await;
             continue;
@@ -198,6 +217,7 @@ async fn run_update_loop(
                     coin_registry.as_ref(),
                     vrpc_provider_pool.as_ref(),
                     btc_provider_pool.as_ref(),
+                    eth_provider_pool.as_ref(),
                 )
                 .await
                 {
@@ -234,62 +254,65 @@ async fn run_update_loop(
             }
         }
 
-        for (coin_id, channel_id) in &channels {
-            if cancel_token.is_cancelled() {
-                return;
-            }
+        if poll_transactions {
+            for (coin_id, channel_id) in &channels {
+                if cancel_token.is_cancelled() {
+                    return;
+                }
 
-            let state = channel_state.entry(channel_id.clone()).or_default();
-            let needs_tx = state.last_tx_fetch.map_or(true, |t| {
-                now.duration_since(t).as_secs() >= TRANSACTION_REFRESH_SECS
-            });
+                let state = channel_state.entry(channel_id.clone()).or_default();
+                let needs_tx = state.last_tx_fetch.map_or(true, |t| {
+                    now.duration_since(t).as_secs() >= TRANSACTION_REFRESH_SECS
+                });
 
-            if needs_tx {
-                match route_get_transactions(
-                    channel_id,
-                    &session_manager,
-                    coin_registry.as_ref(),
-                    vrpc_provider_pool.as_ref(),
-                    btc_provider_pool.as_ref(),
-                )
-                .await
-                {
-                    Ok(txs) => {
-                        let payload = TransactionsUpdatedPayload {
-                            coin_id: coin_id.clone(),
-                            channel: channel_id.clone(),
-                            transactions: txs.transactions,
-                        };
-                        if let Err(e) = app_handle.emit(EVENT_TRANSACTIONS_UPDATED, &payload) {
-                            println!("[UPDATE] Emit transactions-updated failed: {:?}", e);
+                if needs_tx {
+                    match route_get_transactions(
+                        channel_id,
+                        &session_manager,
+                        coin_registry.as_ref(),
+                        vrpc_provider_pool.as_ref(),
+                        btc_provider_pool.as_ref(),
+                        eth_provider_pool.as_ref(),
+                    )
+                    .await
+                    {
+                        Ok(txs) => {
+                            let payload = TransactionsUpdatedPayload {
+                                coin_id: coin_id.clone(),
+                                channel: channel_id.clone(),
+                                transactions: txs.transactions,
+                            };
+                            if let Err(e) = app_handle.emit(EVENT_TRANSACTIONS_UPDATED, &payload) {
+                                println!("[UPDATE] Emit transactions-updated failed: {:?}", e);
+                            }
+                            if let Some(warning) = txs.warning {
+                                let _ = app_handle.emit(
+                                    EVENT_ERROR,
+                                    &UpdateErrorPayload {
+                                        data_type: "transactions_warning".to_string(),
+                                        coin_id: coin_id.clone(),
+                                        channel: channel_id.clone(),
+                                        message: warning,
+                                    },
+                                );
+                            }
+                            state.last_tx_fetch = Some(Instant::now());
                         }
-                        if let Some(warning) = txs.warning {
+                        Err(e) => {
+                            let message = user_facing_error(&e);
                             let _ = app_handle.emit(
                                 EVENT_ERROR,
                                 &UpdateErrorPayload {
-                                    data_type: "transactions_warning".to_string(),
+                                    data_type: "transactions".to_string(),
                                     coin_id: coin_id.clone(),
                                     channel: channel_id.clone(),
-                                    message: warning,
+                                    message,
                                 },
                             );
                         }
-                        state.last_tx_fetch = Some(Instant::now());
                     }
-                    Err(e) => {
-                        let message = user_facing_error(&e);
-                        let _ = app_handle.emit(
-                            EVENT_ERROR,
-                            &UpdateErrorPayload {
-                                data_type: "transactions".to_string(),
-                                coin_id: coin_id.clone(),
-                                channel: channel_id.clone(),
-                                message,
-                            },
-                        );
-                    }
+                    tokio::time::sleep(jitter_duration(2)).await;
                 }
-                tokio::time::sleep(jitter_duration(2)).await;
             }
         }
 
@@ -307,7 +330,53 @@ fn user_facing_error(e: &WalletError) -> String {
         WalletError::UnsupportedChannel => "Unsupported channel".to_string(),
         WalletError::InvalidPreflight => "Invalid preflight".to_string(),
         WalletError::NetworkError => "Network error".to_string(),
+        WalletError::EthNotConfigured => "Ethereum channels are not configured".to_string(),
         WalletError::OperationFailed => "Temporarily unavailable".to_string(),
         _ => "Temporarily unavailable".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::active_channels;
+    use crate::core::coins::CoinRegistry;
+
+    #[test]
+    fn active_channels_includes_eth_and_erc20_when_eth_enabled() {
+        let registry = CoinRegistry::new();
+        let channels = active_channels(&registry, false, "RtestAddress", true);
+
+        assert!(channels
+            .iter()
+            .any(|(coin_id, channel_id)| coin_id == "ETH" && channel_id == "eth.ETH"));
+        assert!(channels
+            .iter()
+            .any(|(coin_id, channel_id)| coin_id == "USDC" && channel_id == "erc20.USDC"));
+    }
+
+    #[test]
+    fn active_channels_omits_eth_and_erc20_when_eth_disabled() {
+        let registry = CoinRegistry::new();
+        let channels = active_channels(&registry, false, "RtestAddress", false);
+
+        assert!(!channels
+            .iter()
+            .any(|(_, channel_id)| channel_id.starts_with("eth.")));
+        assert!(!channels
+            .iter()
+            .any(|(_, channel_id)| channel_id.starts_with("erc20.")));
+    }
+
+    #[test]
+    fn active_channels_respects_testnet_network() {
+        let registry = CoinRegistry::new();
+        let channels = active_channels(&registry, true, "RtestAddress", true);
+
+        assert!(channels
+            .iter()
+            .any(|(coin_id, channel_id)| coin_id == "GETH" && channel_id == "eth.GETH"));
+        assert!(!channels
+            .iter()
+            .any(|(coin_id, _)| coin_id == "ETH" || coin_id == "USDC"));
     }
 }

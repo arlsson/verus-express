@@ -179,4 +179,21 @@ impl SessionManager {
             .ok_or(WalletError::WalletLocked)?;
         Ok(keys.wif.clone())
     }
+
+    /// Returns the Ethereum private key for signing ETH/ERC20 transactions.
+    /// Security: Must remain backend-only and never cross the command boundary.
+    pub fn get_eth_private_key_for_signing(&self) -> Result<String, WalletError> {
+        if !self.is_unlocked || self.is_expired() {
+            return Err(WalletError::WalletLocked);
+        }
+        let account_id = self
+            .active_account_id
+            .as_ref()
+            .ok_or(WalletError::WalletLocked)?;
+        let keys = self
+            .derived_keys
+            .get(account_id)
+            .ok_or(WalletError::WalletLocked)?;
+        Ok(keys.eth_private_key.clone())
+    }
 }

@@ -24,7 +24,7 @@
   let network = $state<WalletNetwork>('mainnet');
   let loading = $state(true);
   let error = $state('');
-  let copied = $state<'vrsc' | 'btc' | null>(null);
+  let copied = $state<'vrsc' | 'eth' | 'btc' | null>(null);
   const i18n = $derived($i18nStore);
   const vrscLabel = $derived(
     network === 'testnet'
@@ -38,6 +38,12 @@
   );
   const vrscCoinId = $derived(network === 'testnet' ? 'VRSCTEST' : 'VRSC');
   const btcCoinId = $derived(network === 'testnet' ? 'BTCTEST' : 'BTC');
+  const ethLabel = $derived(
+    network === 'testnet'
+      ? i18n.t('wallet.receive.ethAddressTestnet')
+      : i18n.t('wallet.receive.ethAddress')
+  );
+  const ethCoinId = $derived(network === 'testnet' ? 'GETH' : 'ETH');
 
   onMount(async () => {
     try {
@@ -55,7 +61,7 @@
     }
   });
 
-  async function copyAddress(addr: string, which: 'vrsc' | 'btc') {
+  async function copyAddress(addr: string, which: 'vrsc' | 'eth' | 'btc') {
     try {
       await globalThis.navigator.clipboard.writeText(addr);
       copied = which;
@@ -107,6 +113,35 @@
               title={i18n.t('wallet.receive.copy')}
             >
               {#if copied === 'vrsc'}
+                <CheckIcon class="h-4 w-4 text-green-600" />
+              {:else}
+                <CopyIcon class="h-4 w-4" />
+              {/if}
+            </Button>
+          </div>
+        </div>
+        <div>
+          <Label.Root for="receive-eth" class="mb-2 block">
+            <span class="inline-flex items-center gap-2">
+              <CoinIcon coinId={ethCoinId} proto="eth" size={18} decorative />
+              <span>{ethLabel}</span>
+            </span>
+          </Label.Root>
+          <div class="flex gap-2 items-center">
+            <Input
+              id="receive-eth"
+              type="text"
+              readonly
+              value={addresses.eth_address}
+              class="flex-1 truncate font-mono text-xs sm:text-sm"
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              onclick={() => copyAddress(addresses!.eth_address, 'eth')}
+              title={i18n.t('wallet.receive.copy')}
+            >
+              {#if copied === 'eth'}
                 <CheckIcon class="h-4 w-4 text-green-600" />
               {:else}
                 <CopyIcon class="h-4 w-4" />

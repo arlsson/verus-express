@@ -41,10 +41,14 @@ export function buildWalletChannels(
 
   const primaryVrpcCoin = coins.find((c) => c.compatibleChannels.includes('vrpc'));
   const primaryBtcCoin = coins.find((c) => c.compatibleChannels.includes('btc'));
+  const primaryEthCoin = coins.find((c) => c.compatibleChannels.includes('eth'));
+  const primaryErc20Coin = coins.find((c) => c.compatibleChannels.includes('erc20'));
 
   const primaryChannelId =
     (primaryVrpcCoin ? byCoinId[primaryVrpcCoin.id] : null) ??
     (primaryBtcCoin ? byCoinId[primaryBtcCoin.id] : null) ??
+    (primaryEthCoin ? byCoinId[primaryEthCoin.id] : null) ??
+    (primaryErc20Coin ? byCoinId[primaryErc20Coin.id] : null) ??
     channels[0] ??
     null;
 
