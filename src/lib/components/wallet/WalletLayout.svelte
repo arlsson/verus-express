@@ -48,6 +48,7 @@
   <Sidebar.Provider>
     <AppSidebar bind:activeSection {walletData} />
     <Sidebar.Inset class="dark:bg-[#111111]">
+      <div class="h-6 shrink-0" data-tauri-drag-region aria-hidden="true"></div>
       {#if latestError}
         <div class="mx-6 mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <div class="flex items-start justify-between gap-3">

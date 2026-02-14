@@ -31,6 +31,7 @@ export interface CoinDefinition {
   systemId: string;
   displayTicker: string;
   displayName: string;
+  coinPaprikaId?: string | null;
   proto: Protocol;
   compatibleChannels: Channel[];
   decimals: number;

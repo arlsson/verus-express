@@ -17,11 +17,12 @@ use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::channels::{route_get_balances, route_get_transactions};
 use crate::core::coins::Channel;
 use crate::core::coins::CoinRegistry;
+use crate::core::rates::{build_rates_http_client, coinpaprika, ecb, pbaas};
 use crate::core::updates::events::{
-    BalancesUpdatedPayload, TransactionsUpdatedPayload, UpdateErrorPayload,
+    BalancesUpdatedPayload, RatesUpdatedPayload, TransactionsUpdatedPayload, UpdateErrorPayload,
 };
 use crate::core::updates::params::{
-    jitter_duration, BALANCE_REFRESH_SECS, TRANSACTION_REFRESH_SECS,
+    jitter_duration, BALANCE_REFRESH_SECS, RATES_REFRESH_SECS, TRANSACTION_REFRESH_SECS,
 };
 use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
@@ -29,6 +30,7 @@ use crate::types::WalletError;
 /// Tauri event names (frontend listens via listen()).
 pub const EVENT_BALANCES_UPDATED: &str = "wallet://balances-updated";
 pub const EVENT_TRANSACTIONS_UPDATED: &str = "wallet://transactions-updated";
+pub const EVENT_RATES_UPDATED: &str = "wallet://rates-updated";
 pub const EVENT_ERROR: &str = "wallet://error";
 
 /// Per-channel expiry state for balance and transaction data.
@@ -156,6 +158,9 @@ async fn run_update_loop(
     poll_transactions: bool,
 ) {
     let mut channel_state: HashMap<String, ChannelState> = HashMap::new();
+    let mut coin_rates_state: HashMap<String, Instant> = HashMap::new();
+    let mut latest_rates: HashMap<String, HashMap<String, f64>> = HashMap::new();
+    let rates_http_client = build_rates_http_client();
 
     loop {
         if cancel_token.is_cancelled() {
@@ -182,7 +187,8 @@ async fn run_update_loop(
                 continue;
             }
         };
-        let is_testnet = matches!(session.active_network(), Some(WalletNetwork::Testnet));
+        let active_network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+        let is_testnet = matches!(active_network, WalletNetwork::Testnet);
         drop(session);
 
         let channels = active_channels(
@@ -313,6 +319,83 @@ async fn run_update_loop(
                     }
                     tokio::time::sleep(jitter_duration(2)).await;
                 }
+            }
+        }
+
+        let rate_coins = coin_registry
+            .get_all()
+            .into_iter()
+            .filter(|coin| coin.is_testnet == is_testnet)
+            .collect::<Vec<_>>();
+
+        let needs_any_rates = rate_coins.iter().any(|coin| {
+            coin_rates_state.get(&coin.id).map_or(true, |t| {
+                now.duration_since(*t).as_secs() >= RATES_REFRESH_SECS
+            })
+        });
+
+        if needs_any_rates {
+            let usd_reference_rates = match ecb::fetch_usd_reference_rates(&rates_http_client).await
+            {
+                Ok(rates) => rates,
+                Err(err) => {
+                    println!("[UPDATE] ECB rates unavailable: {}", err);
+                    HashMap::from([(ecb::USD.to_string(), 1.0)])
+                }
+            };
+
+            for coin in &rate_coins {
+                if cancel_token.is_cancelled() {
+                    return;
+                }
+
+                let needs_rates = coin_rates_state.get(&coin.id).map_or(true, |t| {
+                    now.duration_since(*t).as_secs() >= RATES_REFRESH_SECS
+                });
+                if !needs_rates {
+                    continue;
+                }
+
+                let mut resolved_rates: Option<HashMap<String, f64>> = None;
+
+                match coinpaprika::fetch_usd_close(&rates_http_client, coin).await {
+                    Ok((usd_price, _source)) => {
+                        let rates = ecb::build_coin_fiat_rates(usd_price, &usd_reference_rates);
+                        if !rates.is_empty() {
+                            resolved_rates = Some(rates);
+                        }
+                    }
+                    Err(err) => {
+                        if pbaas::is_pbaas_derivation_candidate(coin) {
+                            resolved_rates = pbaas::derive_pbaas_rates(
+                                vrpc_provider_pool.for_network(active_network),
+                                coin,
+                                &latest_rates,
+                            )
+                            .await;
+                        }
+
+                        if resolved_rates.is_none() {
+                            println!("[UPDATE] Fiat rate unavailable for {}: {}", coin.id, err);
+                        }
+                    }
+                }
+
+                if let Some(rates) = resolved_rates {
+                    let payload = RatesUpdatedPayload {
+                        coin_id: coin.id.clone(),
+                        rates: rates.clone(),
+                    };
+                    if let Err(e) = app_handle.emit(EVENT_RATES_UPDATED, &payload) {
+                        println!("[UPDATE] Emit rates-updated failed: {:?}", e);
+                    } else {
+                        latest_rates.insert(coin.id.clone(), rates);
+                    }
+                }
+
+                // Throttle retries after both success and failure.
+                coin_rates_state.insert(coin.id.clone(), Instant::now());
+                tokio::time::sleep(jitter_duration(1)).await;
             }
         }
 

@@ -6,6 +6,7 @@ pub mod auth;
 pub mod channels;
 pub mod coins;
 pub mod crypto;
+pub mod rates;
 pub mod updates;
 pub mod wallet;
 

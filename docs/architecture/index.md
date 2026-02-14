@@ -32,6 +32,7 @@ details.
 - Transaction commands: `src-tauri/src/commands/transaction.rs`
 - Preflight store: `src-tauri/src/core/channels/store.rs`
 - Update engine: `src-tauri/src/core/updates/engine.rs`
+- Fiat rates domain: `src-tauri/src/core/rates`
 
 ## Related docs
 

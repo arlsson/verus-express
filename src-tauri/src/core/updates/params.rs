@@ -15,7 +15,7 @@ pub const TRANSACTION_REFRESH_SECS: u64 = 300;
 /// Chain info: fixed 30s for first version (full lifecycle deferred).
 pub const CHAIN_INFO_REFRESH_SECS: u64 = 30;
 
-/// Fiat rates: stub; same intervals when implemented.
+/// Fiat rates: parity with mobile defaults.
 pub const RATES_EXPIRE_SECS: u64 = 60;
 pub const RATES_REFRESH_SECS: u64 = 300;
 

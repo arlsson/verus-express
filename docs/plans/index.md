@@ -22,6 +22,8 @@ Plans are first-class artifacts for multi-step work.
 
 - VerusID guard signed-out entry and flows:
   [`./done/verusid-guard-entry-signed-out.md`](./done/verusid-guard-entry-signed-out.md)
+- Fiat rates via CoinPaprika + PBaaS derivation:
+  [`./done/fiat-rates-coinpaprika-pbaas.md`](./done/fiat-rates-coinpaprika-pbaas.md)
 
 ## Plan policy
 

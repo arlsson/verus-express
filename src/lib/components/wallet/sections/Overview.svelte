@@ -63,39 +63,21 @@
 </script>
 
 <div class="mx-auto w-full max-w-6xl px-6 pb-6 pt-0 sm:px-8">
-  <section class="border-border border-b pb-5 pt-4 sm:pt-5">
-    <div class="flex flex-col gap-5 md:flex-row md:items-start md:justify-between md:gap-24">
-      <div class="min-w-0">
-        <div class="flex items-start">
-          {#if overview.heroFiatSymbolDisplay}
-            <span class="text-muted-foreground mt-1 mr-1.5 text-xl font-semibold sm:text-2xl">
-              {overview.heroFiatSymbolDisplay}
-            </span>
-          {/if}
-          <p class="font-google-sans-17pt text-4xl leading-[1.02] font-semibold tracking-tight sm:text-5xl">
-            {overview.heroFiatValueDisplay}
-          </p>
-        </div>
-      </div>
-
-      <div class="w-full max-w-[172px] text-xs md:self-start">
-        <div class="flex items-center justify-between py-1.5">
-          <span class="text-muted-foreground/90">{i18n.t('wallet.overview.identitiesLabel')}</span>
-          <span class="text-foreground min-w-4 text-right text-xs font-medium tabular-nums">
-            {overview.identityCount}
+  <section class="border-border border-b pb-6 pt-3 sm:pt-4">
+    <div class="min-w-0">
+      <div class="flex -translate-y-2 items-start">
+        {#if overview.heroFiatSymbolDisplay}
+          <span class="text-muted-foreground mt-1 mr-1.5 text-xl font-semibold sm:text-2xl">
+            {overview.heroFiatSymbolDisplay}
           </span>
-        </div>
-        <div class="bg-border/20 h-px"></div>
-        <div class="flex items-center justify-between py-1.5">
-          <span class="text-muted-foreground/90">{i18n.t('wallet.overview.assetsLabel')}</span>
-          <span class="text-foreground min-w-4 text-right text-xs font-medium tabular-nums">
-            {overview.assetCount}
-          </span>
-        </div>
+        {/if}
+        <p class="font-google-sans-17pt text-4xl leading-[1.02] font-semibold tracking-tight sm:text-5xl">
+          {overview.heroFiatValueDisplay}
+        </p>
       </div>
     </div>
 
-    <div class="mt-3 w-full md:max-w-[620px]">
+    <div class="mt-5 w-full md:max-w-[620px]">
       <div class="grid w-full grid-cols-3 gap-2">
         <Button variant="secondary" size="lg" class="h-10 w-full gap-1.5 rounded-md px-3" onclick={onNavigateToReceive}>
           <DownloadIcon class="h-4 w-4" />
@@ -113,7 +95,7 @@
     </div>
   </section>
 
-  <section class="pt-3">
+  <section class="pt-4">
     {#if overview.rows.length === 0}
       <p class="text-muted-foreground py-8 text-sm">{i18n.t('wallet.overview.noChannel')}</p>
     {:else}

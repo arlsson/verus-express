@@ -6,16 +6,17 @@
 -->
 
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import WalletLayout from '$lib/components/wallet/WalletLayout.svelte';
   import * as walletService from '$lib/services/walletService.js';
   import * as coinsService from '$lib/services/coinsService.js';
   import { setupWalletEventBridge } from '$lib/services/eventBridge.js';
   import { balanceStore } from '$lib/stores/balances.js';
+  import { ratesStore } from '$lib/stores/rates.js';
   import { transactionStore } from '$lib/stores/transactions.js';
   import { coinsStore } from '$lib/stores/coins.js';
-  import { walletChannelsStore, buildWalletChannels, resetWalletChannels } from '$lib/stores/walletChannels.js';
+  import { buildWalletChannels, resetWalletChannels, walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { clearWalletErrors, pushWalletError } from '$lib/stores/walletErrors.js';
   import { i18nStore } from '$lib/i18n';
   import type { WalletNetwork } from '$lib/types/wallet.js';
@@ -28,6 +29,7 @@
   onMount(async () => {
     clearWalletErrors();
     balanceStore.set({});
+    ratesStore.set({});
     transactionStore.set({});
     try {
       const unlocked = await walletService.isUnlocked();
@@ -70,6 +72,7 @@
   onDestroy(() => {
     teardownEventBridge?.();
     balanceStore.set({});
+    ratesStore.set({});
     transactionStore.set({});
     resetWalletChannels();
   });

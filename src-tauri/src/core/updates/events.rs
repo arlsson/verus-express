@@ -36,7 +36,7 @@ pub struct InfoUpdatedPayload {
     pub syncing: bool,
 }
 
-/// Payload for wallet://rates-updated. Stub: rates empty until fiat source exists.
+/// Payload for wallet://rates-updated.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RatesUpdatedPayload {

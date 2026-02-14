@@ -33,6 +33,7 @@ pub struct CoinDefinition {
     pub system_id: String,
     pub display_ticker: String,
     pub display_name: String,
+    pub coin_paprika_id: Option<String>,
     pub proto: Protocol,
     pub compatible_channels: Vec<Channel>,
     pub decimals: u8,
