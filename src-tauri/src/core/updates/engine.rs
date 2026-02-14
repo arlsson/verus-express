@@ -208,9 +208,10 @@ async fn run_update_loop(
             if cancel_token.is_cancelled() {
                 return;
             }
+            let channel_state_key = format!("{}::{}", channel_id, coin_id);
 
             let needs_balance = {
-                let state = channel_state.entry(channel_id.clone()).or_default();
+                let state = channel_state.entry(channel_state_key.clone()).or_default();
                 state.last_balance_fetch.map_or(true, |t| {
                     now.duration_since(t).as_secs() >= BALANCE_REFRESH_SECS
                 })
@@ -219,6 +220,7 @@ async fn run_update_loop(
             if needs_balance {
                 match route_get_balances(
                     channel_id,
+                    Some(coin_id.as_str()),
                     &session_manager,
                     coin_registry.as_ref(),
                     vrpc_provider_pool.as_ref(),
@@ -239,7 +241,7 @@ async fn run_update_loop(
                             println!("[UPDATE] Emit balances-updated failed: {:?}", e);
                         }
                         channel_state
-                            .entry(channel_id.clone())
+                            .entry(channel_state_key.clone())
                             .or_default()
                             .last_balance_fetch = Some(Instant::now());
                     }
@@ -265,8 +267,9 @@ async fn run_update_loop(
                 if cancel_token.is_cancelled() {
                     return;
                 }
+                let channel_state_key = format!("{}::{}", channel_id, coin_id);
 
-                let state = channel_state.entry(channel_id.clone()).or_default();
+                let state = channel_state.entry(channel_state_key.clone()).or_default();
                 let needs_tx = state.last_tx_fetch.map_or(true, |t| {
                     now.duration_since(t).as_secs() >= TRANSACTION_REFRESH_SECS
                 });
@@ -274,6 +277,7 @@ async fn run_update_loop(
                 if needs_tx {
                     match route_get_transactions(
                         channel_id,
+                        Some(coin_id.as_str()),
                         &session_manager,
                         coin_registry.as_ref(),
                         vrpc_provider_pool.as_ref(),
@@ -357,11 +361,14 @@ async fn run_update_loop(
                 }
 
                 let mut resolved_rates: Option<HashMap<String, f64>> = None;
+                let mut usd_change_24h_pct: Option<f64> = None;
 
-                match coinpaprika::fetch_usd_close(&rates_http_client, coin).await {
-                    Ok((usd_price, _source)) => {
-                        let rates = ecb::build_coin_fiat_rates(usd_price, &usd_reference_rates);
+                match coinpaprika::fetch_usd_metrics(&rates_http_client, coin).await {
+                    Ok(metrics) => {
+                        let rates =
+                            ecb::build_coin_fiat_rates(metrics.usd_price, &usd_reference_rates);
                         if !rates.is_empty() {
+                            usd_change_24h_pct = metrics.usd_change_24h_pct;
                             resolved_rates = Some(rates);
                         }
                     }
@@ -385,6 +392,7 @@ async fn run_update_loop(
                     let payload = RatesUpdatedPayload {
                         coin_id: coin.id.clone(),
                         rates: rates.clone(),
+                        usd_change_24h_pct,
                     };
                     if let Err(e) = app_handle.emit(EVENT_RATES_UPDATED, &payload) {
                         println!("[UPDATE] Emit rates-updated failed: {:?}", e);

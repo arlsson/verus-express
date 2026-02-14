@@ -13,6 +13,7 @@ interface CatalogCoin {
   systemId: string;
   displayTicker: string;
   displayName: string;
+  coinPaprikaId?: string | null;
   proto: AddAssetProto;
   mappedTo: string | null;
   isTestnet: boolean;
@@ -25,6 +26,7 @@ export interface AddAssetEntry {
   systemId: string;
   displayTicker: string;
   displayName: string;
+  coinPaprikaId: string | null;
   proto: AddAssetProto;
   mappedTo: string | null;
   isTestnet: boolean;
@@ -56,6 +58,53 @@ const DEFAULT_ELECTRUM_TESTNET = ['https://electrum.blockstream.info/testnet'];
 const DEFAULT_VRPC_MAINNET = ['https://api.verus.services/'];
 const DEFAULT_VRPC_TESTNET = ['https://api.verustest.net/'];
 const ETH_ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+function catalogLookupKey(value: string, isTestnet: boolean): string {
+  return `${isTestnet ? 'testnet' : 'mainnet'}:${value.toLowerCase()}`;
+}
+
+const catalogById = new Map<string, CatalogCoin>();
+const catalogByCurrencyId = new Map<string, CatalogCoin>();
+const catalogBySystemId = new Map<string, CatalogCoin>();
+
+for (const coin of catalogCoins) {
+  catalogById.set(catalogLookupKey(coin.id, coin.isTestnet), coin);
+  if (coin.currencyId.trim().length > 0) {
+    catalogByCurrencyId.set(catalogLookupKey(coin.currencyId, coin.isTestnet), coin);
+  }
+  if (coin.systemId.trim().length > 0) {
+    catalogBySystemId.set(catalogLookupKey(coin.systemId, coin.isTestnet), coin);
+  }
+}
+
+function findCatalogCoinForDefinition(definition: CoinDefinition): CatalogCoin | null {
+  const isTestnet = Boolean(definition.isTestnet);
+  const keys = [definition.id, definition.currencyId, definition.systemId]
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  for (const value of keys) {
+    const key = catalogLookupKey(value, isTestnet);
+    const hit =
+      catalogById.get(key) ?? catalogByCurrencyId.get(key) ?? catalogBySystemId.get(key);
+    if (hit) return hit;
+  }
+
+  return null;
+}
+
+export function applyCatalogMetadataToCoinDefinition(definition: CoinDefinition): CoinDefinition {
+  const catalogCoin = findCatalogCoinForDefinition(definition);
+  if (!catalogCoin) return definition;
+
+  return {
+    ...definition,
+    displayTicker: catalogCoin.displayTicker || definition.displayTicker,
+    displayName: catalogCoin.displayName || definition.displayName,
+    coinPaprikaId: catalogCoin.coinPaprikaId ?? definition.coinPaprikaId ?? null,
+    mappedTo: catalogCoin.mappedTo ?? definition.mappedTo ?? null
+  };
+}
 
 function normalizeSearchValue(value: string): string {
   return value.trim().toLowerCase();
@@ -156,6 +205,7 @@ export function buildAddAssetCatalogView({
       systemId: runtimeCoin.systemId,
       displayTicker: presentation.displayTicker,
       displayName: presentation.displayName,
+      coinPaprikaId: runtimeCoin.coinPaprikaId ?? null,
       proto: runtimeCoin.proto,
       mappedTo: runtimeCoin.mappedTo ?? null,
       isTestnet: runtimeCoin.isTestnet,
@@ -175,6 +225,12 @@ export function buildAddAssetCatalogView({
 
     if (existing) {
       existing.source = existing.source === 'runtime' ? 'both' : existing.source;
+      if (!existing.coinPaprikaId && catalogCoin.coinPaprikaId) {
+        existing.coinPaprikaId = catalogCoin.coinPaprikaId;
+      }
+      if (!existing.mappedTo && catalogCoin.mappedTo) {
+        existing.mappedTo = catalogCoin.mappedTo;
+      }
       continue;
     }
 
@@ -188,6 +244,7 @@ export function buildAddAssetCatalogView({
       systemId: catalogCoin.systemId,
       displayTicker: catalogCoin.displayTicker,
       displayName: catalogCoin.displayName,
+      coinPaprikaId: catalogCoin.coinPaprikaId ?? null,
       proto: catalogCoin.proto,
       mappedTo: catalogCoin.mappedTo,
       isTestnet: catalogCoin.isTestnet,
@@ -219,7 +276,7 @@ export function catalogEntryToCoinDefinition(
       systemId: entry.systemId,
       displayTicker: entry.displayTicker,
       displayName: entry.displayName,
-      coinPaprikaId: null,
+      coinPaprikaId: entry.coinPaprikaId,
       proto: 'vrsc',
       compatibleChannels: ['vrpc'],
       decimals: 8,
@@ -238,7 +295,7 @@ export function catalogEntryToCoinDefinition(
       systemId: entry.systemId,
       displayTicker: entry.displayTicker,
       displayName: entry.displayName,
-      coinPaprikaId: null,
+      coinPaprikaId: entry.coinPaprikaId,
       proto: 'eth',
       compatibleChannels: ['eth'],
       decimals: 18,
@@ -261,7 +318,7 @@ export function catalogEntryToCoinDefinition(
       systemId: entry.systemId,
       displayTicker: entry.displayTicker,
       displayName: entry.displayName,
-      coinPaprikaId: null,
+      coinPaprikaId: entry.coinPaprikaId,
       proto: 'btc',
       compatibleChannels: ['btc'],
       decimals: 8,

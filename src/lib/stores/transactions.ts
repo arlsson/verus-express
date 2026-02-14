@@ -1,15 +1,20 @@
 /**
- * Transaction history store: channel_id -> Transaction[].
- * Key = channel_id. Updated by pull (get_transaction_history) or future wallet://transactions-updated.
+ * Transaction history store: channel_id -> coin_id -> Transaction[].
  */
 
 import { writable } from 'svelte/store';
 import type { Transaction } from '$lib/types/wallet.js';
 
-const initialState: Record<string, Transaction[]> = {};
+export type TransactionsByChannel = Record<string, Record<string, Transaction[]>>;
 
-export const transactionStore = writable<Record<string, Transaction[]>>(initialState);
+const initialState: TransactionsByChannel = {};
 
-export function getTransactions(channelId: string, transactions: Record<string, Transaction[]>): Transaction[] {
-  return transactions[channelId] ?? [];
+export const transactionStore = writable<TransactionsByChannel>(initialState);
+
+export function getTransactions(
+  channelId: string,
+  coinId: string,
+  transactions: TransactionsByChannel
+): Transaction[] {
+  return transactions[channelId]?.[coinId] ?? [];
 }

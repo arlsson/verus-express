@@ -239,12 +239,22 @@ async function assertReadable(targetPath) {
 }
 
 function normalizeCoin(rawCoin) {
+  const coinPaprikaIdRaw =
+    rawCoin?.rate_url_params && typeof rawCoin.rate_url_params === 'object'
+      ? rawCoin.rate_url_params.coin_paprika
+      : null;
+  const coinPaprikaId =
+    typeof coinPaprikaIdRaw === 'string' && coinPaprikaIdRaw.trim().length > 0
+      ? coinPaprikaIdRaw.trim()
+      : null;
+
   return {
     id: String(rawCoin.id ?? ''),
     currencyId: String(rawCoin.currency_id ?? ''),
     systemId: String(rawCoin.system_id ?? ''),
     displayTicker: String(rawCoin.display_ticker ?? ''),
     displayName: String(rawCoin.display_name ?? ''),
+    ...(coinPaprikaId ? { coinPaprikaId } : {}),
     proto: String(rawCoin.proto ?? ''),
     mappedTo: rawCoin.mapped_to == null ? null : String(rawCoin.mapped_to),
     isTestnet: Boolean(rawCoin.testnet),

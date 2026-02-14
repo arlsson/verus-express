@@ -20,6 +20,7 @@ const TRANSACTIONS_UPDATED = 'wallet://transactions-updated';
 const INFO_UPDATED = 'wallet://info-updated';
 const RATES_UPDATED = 'wallet://rates-updated';
 const ERROR = 'wallet://error';
+const DEFAULT_COIN_KEY = '__default__';
 
 interface BalancesUpdatedPayload {
   coinId?: string;
@@ -49,6 +50,7 @@ interface InfoUpdatedPayload {
 interface RatesUpdatedPayload {
   coinId?: string;
   rates?: Record<string, number>;
+  usdChange24hPct?: number | null;
 }
 
 interface UpdateErrorPayload {
@@ -94,20 +96,34 @@ export async function setupWalletEventBridge(): Promise<() => void> {
   const unBalances = await listen<BalancesUpdatedPayload>(BALANCES_UPDATED, (event) => {
     const p = event.payload;
     const key = normalizeChannelKey(balanceKey(p));
+    const coinId = p.coinId ?? DEFAULT_COIN_KEY;
     const value: BalanceResult = {
       confirmed: p.confirmed ?? '0',
       pending: p.pending ?? '0',
       total: p.total ?? '0'
     };
-    balanceStore.update((m) => ({ ...m, [key]: value }));
+    balanceStore.update((m) => ({
+      ...m,
+      [key]: {
+        ...(m[key] ?? {}),
+        [coinId]: value
+      }
+    }));
   });
   unsubs.push(() => unBalances());
 
   const unTx = await listen<TransactionsUpdatedPayload>(TRANSACTIONS_UPDATED, (event) => {
     const p = event.payload;
     const key = normalizeChannelKey(txKey(p));
+    const coinId = p.coinId ?? DEFAULT_COIN_KEY;
     const list = p.transactions ?? [];
-    transactionStore.update((m) => ({ ...m, [key]: list }));
+    transactionStore.update((m) => ({
+      ...m,
+      [key]: {
+        ...(m[key] ?? {}),
+        [coinId]: list
+      }
+    }));
   });
   unsubs.push(() => unTx());
 
@@ -127,7 +143,13 @@ export async function setupWalletEventBridge(): Promise<() => void> {
     const p = event.payload;
     const coinId = p.coinId ?? 'default';
     const rates = p.rates ?? {};
-    ratesStore.update((m) => ({ ...m, [coinId]: rates }));
+    ratesStore.update((m) => ({
+      ...m,
+      [coinId]: {
+        rates,
+        usdChange24hPct: typeof p.usdChange24hPct === 'number' ? p.usdChange24hPct : null
+      }
+    }));
   });
   unsubs.push(() => unRates());
 

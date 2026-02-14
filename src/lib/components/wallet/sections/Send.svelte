@@ -100,10 +100,16 @@
   }
 
   async function refreshTxHistory() {
-    if (!channelId) return;
+    if (!channelId || !selectedCoin) return;
     try {
-      const txs = await walletService.getTransactionHistory(channelId);
-      transactionStore.update((m) => ({ ...m, [channelId]: txs }));
+      const txs = await walletService.getTransactionHistory(channelId, selectedCoin.id);
+      transactionStore.update((m) => ({
+        ...m,
+        [channelId]: {
+          ...(m[channelId] ?? {}),
+          [selectedCoin.id]: txs
+        }
+      }));
     } catch {
       // ignore
     }

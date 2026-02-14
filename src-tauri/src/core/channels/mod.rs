@@ -46,12 +46,27 @@ pub trait WalletChannel: Send + Sync {
 fn resolve_vrpc_coin_context(
     coin_registry: &CoinRegistry,
     system_id: &str,
+    coin_id_hint: Option<&str>,
     network: WalletNetwork,
 ) -> Result<vrpc::VrpcCoinContext, WalletError> {
     let is_testnet = matches!(network, WalletNetwork::Testnet);
-    let coin = coin_registry
-        .find_by_system_id(system_id, is_testnet)
-        .ok_or(WalletError::UnsupportedChannel)?;
+    let coin = if let Some(coin_id) = coin_id_hint {
+        let hinted = coin_registry
+            .find_by_id(coin_id, is_testnet)
+            .ok_or(WalletError::UnsupportedChannel)?;
+        let supports_vrpc = hinted
+            .compatible_channels
+            .iter()
+            .any(|ch| matches!(ch, crate::core::coins::Channel::Vrpc));
+        if !supports_vrpc || hinted.system_id != system_id {
+            return Err(WalletError::UnsupportedChannel);
+        }
+        hinted
+    } else {
+        coin_registry
+            .find_by_system_id(system_id, is_testnet)
+            .ok_or(WalletError::UnsupportedChannel)?
+    };
 
     Ok(vrpc::VrpcCoinContext {
         currency_id: coin.currency_id,
@@ -96,7 +111,12 @@ pub async fn route_preflight(
             drop(session);
 
             let resolved = vrpc::parse_vrpc_channel_id(channel_id, Some(&session_vrpc_address))?;
-            let _coin = resolve_vrpc_coin_context(coin_registry, &resolved.system_id, network)?;
+            let _coin = resolve_vrpc_coin_context(
+                coin_registry,
+                &resolved.system_id,
+                Some(&params.coin_id),
+                network,
+            )?;
 
             // Phase-1 parity: we only own one derived VRPC address in this app.
             if resolved.address != session_vrpc_address {
@@ -245,6 +265,7 @@ pub async fn route_send(
 /// Route balance fetch by channel_id. VRPC uses vrsc address; BTC uses btc address.
 pub async fn route_get_balances(
     channel_id: &str,
+    coin_id_hint: Option<&str>,
     session_manager: &Arc<Mutex<SessionManager>>,
     coin_registry: &CoinRegistry,
     vrpc_provider_pool: &VrpcProviderPool,
@@ -260,7 +281,12 @@ pub async fn route_get_balances(
             drop(session);
 
             let resolved = vrpc::parse_vrpc_channel_id(channel_id, Some(&session_vrpc_address))?;
-            let coin = resolve_vrpc_coin_context(coin_registry, &resolved.system_id, network)?;
+            let coin = resolve_vrpc_coin_context(
+                coin_registry,
+                &resolved.system_id,
+                coin_id_hint,
+                network,
+            )?;
             let addresses = vec![resolved.address];
             vrpc::get_balances(vrpc_provider_pool.for_network(network), &addresses, &coin).await
         }
@@ -311,6 +337,7 @@ pub async fn route_get_balances(
 /// Route transaction history fetch by channel_id. VRPC uses vrsc address; BTC uses btc address.
 pub async fn route_get_transactions(
     channel_id: &str,
+    coin_id_hint: Option<&str>,
     session_manager: &Arc<Mutex<SessionManager>>,
     coin_registry: &CoinRegistry,
     vrpc_provider_pool: &VrpcProviderPool,
@@ -326,7 +353,12 @@ pub async fn route_get_transactions(
             drop(session);
 
             let resolved = vrpc::parse_vrpc_channel_id(channel_id, Some(&session_vrpc_address))?;
-            let coin = resolve_vrpc_coin_context(coin_registry, &resolved.system_id, network)?;
+            let coin = resolve_vrpc_coin_context(
+                coin_registry,
+                &resolved.system_id,
+                coin_id_hint,
+                network,
+            )?;
             let addresses = vec![resolved.address];
             let res =
                 vrpc::get_transactions(vrpc_provider_pool.for_network(network), &addresses, &coin)

@@ -42,6 +42,7 @@ pub struct InfoUpdatedPayload {
 pub struct RatesUpdatedPayload {
     pub coin_id: String,
     pub rates: std::collections::HashMap<String, f64>,
+    pub usd_change_24h_pct: Option<f64>,
 }
 
 /// Payload for wallet://error. Message must be user-facing, no internal details.

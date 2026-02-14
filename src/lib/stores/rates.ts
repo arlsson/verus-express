@@ -1,9 +1,14 @@
 /**
- * Fiat rates store: coinId -> { currency -> rate }.
+ * Fiat rates store: coinId -> fiat rates + optional 24h USD percentage change.
  */
 
 import { writable } from 'svelte/store';
 
-const initialState: Record<string, Record<string, number>> = {};
+export interface CoinRatesSnapshot {
+  rates: Record<string, number>;
+  usdChange24hPct: number | null;
+}
 
-export const ratesStore = writable<Record<string, Record<string, number>>>(initialState);
+const initialState: Record<string, CoinRatesSnapshot> = {};
+
+export const ratesStore = writable<Record<string, CoinRatesSnapshot>>(initialState);

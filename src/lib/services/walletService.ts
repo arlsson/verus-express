@@ -51,10 +51,16 @@ export async function getAddresses(): Promise<AddressResponse> {
   return invoke<AddressResponse>('get_addresses');
 }
 
-export async function getBalances(channelId: string): Promise<BalanceResult> {
-  return invoke<BalanceResult>('get_balances', { channel_id: channelId });
+export async function getBalances(channelId: string, coinId?: string): Promise<BalanceResult> {
+  return invoke<BalanceResult>('get_balances', {
+    channel_id: channelId,
+    ...(coinId ? { coin_id: coinId } : {})
+  });
 }
 
-export async function getTransactionHistory(channelId: string): Promise<Transaction[]> {
-  return invoke<Transaction[]>('get_transaction_history', { channel_id: channelId });
+export async function getTransactionHistory(channelId: string, coinId?: string): Promise<Transaction[]> {
+  return invoke<Transaction[]>('get_transaction_history', {
+    channel_id: channelId,
+    ...(coinId ? { coin_id: coinId } : {})
+  });
 }

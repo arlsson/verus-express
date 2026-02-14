@@ -85,6 +85,7 @@ pub async fn send_transaction(
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_balances(
     channel_id: String,
+    coin_id: Option<String>,
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     coin_registry: State<'_, Arc<CoinRegistry>>,
     vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
@@ -99,6 +100,7 @@ pub async fn get_balances(
 
     route_get_balances(
         &channel_id,
+        coin_id.as_deref(),
         &session_manager,
         coin_registry.as_ref(),
         vrpc_provider_pool.inner().as_ref(),
@@ -112,6 +114,7 @@ pub async fn get_balances(
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_transaction_history(
     channel_id: String,
+    coin_id: Option<String>,
     app_handle: AppHandle,
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     coin_registry: State<'_, Arc<CoinRegistry>>,
@@ -127,6 +130,7 @@ pub async fn get_transaction_history(
 
     let res = route_get_transactions(
         &channel_id,
+        coin_id.as_deref(),
         &session_manager,
         coin_registry.as_ref(),
         vrpc_provider_pool.inner().as_ref(),

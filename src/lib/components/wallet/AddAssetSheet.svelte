@@ -8,10 +8,18 @@
   import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
   import { i18nStore } from '$lib/i18n';
   import { isWalletSupportedAsset } from '$lib/coins/supportedAssets.js';
+  import {
+    assetVisibilityKey,
+    filterVisibleAssets,
+    hideAssetByKey,
+    isAssetHiddenByKey,
+    showAssetByKey
+  } from '$lib/stores/assetVisibility.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { buildWalletChannels, walletChannelsStore } from '$lib/stores/walletChannels.js';
   import * as coinsService from '$lib/services/coinsService.js';
   import {
+    applyCatalogMetadataToCoinDefinition,
     type AddAssetEntry,
     buildAddAssetCatalogView,
     catalogEntryToCoinDefinition,
@@ -57,8 +65,9 @@
   );
 
   $effect(() => {
+    const query = searchInput;
     const timer = setTimeout(() => {
-      debouncedSearch = searchInput;
+      debouncedSearch = query;
     }, 150);
     return () => clearTimeout(timer);
   });
@@ -159,26 +168,56 @@
 
   async function refreshRegistryState() {
     const allCoins = await coinsService.getCoinRegistry();
-    const networkCoins = allCoins.filter((coin) => isWalletSupportedAsset(coin, network));
+    const networkCoins = filterVisibleAssets(
+      allCoins.filter((coin) => isWalletSupportedAsset(coin, network)),
+      network
+    );
     coinsStore.set(networkCoins);
     walletChannelsStore.set(buildWalletChannels(networkCoins, walletChannels.vrpcAddress));
   }
 
   async function addCoinToRegistry(definition: CoinDefinition, successMessageKey: string) {
-    await coinsService.addCoinDefinition(definition);
-    await refreshRegistryState();
-    actionError = '';
-    actionSuccess = i18n.t(successMessageKey, { ticker: definition.displayTicker });
+    const visibilityKey = assetVisibilityKey(definition.id, definition.proto);
+    try {
+      await coinsService.addCoinDefinition(definition);
+      showAssetByKey(visibilityKey, network);
+      await refreshRegistryState();
+      actionError = '';
+      actionSuccess = i18n.t(successMessageKey, { ticker: definition.displayTicker });
+    } catch (error) {
+      const errorType = extractWalletErrorType(error);
+      if (errorType === 'AssetAlreadyExists' && isAssetHiddenByKey(visibilityKey, network)) {
+        showAssetByKey(visibilityKey, network);
+        await refreshRegistryState();
+        actionError = '';
+        actionSuccess = i18n.t('wallet.addAsset.toast.enabled', { ticker: definition.displayTicker });
+        return;
+      }
+
+      throw error;
+    }
   }
 
-  async function handleCatalogAdd(entry: AddAssetEntry) {
-    if (entry.status !== 'available') return;
-
+  async function handleCatalogAction(entry: AddAssetEntry) {
     actionSuccess = '';
     actionError = '';
     activeRowKey = entry.key;
 
     try {
+      if (entry.status === 'added') {
+        hideAssetByKey(entry.key, network);
+        await refreshRegistryState();
+        actionSuccess = i18n.t('wallet.addAsset.toast.disabled', { ticker: entry.displayTicker });
+        return;
+      }
+
+      if (isAssetHiddenByKey(entry.key, network)) {
+        showAssetByKey(entry.key, network);
+        await refreshRegistryState();
+        actionSuccess = i18n.t('wallet.addAsset.toast.enabled', { ticker: entry.displayTicker });
+        return;
+      }
+
       if (entry.addStrategy === 'direct') {
         const definition = catalogEntryToCoinDefinition(entry, network);
         if (!definition) {
@@ -190,10 +229,12 @@
         if (result.status === 'ambiguous') {
           throw new Error(i18n.t('wallet.addAsset.error.pbaasAmbiguous'));
         }
-        await addCoinToRegistry(result.coin, 'wallet.addAsset.toast.added');
+        const hydratedCoin = applyCatalogMetadataToCoinDefinition(result.coin);
+        await addCoinToRegistry(hydratedCoin, 'wallet.addAsset.toast.added');
       } else if (entry.addStrategy === 'resolve_erc20') {
         const result = await coinsService.resolveErc20Contract(erc20ContractValue(entry));
-        await addCoinToRegistry(result.coin, 'wallet.addAsset.toast.added');
+        const hydratedCoin = applyCatalogMetadataToCoinDefinition(result.coin);
+        await addCoinToRegistry(hydratedCoin, 'wallet.addAsset.toast.added');
       }
     } catch (error) {
       actionError = translateAssetError(error, 'wallet.addAsset.error.addFailed');
@@ -236,7 +277,8 @@
     pbaasError = '';
 
     try {
-      await addCoinToRegistry(pbaasResolvedCoin, 'wallet.addAsset.toast.added');
+      const hydratedCoin = applyCatalogMetadataToCoinDefinition(pbaasResolvedCoin);
+      await addCoinToRegistry(hydratedCoin, 'wallet.addAsset.toast.added');
       pbaasQuery = '';
       pbaasResolvedCoin = null;
       pbaasCandidates = [];
@@ -275,7 +317,8 @@
     erc20Error = '';
 
     try {
-      await addCoinToRegistry(erc20ResolvedCoin, 'wallet.addAsset.toast.added');
+      const hydratedCoin = applyCatalogMetadataToCoinDefinition(erc20ResolvedCoin);
+      await addCoinToRegistry(hydratedCoin, 'wallet.addAsset.toast.added');
       erc20Contract = '';
       erc20ResolvedCoin = null;
     } catch (error) {
@@ -300,7 +343,7 @@
             type="text"
             bind:value={searchInput}
             placeholder={i18n.t('wallet.addAsset.searchPlaceholder')}
-            class="h-10 pl-9"
+            class="h-10 pl-9 focus-visible:ring-[2px] focus-visible:ring-ring/40"
           />
         </div>
 
@@ -332,7 +375,7 @@
               <AddAssetRow
                 {entry}
                 busy={activeRowKey === entry.key}
-                onAdd={handleCatalogAdd}
+                onAction={handleCatalogAction}
               />
             {/each}
           </ul>
@@ -353,7 +396,7 @@
               <AddAssetRow
                 {entry}
                 busy={activeRowKey === entry.key}
-                onAdd={handleCatalogAdd}
+                onAction={handleCatalogAction}
               />
             {/each}
           </ul>

@@ -13,6 +13,8 @@ coin registry scope.
 
 - Coin metadata source:
   `/Users/maxtheyse/dev/valu-mobile/src/utils/CoinData/CoinsList.js`
+- CoinPaprika override source:
+  `coinsList[*].rate_url_params.coin_paprika` from the same `CoinsList.js`
 - Coin logo mapping source:
   `/Users/maxtheyse/dev/valu-mobile/src/utils/CoinData/CoinData.js`
 - Icon family indices:
@@ -26,6 +28,9 @@ coin registry scope.
 - Catalog JSON: `src/lib/coins/valuCoinCatalog.generated.json`
 - Catalog metadata: `src/lib/coins/valuCoinCatalog.meta.json`
 - Copied icon assets: `static/images/coin-logos/**`
+
+Catalog entries may include `coinPaprikaId` when Valu defines
+`rate_url_params.coin_paprika`.
 
 ## Sync commands
 

@@ -43,11 +43,11 @@
   const i18n = $derived($i18nStore);
 </script>
 
-<div class="relative min-h-screen">
+<div class="relative h-screen overflow-hidden">
   <div class="absolute top-0 left-0 z-40 h-11 w-[15.25rem]" data-tauri-drag-region aria-hidden="true"></div>
-  <Sidebar.Provider>
+  <Sidebar.Provider class="h-full overflow-hidden">
     <AppSidebar bind:activeSection {walletData} />
-    <Sidebar.Inset class="dark:bg-[#111111]">
+    <Sidebar.Inset class="h-full min-h-0 dark:bg-[#111111]">
       <div class="h-6 shrink-0" data-tauri-drag-region aria-hidden="true"></div>
       {#if latestError}
         <div class="mx-6 mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -59,7 +59,7 @@
           </div>
         </div>
       {/if}
-      <main class="flex-1 overflow-auto">
+      <main class={activeSection === 'overview' ? 'flex flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-auto'}>
         {#if activeSection === 'overview'}
           <Overview
             {walletData}

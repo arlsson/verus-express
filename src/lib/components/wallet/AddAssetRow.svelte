@@ -1,8 +1,7 @@
 <script lang="ts">
-  import CheckIcon from '@lucide/svelte/icons/check';
+  import MinusIcon from '@lucide/svelte/icons/minus';
   import PlusIcon from '@lucide/svelte/icons/plus';
   import { Badge } from '$lib/components/ui/badge';
-  import { Button } from '$lib/components/ui/button';
   import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
   import { i18nStore } from '$lib/i18n';
   import type { AddAssetEntry } from '$lib/stores/addAssetCatalog.js';
@@ -14,11 +13,11 @@
   type AddAssetRowProps = {
     entry: AddAssetEntry;
     busy?: boolean;
-    onAdd?: typeof noop;
+    onAction?: typeof noop;
   };
 
   /* eslint-disable prefer-const */
-  let { entry, busy = false, onAdd = noop }: AddAssetRowProps = $props();
+  let { entry, busy = false, onAction = noop }: AddAssetRowProps = $props();
   /* eslint-enable prefer-const */
 
   const i18n = $derived($i18nStore);
@@ -37,24 +36,26 @@
   <div class="flex shrink-0 items-center gap-2">
     <Badge variant="outline" class="border-border/80 text-[10px] uppercase tracking-wide">{protocolLabel}</Badge>
     {#if entry.status === 'added'}
-      <span
-        class="text-emerald-700 dark:text-emerald-300"
-        aria-label={i18n.t('wallet.addAsset.stateAdded')}
-        title={i18n.t('wallet.addAsset.stateAdded')}
-      >
-        <CheckIcon class="h-4 w-4" />
-      </span>
-    {:else}
-      <Button
-        variant="ghost"
-        size="icon"
-        onclick={() => onAdd(entry)}
+      <button
+        type="button"
+        class="text-destructive inline-flex h-8 w-8 items-center justify-center rounded-md bg-transparent transition-opacity hover:opacity-80 focus:bg-transparent active:bg-transparent disabled:opacity-45 dark:bg-transparent dark:hover:bg-transparent dark:focus:bg-transparent dark:active:bg-transparent"
+        onclick={() => onAction(entry)}
         disabled={busy}
-        class="text-primary h-8 w-8 rounded-md bg-transparent hover:bg-transparent"
+        aria-label={busy ? i18n.t('wallet.addAsset.disabling') : i18n.t('wallet.addAsset.disable')}
+        title={busy ? i18n.t('wallet.addAsset.disabling') : i18n.t('wallet.addAsset.disable')}
+      >
+        <MinusIcon class="h-4 w-4" />
+      </button>
+    {:else}
+      <button
+        type="button"
+        class="text-primary inline-flex h-8 w-8 items-center justify-center rounded-md bg-transparent transition-opacity hover:opacity-80 focus:bg-transparent active:bg-transparent disabled:opacity-45 dark:bg-transparent dark:hover:bg-transparent dark:focus:bg-transparent dark:active:bg-transparent"
+        onclick={() => onAction(entry)}
+        disabled={busy}
         aria-label={busy ? i18n.t('wallet.addAsset.adding') : i18n.t('wallet.addAsset.add')}
       >
         <PlusIcon class="h-4 w-4" />
-      </Button>
+      </button>
     {/if}
   </div>
 

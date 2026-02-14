@@ -17,6 +17,7 @@ interface DemoRowSeed {
   amount: number;
   fiatValue: number;
   unitRate: number;
+  change24hPct: number | null;
 }
 
 const MAINNET_ROWS: DemoRowSeed[] = [
@@ -27,7 +28,8 @@ const MAINNET_ROWS: DemoRowSeed[] = [
     fallbackName: 'Verus',
     amount: 2784.2191,
     fiatValue: 6431.55,
-    unitRate: 2.31
+    unitRate: 2.31,
+    change24hPct: 1.84
   },
   {
     coinId: 'ETH',
@@ -36,7 +38,8 @@ const MAINNET_ROWS: DemoRowSeed[] = [
     fallbackName: 'Ethereum',
     amount: 1.2408,
     fiatValue: 4131.86,
-    unitRate: 3330
+    unitRate: 3330,
+    change24hPct: -0.73
   },
   {
     coinId: 'BTC',
@@ -45,7 +48,8 @@ const MAINNET_ROWS: DemoRowSeed[] = [
     fallbackName: 'Bitcoin',
     amount: 0.0314,
     fiatValue: 2006.46,
-    unitRate: 63900
+    unitRate: 63900,
+    change24hPct: 0.02
   },
   {
     coinId: 'USDC',
@@ -54,7 +58,8 @@ const MAINNET_ROWS: DemoRowSeed[] = [
     fallbackName: 'USD Coin',
     amount: 0,
     fiatValue: 0,
-    unitRate: 1
+    unitRate: 1,
+    change24hPct: null
   }
 ];
 
@@ -66,7 +71,8 @@ const TESTNET_ROWS: DemoRowSeed[] = [
     fallbackName: 'Verus Testnet',
     amount: 18250.4421,
     fiatValue: 730.02,
-    unitRate: 0.04
+    unitRate: 0.04,
+    change24hPct: 0.58
   },
   {
     coinId: 'ETH',
@@ -75,7 +81,8 @@ const TESTNET_ROWS: DemoRowSeed[] = [
     fallbackName: 'Ethereum',
     amount: 0.5204,
     fiatValue: 1732.93,
-    unitRate: 3330
+    unitRate: 3330,
+    change24hPct: -1.2
   },
   {
     coinId: 'BTCTEST',
@@ -84,7 +91,8 @@ const TESTNET_ROWS: DemoRowSeed[] = [
     fallbackName: 'Bitcoin Testnet',
     amount: 0.0128,
     fiatValue: 817.92,
-    unitRate: 63900
+    unitRate: 63900,
+    change24hPct: 0
   },
   {
     coinId: 'USDC',
@@ -93,15 +101,38 @@ const TESTNET_ROWS: DemoRowSeed[] = [
     fallbackName: 'USD Coin',
     amount: 0,
     fiatValue: 0,
-    unitRate: 1
+    unitRate: 1,
+    change24hPct: null
   }
 ];
+
+function formatPercentChange(value: number, intlLocale: string): string {
+  const formatted = new Intl.NumberFormat(intlLocale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(Math.abs(value));
+
+  if (value > 0) return `+${formatted}%`;
+  if (value < 0) return `-${formatted}%`;
+  return `${formatted}%`;
+}
+
+function changeDirection(value: number | null): WalletOverviewRowViewModel['change24hDirection'] {
+  if (value === null) return 'none';
+  if (Math.abs(value) < 0.01) return 'flat';
+  if (value > 0) return 'up';
+  return 'down';
+}
 
 function toViewRow(seed: DemoRowSeed, intlLocale: string): WalletOverviewRowViewModel {
   const presentation = resolveCoinPresentationById(seed.coinId, seed.proto);
   const displayTicker = presentation?.displayTicker ?? seed.fallbackTicker;
   const displayName = presentation?.displayName ?? seed.fallbackName;
   const hasBalance = seed.amount > 0;
+  const direction = changeDirection(seed.change24hPct);
+  const marketPriceDisplay = formatUsdAmount(seed.unitRate, intlLocale);
+  const change24hDisplay =
+    direction === 'none' || seed.change24hPct === null ? '—' : formatPercentChange(seed.change24hPct, intlLocale);
   return {
     key: seed.coinId,
     coinId: seed.coinId,
@@ -112,6 +143,9 @@ function toViewRow(seed: DemoRowSeed, intlLocale: string): WalletOverviewRowView
     hasSnapshot: true,
     cryptoAmountDisplay: formatCryptoAmount(seed.amount, displayTicker, intlLocale, 4, 4),
     fiatValueDisplay: formatUsdAmount(seed.fiatValue, intlLocale),
+    marketPriceDisplay,
+    change24hDisplay,
+    change24hDirection: direction,
     unitRateDisplay: formatUsdAmount(seed.unitRate, intlLocale),
     fiatSortValue: hasBalance ? seed.fiatValue : Number.NEGATIVE_INFINITY
   };

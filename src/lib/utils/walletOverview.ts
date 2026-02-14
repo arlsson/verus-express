@@ -1,4 +1,5 @@
 import type { WalletChannelsState } from '$lib/stores/walletChannels.js';
+import type { CoinRatesSnapshot } from '$lib/stores/rates.js';
 import type { BalanceResult, CoinDefinition, WalletNetwork } from '$lib/types/wallet.js';
 import { resolveCoinPresentation } from '$lib/coins/presentation.js';
 
@@ -15,6 +16,9 @@ export interface WalletOverviewRowViewModel {
   hasSnapshot: boolean;
   cryptoAmountDisplay: string;
   fiatValueDisplay: string;
+  marketPriceDisplay: string;
+  change24hDisplay: string;
+  change24hDirection: 'up' | 'down' | 'flat' | 'none';
   unitRateDisplay: string | null;
   fiatSortValue: number;
 }
@@ -34,8 +38,8 @@ export interface WalletOverviewViewModel {
 export interface BuildWalletOverviewParams {
   coins: CoinDefinition[];
   walletChannels: WalletChannelsState;
-  balances: Record<string, BalanceResult>;
-  rates: Record<string, Record<string, number>>;
+  balances: Record<string, Record<string, BalanceResult>>;
+  rates: Record<string, CoinRatesSnapshot>;
   intlLocale: string;
   network?: WalletNetwork;
 }
@@ -105,10 +109,6 @@ function toFiniteNumber(value: unknown): number | null {
   return null;
 }
 
-function hasOwn<K extends string>(source: Record<string, unknown>, key: K): boolean {
-  return Object.prototype.hasOwnProperty.call(source, key);
-}
-
 function getUsdRate(rateMap?: Record<string, number>): number | null {
   if (!rateMap) return null;
   const candidate = rateMap.USD ?? rateMap.usd;
@@ -118,15 +118,38 @@ function getUsdRate(rateMap?: Record<string, number>): number | null {
   return candidate;
 }
 
+function getChangeDirection(changePct: number | null): WalletOverviewRowViewModel['change24hDirection'] {
+  if (changePct === null) return 'none';
+  if (Math.abs(changePct) < 0.01) return 'flat';
+  if (changePct > 0) return 'up';
+  return 'down';
+}
+
+function formatPercentChange(changePct: number, intlLocale: string): string {
+  const formatter = new Intl.NumberFormat(intlLocale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  const absDisplay = formatter.format(Math.abs(changePct));
+
+  if (changePct > 0) return `+${absDisplay}%`;
+  if (changePct < 0) return `-${absDisplay}%`;
+  return `${absDisplay}%`;
+}
+
 function resolvePrimaryCoin(
   coins: CoinDefinition[],
   walletChannels: WalletChannelsState,
   network?: WalletNetwork
 ): CoinDefinition | null {
   const primaryChannelId = walletChannels.primaryChannelId;
-  const primaryCoinIdFromChannel = primaryChannelId
-    ? Object.entries(walletChannels.byCoinId).find(([, channel]) => channel === primaryChannelId)?.[0] ?? null
-    : null;
+  const matchingPrimaryCoinIds = primaryChannelId
+    ? Object.entries(walletChannels.byCoinId)
+        .filter(([, channel]) => channel === primaryChannelId)
+        .map(([coinId]) => coinId)
+    : [];
+  const primaryCoinIdFromChannel =
+    matchingPrimaryCoinIds.length === 1 ? matchingPrimaryCoinIds[0] : null;
 
   const defaultPrimaryId = network === 'testnet' ? 'VRSCTEST' : 'VRSC';
 
@@ -169,21 +192,35 @@ export function buildWalletOverviewViewModel({
   const primaryTicker = primaryPresentation?.displayTicker ?? fallbackPrimaryTicker;
   const primaryChannelId =
     (primaryCoin ? walletChannels.byCoinId[primaryCoin.id] : null) ?? walletChannels.primaryChannelId;
-  const hasPrimarySnapshot = primaryChannelId ? hasOwn(balances, primaryChannelId) : false;
-  const primaryTotal = hasPrimarySnapshot && primaryChannelId ? toFiniteNumber(balances[primaryChannelId]?.total) : null;
+  const primarySnapshot =
+    primaryCoin && primaryChannelId ? balances[primaryChannelId]?.[primaryCoin.id] : undefined;
+  const hasPrimarySnapshot = primarySnapshot !== undefined;
+  const primaryTotal = hasPrimarySnapshot ? toFiniteNumber(primarySnapshot?.total) : null;
 
   const rows = coins.map<WalletOverviewRowViewModel>((coin) => {
     const coinPresentation = resolveCoinPresentation(coin);
     const displayTicker = coinPresentation.displayTicker;
     const displayName = coinPresentation.displayName;
     const channelId = walletChannels.byCoinId[coin.id];
-    const hasSnapshot = channelId ? hasOwn(balances, channelId) : false;
-    const totalAmount = hasSnapshot && channelId ? toFiniteNumber(balances[channelId]?.total) : null;
+    const balanceSnapshot = channelId ? balances[channelId]?.[coin.id] : undefined;
+    const hasSnapshot = balanceSnapshot !== undefined;
+    const totalAmount = hasSnapshot ? toFiniteNumber(balanceSnapshot?.total) : null;
     const amountValue = totalAmount ?? 0;
     const hasBalance = hasSnapshot && amountValue > 0;
-    const usdRate = getUsdRate(rates[coin.id]);
+    const rateSnapshot = rates[coin.id];
+    const usdRate = getUsdRate(rateSnapshot?.rates);
+    const rawChange = rateSnapshot?.usdChange24hPct;
+    const change24hPct =
+      typeof rawChange === 'number' && Number.isFinite(rawChange) ? rawChange : null;
+    const change24hDirection = getChangeDirection(change24hPct);
     const fiatValue = hasSnapshot && usdRate !== null ? amountValue * usdRate : null;
     const rowFractionDigits = Math.max(0, Math.min(4, coin.decimals));
+    const marketPriceDisplay =
+      usdRate === null ? OVERVIEW_UNAVAILABLE_DISPLAY : formatUsdAmount(usdRate, intlLocale);
+    const change24hDisplay =
+      change24hDirection === 'none' || change24hPct === null
+        ? OVERVIEW_UNAVAILABLE_DISPLAY
+        : formatPercentChange(change24hPct, intlLocale);
 
     return {
       key: coin.id,
@@ -198,6 +235,9 @@ export function buildWalletOverviewViewModel({
         : `${OVERVIEW_UNAVAILABLE_DISPLAY} ${displayTicker}`,
       fiatValueDisplay:
         fiatValue === null ? OVERVIEW_UNAVAILABLE_DISPLAY : formatUsdAmount(fiatValue, intlLocale),
+      marketPriceDisplay,
+      change24hDisplay,
+      change24hDirection,
       unitRateDisplay: usdRate === null ? null : formatUsdAmount(usdRate, intlLocale),
       fiatSortValue: hasBalance && fiatValue !== null ? fiatValue : Number.NEGATIVE_INFINITY
     };

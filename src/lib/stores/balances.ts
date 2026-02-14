@@ -1,15 +1,21 @@
 /**
- * Balance store: channel_id -> BalanceResult.
- * Key = channel_id (e.g. vrpc.VRSC.i-5d9c... or btc.BTC). Updated by pull (get_balances) or future wallet://balances-updated.
+ * Balance store: channel_id -> coin_id -> BalanceResult.
+ * Mirrors mobile parity shape to avoid collapsing PBaaS balances on shared VRPC channels.
  */
 
 import { writable } from 'svelte/store';
 import type { BalanceResult } from '$lib/types/wallet.js';
 
-const initialState: Record<string, BalanceResult> = {};
+export type BalancesByChannel = Record<string, Record<string, BalanceResult>>;
 
-export const balanceStore = writable<Record<string, BalanceResult>>(initialState);
+const initialState: BalancesByChannel = {};
 
-export function getBalance(channelId: string, balances: Record<string, BalanceResult>): BalanceResult | undefined {
-  return balances[channelId];
+export const balanceStore = writable<BalancesByChannel>(initialState);
+
+export function getBalance(
+  channelId: string,
+  coinId: string,
+  balances: BalancesByChannel
+): BalanceResult | undefined {
+  return balances[channelId]?.[coinId];
 }

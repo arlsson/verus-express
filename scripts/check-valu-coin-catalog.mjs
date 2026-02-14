@@ -60,6 +60,14 @@ function validateCoinEntry(entry) {
     throw new Error(`Entry ${entry.id} missing displayTicker`);
   }
 
+  if (
+    Object.prototype.hasOwnProperty.call(entry, 'coinPaprikaId') &&
+    entry.coinPaprikaId != null &&
+    typeof entry.coinPaprikaId !== 'string'
+  ) {
+    throw new Error(`Entry ${entry.id} has non-string coinPaprikaId`);
+  }
+
   if (!entry.icon || typeof entry.icon !== 'object') {
     throw new Error(`Entry ${entry.id} missing icon`);
   }
