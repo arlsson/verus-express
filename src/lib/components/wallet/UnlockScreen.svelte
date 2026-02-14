@@ -6,6 +6,7 @@
 -->
 
 <script lang="ts">
+  import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
   import CirclePlusIcon from '@lucide/svelte/icons/circle-plus';
   import DownloadIcon from '@lucide/svelte/icons/download';
   import { onDestroy, tick } from 'svelte';
@@ -15,7 +16,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
-  import * as Sheet from '$lib/components/ui/sheet';
+  import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import { i18nStore, networkLocaleKey } from '$lib/i18n';
   import HelpDrawerLink from '$lib/components/common/HelpDrawerLink.svelte';
   import WalletCreation from '$lib/components/flows/WalletCreation/WalletCreation.svelte';
@@ -25,6 +26,7 @@
   import type { ImportMethod } from '$lib/components/flows/WalletImport/types';
   import { getWalletColorHex } from '$lib/constants/walletColors';
   import { buildNeedHelpContent } from '$lib/utils/helpContent';
+  import { cn } from '$lib/utils.js';
 
   export type WalletListItem = {
     account_id: string;
@@ -323,112 +325,112 @@
   defaultNetwork={selectedWallet?.network === 'testnet' ? 'testnet' : 'mainnet'}
 />
 
-<Sheet.Root bind:open={showWalletSwitcherDrawer}>
-  <Sheet.Content side="right" class="w-[360px] max-w-[92vw] p-6">
-    {#snippet children()}
-      <div class="flex h-full flex-col">
-        <Sheet.Header>
-          <Sheet.Title>{i18n.t('unlock.switcher.title')}</Sheet.Title>
-          <Sheet.Description>{i18n.t('unlock.switcher.description')}</Sheet.Description>
-        </Sheet.Header>
-
-        <div class="mt-5 flex-1 space-y-2 overflow-y-auto pr-1">
-          {#each wallets as wallet}
-            {@const isSelected = effectiveAccountId === wallet.account_id}
-            <Button
-              variant={isSelected ? 'secondary' : 'outline'}
-              class="h-auto w-full justify-start gap-3 px-3 py-2.5"
-              onclick={() => {
-                selectedAccountId = wallet.account_id;
-                errorMessage = '';
-                password = '';
-                showWalletSwitcherDrawer = false;
-              }}
-            >
-              <div
-                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base text-white"
-                style={`background-color: ${walletColorHex(wallet.color)};`}
-              >
-                {walletEmoji(wallet.emoji)}
-              </div>
-              <div class="min-w-0 text-left">
-                <p class="text-foreground truncate text-sm font-semibold">{wallet.wallet_name}</p>
-                <p class="text-muted-foreground text-xs">{networkLabel(wallet.network)}</p>
-              </div>
-            </Button>
-          {/each}
-        </div>
-      </div>
-    {/snippet}
-  </Sheet.Content>
-</Sheet.Root>
-
-<Sheet.Root bind:open={showCreateOptionsDrawer}>
-  <Sheet.Content side="right" class="w-[420px] max-w-[92vw] p-6">
-    {#snippet children()}
-      <div class="flex h-full flex-col">
-        {#if createDrawerView === 'root'}
-          <Sheet.Header>
-            <Sheet.Title>{i18n.t('unlock.create.title')}</Sheet.Title>
-          </Sheet.Header>
-
-          <div class="mt-5 space-y-3">
-            <button
-              type="button"
-              class="group w-full rounded-lg bg-muted/65 p-4 text-left transition-colors hover:bg-muted/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-muted/55 dark:hover:bg-muted/65"
-              onclick={handleStartNewWalletFlow}
-            >
-              <div class="flex items-start gap-3">
-                <CirclePlusIcon
-                  class="mt-0.5 h-6 w-6 shrink-0 text-foreground opacity-30 transition-opacity duration-150 group-hover:opacity-100 dark:opacity-45 dark:group-hover:opacity-100"
-                  absoluteStrokeWidth
-                  stroke-linecap="butt"
-                  aria-hidden="true"
-                />
-                <div class="min-w-0">
-                  <p class="text-foreground text-sm font-semibold">{i18n.t('unlock.create.newTitle')}</p>
-                  <p class="text-muted-foreground mt-1 text-xs">
-                    {i18n.t('unlock.create.newDescription')}
-                  </p>
-                </div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              class="group w-full rounded-lg bg-muted/65 p-4 text-left transition-colors hover:bg-muted/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-muted/55 dark:hover:bg-muted/65"
-              onclick={handleShowImportMethods}
-            >
-              <div class="flex items-start gap-3">
-                <DownloadIcon
-                  class="mt-0.5 h-6 w-6 shrink-0 text-foreground opacity-30 transition-opacity duration-150 group-hover:opacity-100 dark:opacity-45 dark:group-hover:opacity-100"
-                  absoluteStrokeWidth
-                  stroke-linecap="butt"
-                  aria-hidden="true"
-                />
-                <div class="min-w-0">
-                  <p class="text-foreground text-sm font-semibold">{i18n.t('unlock.create.importTitle')}</p>
-                  <p class="text-muted-foreground mt-1 text-xs">
-                    {i18n.t('unlock.create.importDescription')}
-                  </p>
-                </div>
-              </div>
-            </button>
+<StandardRightSheet bind:isOpen={showWalletSwitcherDrawer} title={i18n.t('unlock.switcher.title')}>
+  <div class="flex-1 space-y-2 overflow-y-auto pr-1">
+    {#each wallets as wallet}
+      {@const isSelected = effectiveAccountId === wallet.account_id}
+      <button
+        type="button"
+        class={cn(
+          'group w-full rounded-lg p-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          isSelected
+            ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
+            : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'
+        )}
+        onclick={() => {
+          selectedAccountId = wallet.account_id;
+          errorMessage = '';
+          password = '';
+          showWalletSwitcherDrawer = false;
+        }}
+      >
+        <div class="flex items-center gap-3">
+          <div
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base text-white"
+            style={`background-color: ${walletColorHex(wallet.color)};`}
+          >
+            {walletEmoji(wallet.emoji)}
           </div>
-        {:else}
-          <ImportMethodList
-            onBack={() => {
-              createDrawerView = 'root';
-            }}
-            onSelect={(method) => {
-              handleStartImportWalletFlow(method);
-            }}
+          <div class="min-w-0 text-left">
+            <p class="text-foreground truncate text-sm font-semibold">{wallet.wallet_name}</p>
+            <p class="text-muted-foreground text-xs">{networkLabel(wallet.network)}</p>
+          </div>
+        </div>
+      </button>
+    {/each}
+  </div>
+</StandardRightSheet>
+
+<StandardRightSheet
+  bind:isOpen={showCreateOptionsDrawer}
+  title={i18n.t(createDrawerView === 'root' ? 'unlock.create.title' : 'unlock.importMethods.title')}
+>
+  {#if createDrawerView === 'root'}
+    <div class="space-y-3">
+      <button
+        type="button"
+        class="group w-full rounded-lg bg-muted/65 p-4 text-left transition-colors hover:bg-muted/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-muted/55 dark:hover:bg-muted/65"
+        onclick={handleStartNewWalletFlow}
+      >
+        <div class="flex items-start gap-3">
+          <CirclePlusIcon
+            class="mt-0.5 h-6 w-6 shrink-0 text-foreground opacity-30 transition-opacity duration-150 group-hover:opacity-100 dark:opacity-45 dark:group-hover:opacity-100"
+            absoluteStrokeWidth
+            stroke-linecap="butt"
+            aria-hidden="true"
           />
-        {/if}
-      </div>
-    {/snippet}
-  </Sheet.Content>
-</Sheet.Root>
+          <div class="min-w-0">
+            <p class="text-foreground text-sm font-semibold">{i18n.t('unlock.create.newTitle')}</p>
+            <p class="text-muted-foreground mt-1 text-xs">
+              {i18n.t('unlock.create.newDescription')}
+            </p>
+          </div>
+        </div>
+      </button>
+
+      <button
+        type="button"
+        class="group w-full rounded-lg bg-muted/65 p-4 text-left transition-colors hover:bg-muted/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:bg-muted/55 dark:hover:bg-muted/65"
+        onclick={handleShowImportMethods}
+      >
+        <div class="flex items-start gap-3">
+          <DownloadIcon
+            class="mt-0.5 h-6 w-6 shrink-0 text-foreground opacity-30 transition-opacity duration-150 group-hover:opacity-100 dark:opacity-45 dark:group-hover:opacity-100"
+            absoluteStrokeWidth
+            stroke-linecap="butt"
+            aria-hidden="true"
+          />
+          <div class="min-w-0">
+            <p class="text-foreground text-sm font-semibold">{i18n.t('unlock.create.importTitle')}</p>
+            <p class="text-muted-foreground mt-1 text-xs">
+              {i18n.t('unlock.create.importDescription')}
+            </p>
+          </div>
+        </div>
+      </button>
+    </div>
+  {:else}
+    <div class="space-y-3">
+      <button
+        type="button"
+        class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+        onclick={() => {
+          createDrawerView = 'root';
+        }}
+      >
+        <ArrowLeftIcon class="size-4" />
+        {i18n.t('unlock.importMethods.back')}
+      </button>
+
+      <ImportMethodList
+        showHeader={false}
+        onSelect={(method) => {
+          handleStartImportWalletFlow(method);
+        }}
+      />
+    </div>
+  {/if}
+</StandardRightSheet>
 
 {#if showCreateWallet}
   <div class="fixed inset-0 z-50">

@@ -1,15 +1,255 @@
 //
-// Module 3: Tauri commands for coin registry (get_coin_registry, add_pbaas_currency).
-// Thin wrappers; validation and allowlist policy live in core/coins.
-// Last Updated: State<Arc<CoinRegistry>> for Module 7 update engine sharing.
+// Module 3: Tauri commands for coin registry and asset discovery.
+// Includes registry reads/writes plus PBaaS/ERC20 resolver commands for add-asset UX.
 
+use std::collections::HashSet;
 use std::sync::Arc;
-use tauri::State;
 
-use crate::core::{CoinDefinition, CoinRegistry};
+use ethers::abi::Abi;
+use ethers::contract::Contract;
+use ethers::providers::Middleware;
+use ethers::types::Address;
+use ethers::utils::to_checksum;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use tauri::State;
+use tokio::sync::Mutex;
+
+use crate::core::channels::eth::EthProviderPool;
+use crate::core::channels::vrpc::VrpcProviderPool;
+use crate::core::{Channel, CoinDefinition, CoinRegistry, Protocol, SessionManager};
+use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
 
-/// Returns all coins: static definitions plus dynamically added PBaaS currencies.
+const VRPC_MAINNET: &str = "https://api.verus.services/";
+const VRPC_TESTNET: &str = "https://api.verustest.net/";
+const ERC20_METADATA_ABI: &str = r#"[
+  {
+    \"constant\": true,
+    \"inputs\": [],
+    \"name\": \"symbol\",
+    \"outputs\": [{\"name\": \"\", \"type\": \"string\"}],
+    \"type\": \"function\"
+  },
+  {
+    \"constant\": true,
+    \"inputs\": [],
+    \"name\": \"name\",
+    \"outputs\": [{\"name\": \"\", \"type\": \"string\"}],
+    \"type\": \"function\"
+  },
+  {
+    \"constant\": true,
+    \"inputs\": [],
+    \"name\": \"decimals\",
+    \"outputs\": [{\"name\": \"\", \"type\": \"uint8\"}],
+    \"type\": \"function\"
+  }
+]"#;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PbaasCandidate {
+    pub currency_id: String,
+    pub system_id: String,
+    pub display_ticker: String,
+    pub display_name: String,
+    pub fully_qualified_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum PbaasResolveResult {
+    Resolved { coin: CoinDefinition },
+    Ambiguous { candidates: Vec<PbaasCandidate> },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum Erc20ResolveResult {
+    Resolved { coin: CoinDefinition },
+}
+
+fn normalize_query(input: &str) -> String {
+    input.trim().to_ascii_lowercase()
+}
+
+fn value_as_string(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn as_currency_definition(value: &Value) -> &Value {
+    value.get("currencydefinition").unwrap_or(value)
+}
+
+fn as_result_payload(value: &Value) -> &Value {
+    value.get("result").unwrap_or(value)
+}
+
+fn pbaas_candidate_from_value(value: &Value) -> Option<PbaasCandidate> {
+    let definition = as_currency_definition(value);
+    let currency_id = value_as_string(
+        definition
+            .get("currencyid")
+            .or(definition.get("currency_id")),
+    )?;
+
+    let system_id = value_as_string(definition.get("systemid").or(definition.get("system_id")))
+        .or_else(|| value_as_string(definition.get("parent")))
+        .unwrap_or_else(|| currency_id.clone());
+
+    let fully_qualified_name = value_as_string(
+        definition
+            .get("fullyqualifiedname")
+            .or(definition.get("fully_qualified_name")),
+    );
+
+    let display_ticker = value_as_string(definition.get("name"))
+        .or_else(|| fully_qualified_name.clone())
+        .unwrap_or_else(|| currency_id.clone());
+
+    let display_name = fully_qualified_name
+        .clone()
+        .or_else(|| value_as_string(definition.get("name")))
+        .unwrap_or_else(|| display_ticker.clone());
+
+    Some(PbaasCandidate {
+        currency_id,
+        system_id,
+        display_ticker,
+        display_name,
+        fully_qualified_name,
+    })
+}
+
+fn collect_pbaas_candidates(payload: &Value) -> Vec<PbaasCandidate> {
+    let root = as_result_payload(payload);
+    let mut candidates = Vec::<PbaasCandidate>::new();
+
+    if let Some(items) = root.as_array() {
+        for item in items {
+            if let Some(candidate) = pbaas_candidate_from_value(item) {
+                candidates.push(candidate);
+            }
+        }
+    } else if let Some(candidate) = pbaas_candidate_from_value(root) {
+        candidates.push(candidate);
+    }
+
+    let mut seen = HashSet::<String>::new();
+    candidates
+        .into_iter()
+        .filter(|candidate| seen.insert(candidate.currency_id.to_ascii_lowercase()))
+        .collect()
+}
+
+fn candidate_matches_query(candidate: &PbaasCandidate, query_normalized: &str) -> bool {
+    if query_normalized.is_empty() {
+        return false;
+    }
+
+    [
+        candidate.currency_id.as_str(),
+        candidate.system_id.as_str(),
+        candidate.display_ticker.as_str(),
+        candidate.display_name.as_str(),
+        candidate
+            .fully_qualified_name
+            .as_deref()
+            .unwrap_or_default(),
+    ]
+    .iter()
+    .any(|value| value.to_ascii_lowercase() == query_normalized)
+}
+
+fn vrpc_endpoint_for_network(network: WalletNetwork) -> &'static str {
+    match network {
+        WalletNetwork::Mainnet => VRPC_MAINNET,
+        WalletNetwork::Testnet => VRPC_TESTNET,
+    }
+}
+
+fn build_pbaas_coin_definition(
+    candidate: &PbaasCandidate,
+    network: WalletNetwork,
+) -> CoinDefinition {
+    CoinDefinition {
+        id: candidate.currency_id.clone(),
+        currency_id: candidate.currency_id.clone(),
+        system_id: candidate.system_id.clone(),
+        display_ticker: candidate.display_ticker.clone(),
+        display_name: candidate.display_name.clone(),
+        coin_paprika_id: None,
+        proto: Protocol::Vrsc,
+        compatible_channels: vec![Channel::Vrpc],
+        decimals: 8,
+        vrpc_endpoints: vec![vrpc_endpoint_for_network(network).to_string()],
+        electrum_endpoints: None,
+        seconds_per_block: 60,
+        mapped_to: None,
+        is_testnet: matches!(network, WalletNetwork::Testnet),
+    }
+}
+
+fn parse_contract_address(contract: &str) -> Result<Address, WalletError> {
+    contract
+        .trim()
+        .parse::<Address>()
+        .map_err(|_| WalletError::InvalidContract)
+}
+
+fn build_erc20_coin_definition(
+    contract_address: Address,
+    symbol: &str,
+    name: &str,
+    decimals: u8,
+) -> Result<CoinDefinition, WalletError> {
+    let symbol_trimmed = symbol.trim();
+    if symbol_trimmed.is_empty() {
+        return Err(WalletError::InvalidContract);
+    }
+
+    let checksum = to_checksum(&contract_address, None);
+    let lowercase_contract = format!("{:#x}", contract_address).to_ascii_lowercase();
+    let display_ticker = symbol_trimmed.to_ascii_uppercase();
+    let display_name = if name.trim().is_empty() {
+        display_ticker.clone()
+    } else {
+        name.trim().to_string()
+    };
+
+    Ok(CoinDefinition {
+        id: format!("erc20_{}", lowercase_contract),
+        currency_id: checksum.clone(),
+        system_id: checksum,
+        display_ticker,
+        display_name,
+        coin_paprika_id: None,
+        proto: Protocol::Erc20,
+        compatible_channels: vec![Channel::Erc20],
+        decimals,
+        vrpc_endpoints: vec![],
+        electrum_endpoints: None,
+        seconds_per_block: 12,
+        mapped_to: Some("ETH".to_string()),
+        is_testnet: false,
+    })
+}
+
+async fn require_active_network(
+    session_manager: &Arc<Mutex<SessionManager>>,
+) -> Result<WalletNetwork, WalletError> {
+    let session = session_manager.lock().await;
+    if !session.is_unlocked() {
+        return Err(WalletError::WalletLocked);
+    }
+    Ok(session.active_network().unwrap_or(WalletNetwork::Mainnet))
+}
+
+/// Returns all coins: static definitions plus dynamically added entries.
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_coin_registry(
     registry: State<'_, Arc<CoinRegistry>>,
@@ -20,7 +260,19 @@ pub fn get_coin_registry(
     Ok(coins)
 }
 
-/// Adds a PBaaS currency to the registry. Validates definition; rejects duplicates.
+/// Adds a coin definition to the dynamic registry.
+#[tauri::command(rename_all = "snake_case")]
+pub fn add_coin_definition(
+    registry: State<'_, Arc<CoinRegistry>>,
+    definition: CoinDefinition,
+) -> Result<CoinDefinition, WalletError> {
+    println!("[COINS] Add coin requested: {}", definition.id);
+    let added = registry.add_coin(definition)?;
+    println!("[COINS] Coin added: {}", added.id);
+    Ok(added)
+}
+
+/// Adds a PBaaS currency to the registry (compatibility wrapper).
 #[tauri::command(rename_all = "snake_case")]
 pub fn add_pbaas_currency(
     registry: State<'_, Arc<CoinRegistry>>,
@@ -30,4 +282,202 @@ pub fn add_pbaas_currency(
     registry.add_pbaas(definition)?;
     println!("[COINS] PBaaS currency added");
     Ok(())
+}
+
+/// Resolves PBaaS by name or i-address against the active wallet network.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn resolve_pbaas_currency(
+    query: String,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+    vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
+) -> Result<PbaasResolveResult, WalletError> {
+    let normalized_query = normalize_query(&query);
+    if normalized_query.is_empty() {
+        return Err(WalletError::PbaasNotFound);
+    }
+
+    let network = require_active_network(session_manager.inner()).await?;
+    let provider = vrpc_provider_pool.for_network(network);
+
+    if let Ok(payload) = provider.getcurrency(query.trim()).await {
+        if let Some(candidate) = pbaas_candidate_from_value(as_result_payload(&payload)) {
+            return Ok(PbaasResolveResult::Resolved {
+                coin: build_pbaas_coin_definition(&candidate, network),
+            });
+        }
+    }
+
+    let payload = provider.listcurrencies().await?;
+    let mut matches = collect_pbaas_candidates(&payload)
+        .into_iter()
+        .filter(|candidate| candidate_matches_query(candidate, &normalized_query))
+        .collect::<Vec<_>>();
+
+    if matches.is_empty() {
+        return Err(WalletError::PbaasNotFound);
+    }
+
+    matches.sort_by(|a, b| {
+        a.display_ticker
+            .to_ascii_lowercase()
+            .cmp(&b.display_ticker.to_ascii_lowercase())
+            .then(
+                a.currency_id
+                    .to_ascii_lowercase()
+                    .cmp(&b.currency_id.to_ascii_lowercase()),
+            )
+    });
+
+    if matches.len() > 1 {
+        return Ok(PbaasResolveResult::Ambiguous {
+            candidates: matches,
+        });
+    }
+
+    let candidate = matches
+        .into_iter()
+        .next()
+        .ok_or(WalletError::PbaasNotFound)?;
+    Ok(PbaasResolveResult::Resolved {
+        coin: build_pbaas_coin_definition(&candidate, network),
+    })
+}
+
+/// Resolves ERC20 metadata by contract on Ethereum mainnet.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn resolve_erc20_contract(
+    contract: String,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+    eth_provider_pool: State<'_, Arc<EthProviderPool>>,
+) -> Result<Erc20ResolveResult, WalletError> {
+    let network = require_active_network(session_manager.inner()).await?;
+    if !matches!(network, WalletNetwork::Mainnet) {
+        return Err(WalletError::UnsupportedNetwork);
+    }
+
+    let provider = eth_provider_pool.for_network(network)?;
+    let contract_address = parse_contract_address(&contract)?;
+
+    let bytecode = provider
+        .rpc_provider
+        .get_code(contract_address, None)
+        .await
+        .map_err(|_| WalletError::NetworkError)?;
+    if bytecode.as_ref().is_empty() {
+        return Err(WalletError::InvalidContract);
+    }
+
+    let abi: Abi =
+        serde_json::from_str(ERC20_METADATA_ABI).map_err(|_| WalletError::OperationFailed)?;
+    let contract_client = Arc::new(provider.rpc_provider.clone());
+    let metadata_contract = Contract::new(contract_address, abi, contract_client);
+
+    let symbol = metadata_contract
+        .method::<_, String>("symbol", ())
+        .map_err(|_| WalletError::InvalidContract)?
+        .call()
+        .await
+        .map_err(|_| WalletError::InvalidContract)?;
+
+    let name = metadata_contract
+        .method::<_, String>("name", ())
+        .map_err(|_| WalletError::InvalidContract)?
+        .call()
+        .await
+        .map_err(|_| WalletError::InvalidContract)?;
+
+    let decimals = metadata_contract
+        .method::<_, u8>("decimals", ())
+        .map_err(|_| WalletError::InvalidContract)?
+        .call()
+        .await
+        .map_err(|_| WalletError::InvalidContract)?;
+
+    let coin = build_erc20_coin_definition(contract_address, &symbol, &name, decimals)?;
+
+    Ok(Erc20ResolveResult::Resolved { coin })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_contract_address_rejects_invalid_input() {
+        let result = parse_contract_address("not-an-address");
+        assert!(matches!(result, Err(WalletError::InvalidContract)));
+    }
+
+    #[test]
+    fn build_erc20_coin_definition_uses_deterministic_id() {
+        let contract = parse_contract_address("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+            .expect("valid contract");
+        let coin =
+            build_erc20_coin_definition(contract, "usdc", "USD Coin", 6).expect("coin definition");
+
+        assert_eq!(coin.id, "erc20_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+        assert_eq!(coin.display_ticker, "USDC");
+        assert_eq!(coin.decimals, 6);
+        assert_eq!(coin.proto, Protocol::Erc20);
+    }
+
+    #[test]
+    fn collect_pbaas_candidates_reads_currency_definition_entries() {
+        let payload = serde_json::json!({
+            "result": [
+                {
+                    "currencydefinition": {
+                        "currencyid": "iExampleOne",
+                        "systemid": "iSystem",
+                        "name": "ONE",
+                        "fullyqualifiedname": "One currency"
+                    }
+                },
+                {
+                    "currencydefinition": {
+                        "currencyid": "iExampleTwo",
+                        "systemid": "iSystem",
+                        "name": "TWO"
+                    }
+                }
+            ]
+        });
+
+        let candidates = collect_pbaas_candidates(&payload);
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates[0].currency_id, "iExampleOne");
+        assert_eq!(candidates[1].currency_id, "iExampleTwo");
+    }
+
+    #[test]
+    fn candidate_matches_query_checks_expected_fields() {
+        let candidate = PbaasCandidate {
+            currency_id: "iCurrency".to_string(),
+            system_id: "iSystem".to_string(),
+            display_ticker: "TICK".to_string(),
+            display_name: "Ticker Name".to_string(),
+            fully_qualified_name: Some("Ticker.Name".to_string()),
+        };
+
+        assert!(candidate_matches_query(
+            &candidate,
+            &normalize_query("iCurrency")
+        ));
+        assert!(candidate_matches_query(
+            &candidate,
+            &normalize_query("iSystem")
+        ));
+        assert!(candidate_matches_query(
+            &candidate,
+            &normalize_query("TICK")
+        ));
+        assert!(candidate_matches_query(
+            &candidate,
+            &normalize_query("Ticker.Name")
+        ));
+        assert!(!candidate_matches_query(
+            &candidate,
+            &normalize_query("missing")
+        ));
+    }
 }

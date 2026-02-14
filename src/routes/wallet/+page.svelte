@@ -18,6 +18,7 @@
   import { coinsStore } from '$lib/stores/coins.js';
   import { buildWalletChannels, resetWalletChannels, walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { clearWalletErrors, pushWalletError } from '$lib/stores/walletErrors.js';
+  import { isWalletSupportedAsset } from '$lib/coins/supportedAssets.js';
   import { i18nStore } from '$lib/i18n';
   import type { WalletNetwork } from '$lib/types/wallet.js';
 
@@ -53,7 +54,7 @@
       }
 
       const allCoins = await coinsService.getCoinRegistry();
-      const coins = allCoins.filter((c) => c.isTestnet === (walletNetwork === 'testnet'));
+      const coins = allCoins.filter((coin) => isWalletSupportedAsset(coin, walletNetwork));
       coinsStore.set(coins);
 
       const channels = buildWalletChannels(coins, addresses?.vrsc_address ?? null);

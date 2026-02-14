@@ -3,7 +3,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { CoinDefinition } from '$lib/types/wallet.js';
+import type { CoinDefinition, Erc20ResolveResult, PbaasResolveResult } from '$lib/types/wallet.js';
 
 export async function getCoinRegistry(): Promise<CoinDefinition[]> {
   return invoke<CoinDefinition[]>('get_coin_registry');
@@ -11,4 +11,16 @@ export async function getCoinRegistry(): Promise<CoinDefinition[]> {
 
 export async function addPbaasCurrency(definition: CoinDefinition): Promise<void> {
   await invoke('add_pbaas_currency', { definition });
+}
+
+export async function addCoinDefinition(definition: CoinDefinition): Promise<CoinDefinition> {
+  return invoke<CoinDefinition>('add_coin_definition', { definition });
+}
+
+export async function resolvePbaasCurrency(query: string): Promise<PbaasResolveResult> {
+  return invoke<PbaasResolveResult>('resolve_pbaas_currency', { query });
+}
+
+export async function resolveErc20Contract(contract: string): Promise<Erc20ResolveResult> {
+  return invoke<Erc20ResolveResult>('resolve_erc20_contract', { contract });
 }

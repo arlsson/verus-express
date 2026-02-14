@@ -36,7 +36,10 @@ fn load_runtime_env_files() {
 
         match dotenvy::from_filename(candidate) {
             Ok(_) => println!("[APP] Loaded runtime env file: {}", candidate),
-            Err(err) => eprintln!("[APP] Failed to load runtime env file {}: {}", candidate, err),
+            Err(err) => eprintln!(
+                "[APP] Failed to load runtime env file {}: {}",
+                candidate, err
+            ),
         }
     }
 }
@@ -80,7 +83,7 @@ pub fn run() {
                 eprintln!("[APP] Failed to create wallet data directory: {:?}", e);
                 e
             })?;
-            let wallet_manager = WalletManager::new(wallet_data_dir);
+            let wallet_manager = WalletManager::new(wallet_data_dir.clone());
             app.manage(wallet_manager);
 
             // Initialize Stronghold store and session manager
@@ -93,7 +96,8 @@ pub fn run() {
             app.manage(session_manager);
             println!("[APP] Session manager initialized");
 
-            let coin_registry = Arc::new(CoinRegistry::new());
+            let coin_registry_store = wallet_data_dir.join("dynamic_coins.json");
+            let coin_registry = Arc::new(CoinRegistry::with_dynamic_store(coin_registry_store));
             app.manage(coin_registry);
             println!("[APP] Coin registry initialized");
 
@@ -146,7 +150,10 @@ pub fn run() {
             wallet::is_unlocked,
             // Coin registry commands (Module 3)
             coins::get_coin_registry,
+            coins::add_coin_definition,
             coins::add_pbaas_currency,
+            coins::resolve_pbaas_currency,
+            coins::resolve_erc20_contract,
             // Transaction commands (Module 4 + 9)
             transaction::preflight_send,
             transaction::send_transaction,

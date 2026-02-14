@@ -48,14 +48,29 @@ pub enum WalletError {
     #[error("PBaaS currency already exists")]
     DuplicatePbaasCurrency,
 
+    #[error("Asset already exists")]
+    AssetAlreadyExists,
+
+    #[error("PBaaS currency not found")]
+    PbaasNotFound,
+
+    #[error("PBaaS query is ambiguous")]
+    PbaasAmbiguous,
+
     #[error("Invalid or expired preflight")]
     InvalidPreflight,
 
     #[error("Unsupported channel")]
     UnsupportedChannel,
 
+    #[error("Unsupported network for this operation")]
+    UnsupportedNetwork,
+
     #[error("Ethereum channels are not configured")]
     EthNotConfigured,
+
+    #[error("Invalid ERC20 contract")]
+    InvalidContract,
 
     #[error("Identity not found")]
     IdentityNotFound,

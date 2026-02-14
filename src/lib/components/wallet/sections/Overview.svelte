@@ -10,6 +10,7 @@
   import SendIcon from '@lucide/svelte/icons/send';
   import DownloadIcon from '@lucide/svelte/icons/download';
   import ArrowLeftRightIcon from '@lucide/svelte/icons/arrow-left-right';
+  import PlusIcon from '@lucide/svelte/icons/plus';
   import { balanceStore } from '$lib/stores/balances.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { ratesStore } from '$lib/stores/rates.js';
@@ -18,6 +19,7 @@
   import { buildWalletOverviewViewModel } from '$lib/utils/walletOverview.js';
   import { getWalletOverviewDemoSnapshot } from '$lib/utils/walletOverviewDemo.js';
   import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
+  import AddAssetSheet from '$lib/components/wallet/AddAssetSheet.svelte';
 
   interface WalletData {
     name: string;
@@ -40,9 +42,11 @@
 
   const coins = $derived($coinsStore);
   const i18n = $derived($i18nStore);
+  const walletNetwork = $derived(walletData.network ?? 'mainnet');
   const walletChannels = $derived($walletChannelsStore);
   const balances = $derived($balanceStore);
   const rates = $derived($ratesStore);
+  let showAddAssetSheet = $state(false);
 
   const liveOverview = $derived(
     buildWalletOverviewViewModel({
@@ -77,19 +81,32 @@
       </div>
     </div>
 
-    <div class="mt-5 w-full md:max-w-[620px]">
-      <div class="grid w-full grid-cols-3 gap-2">
-        <Button variant="secondary" size="lg" class="h-10 w-full gap-1.5 rounded-md px-3" onclick={onNavigateToReceive}>
-          <DownloadIcon class="h-4 w-4" />
-          <span>{i18n.t('wallet.overview.receive')}</span>
-        </Button>
-        <Button variant="secondary" size="lg" class="h-10 w-full gap-1.5 rounded-md px-3" onclick={onNavigateToSend}>
-          <SendIcon class="h-4 w-4" />
-          <span>{i18n.t('wallet.overview.send')}</span>
-        </Button>
-        <Button variant="secondary" size="lg" class="h-10 w-full gap-1.5 rounded-md px-3" onclick={onNavigateToConvert}>
-          <ArrowLeftRightIcon class="h-4 w-4" />
-          <span>{i18n.t('wallet.overview.convert')}</span>
+    <div class="mt-5 w-full md:max-w-[700px]">
+      <div class="flex w-full gap-2">
+        <div class="grid w-full flex-1 grid-cols-3 gap-2">
+          <Button variant="secondary" size="lg" class="h-10 w-full gap-1.5 rounded-md px-3" onclick={onNavigateToReceive}>
+            <DownloadIcon class="h-4 w-4" />
+            <span>{i18n.t('wallet.overview.receive')}</span>
+          </Button>
+          <Button variant="secondary" size="lg" class="h-10 w-full gap-1.5 rounded-md px-3" onclick={onNavigateToSend}>
+            <SendIcon class="h-4 w-4" />
+            <span>{i18n.t('wallet.overview.send')}</span>
+          </Button>
+          <Button variant="secondary" size="lg" class="h-10 w-full gap-1.5 rounded-md px-3" onclick={onNavigateToConvert}>
+            <ArrowLeftRightIcon class="h-4 w-4" />
+            <span>{i18n.t('wallet.overview.convert')}</span>
+          </Button>
+        </div>
+        <Button
+          variant="default"
+          size="icon"
+          class="h-10 w-10 shrink-0 rounded-md"
+          aria-label={i18n.t('wallet.addAsset.open')}
+          onclick={() => {
+            showAddAssetSheet = true;
+          }}
+        >
+          <PlusIcon class="h-4 w-4" />
         </Button>
       </div>
     </div>
@@ -122,3 +139,5 @@
     {/if}
   </section>
 </div>
+
+<AddAssetSheet bind:isOpen={showAddAssetSheet} network={walletNetwork} />

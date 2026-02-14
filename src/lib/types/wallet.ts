@@ -42,6 +42,29 @@ export interface CoinDefinition {
   isTestnet: boolean;
 }
 
+export interface PbaasCandidate {
+  currencyId: string;
+  systemId: string;
+  displayTicker: string;
+  displayName: string;
+  fullyQualifiedName?: string | null;
+}
+
+export type PbaasResolveResult =
+  | {
+      status: 'resolved';
+      coin: CoinDefinition;
+    }
+  | {
+      status: 'ambiguous';
+      candidates: PbaasCandidate[];
+    };
+
+export type Erc20ResolveResult = {
+  status: 'resolved';
+  coin: CoinDefinition;
+};
+
 export interface PreflightWarning {
   warningType: string;
   message: string;
