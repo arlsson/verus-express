@@ -1,0 +1,1531 @@
+[
+  {
+    "id": "0x18084fbA666a33d37592fA2633fD49a74DD93a88",
+    "currencyId": "0x18084fbA666a33d37592fA2633fD49a74DD93a88",
+    "systemId": ".eth",
+    "displayTicker": "tBTC",
+    "displayName": "tBTC",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/tbtc_light.svg",
+      "dark": "/images/coin-logos/web3/tbtc_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "TBTC"
+    }
+  },
+  {
+    "id": "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c",
+    "currencyId": "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c",
+    "systemId": ".eth",
+    "displayTicker": "EURC",
+    "displayName": "EURC",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/eurc_light.svg",
+      "dark": "/images/coin-logos/web3/eurc_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "EURC"
+    }
+  },
+  {
+    "id": "0xBc2738BA63882891094C99E59a02141Ca1A1C36a",
+    "currencyId": "0xBc2738BA63882891094C99E59a02141Ca1A1C36a",
+    "systemId": ".eth",
+    "displayTicker": "VRSC [ERC20]",
+    "displayName": "Verus on Ethereum",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/vrsc_light.svg",
+      "dark": "/images/coin-logos/btc/vrsc_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "VRSC"
+    }
+  },
+  {
+    "id": "0xE6052Dcc60573561ECef2D9A4C0FEA6d3aC5B9A2",
+    "currencyId": "0xE6052Dcc60573561ECef2D9A4C0FEA6d3aC5B9A2",
+    "systemId": ".eth",
+    "displayTicker": "VBRID",
+    "displayName": "Bridge.vETH on Ethereum",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/pbaas/bridge-veth_light.svg",
+      "dark": "/images/coin-logos/pbaas/bridge-veth_dark.svg",
+      "logoMapped": true,
+      "family": "pbaas",
+      "symbolKey": "BRIDGE_VETH"
+    }
+  },
+  {
+    "id": "AAVE",
+    "currencyId": "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9",
+    "systemId": ".eth",
+    "displayTicker": "AAVE",
+    "displayName": "AAVE",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/aave_light.svg",
+      "dark": "/images/coin-logos/web3/aave_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "AAVE"
+    }
+  },
+  {
+    "id": "ARS",
+    "currencyId": "ARS",
+    "systemId": ".fiat",
+    "displayTicker": "ARS",
+    "displayName": "Argentine Peso",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "$",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "ARS"
+    }
+  },
+  {
+    "id": "AUD",
+    "currencyId": "AUD",
+    "systemId": ".fiat",
+    "displayTicker": "AUD",
+    "displayName": "Australian Dollar",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "$",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "AUD"
+    }
+  },
+  {
+    "id": "BAL",
+    "currencyId": "0xba100000625a3754423978a60c9317c58a424e3d",
+    "systemId": ".eth",
+    "displayTicker": "BAL",
+    "displayName": "Balancer",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/bal_light.svg",
+      "dark": "/images/coin-logos/web3/bal_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "BAL"
+    }
+  },
+  {
+    "id": "BAT",
+    "currencyId": "0x0d8775f648430679a709e98d2b0cb6250d2887ef",
+    "systemId": ".eth",
+    "displayTicker": "BAT",
+    "displayName": "Basic Attention Token",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/bat_light.svg",
+      "dark": "/images/coin-logos/web3/bat_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "BAT"
+    }
+  },
+  {
+    "id": "BCH",
+    "currencyId": "",
+    "systemId": ".bch",
+    "displayTicker": "BCH",
+    "displayName": "Bitcoin Cash",
+    "proto": "btc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/bch_light.svg",
+      "dark": "/images/coin-logos/btc/bch_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "BCH"
+    }
+  },
+  {
+    "id": "BNT",
+    "currencyId": "0x1f573d6fb3f13d689ff844b4ce37794d79a7ff1c",
+    "systemId": ".eth",
+    "displayTicker": "BNT",
+    "displayName": "Bancor",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/bnt_light.svg",
+      "dark": "/images/coin-logos/web3/bnt_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "BNT"
+    }
+  },
+  {
+    "id": "BRL",
+    "currencyId": "BRL",
+    "systemId": ".fiat",
+    "displayTicker": "BRL",
+    "displayName": "Brazilian Real",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "R$",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "BRL"
+    }
+  },
+  {
+    "id": "BTC",
+    "currencyId": "",
+    "systemId": ".btc",
+    "displayTicker": "BTC",
+    "displayName": "Bitcoin",
+    "proto": "btc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/btc_light.svg",
+      "dark": "/images/coin-logos/btc/btc_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "BTC"
+    }
+  },
+  {
+    "id": "CAD",
+    "currencyId": "CAD",
+    "systemId": ".fiat",
+    "displayTicker": "CAD",
+    "displayName": "Canadian Dollar",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "$",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "CAD"
+    }
+  },
+  {
+    "id": "CCL",
+    "currencyId": "ccl",
+    "systemId": ".kmd",
+    "displayTicker": "CCL",
+    "displayName": "CoinCollect",
+    "proto": "btc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/ccl_light.svg",
+      "dark": "/images/coin-logos/btc/ccl_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "CCL"
+    }
+  },
+  {
+    "id": "CHF",
+    "currencyId": "CHF",
+    "systemId": ".fiat",
+    "displayTicker": "CHF",
+    "displayName": "Swiss Franc",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "CHF",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "CHF"
+    }
+  },
+  {
+    "id": "CLP",
+    "currencyId": "CLP",
+    "systemId": ".fiat",
+    "displayTicker": "CLP",
+    "displayName": "Chilean Peso",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "$",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "CLP"
+    }
+  },
+  {
+    "id": "COP",
+    "currencyId": "COP",
+    "systemId": ".fiat",
+    "displayTicker": "COP",
+    "displayName": "Colombian Peso",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "$",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "COP"
+    }
+  },
+  {
+    "id": "CRV",
+    "currencyId": "0xD533a949740bb3306d119CC777fa900bA034cd52",
+    "systemId": ".eth",
+    "displayTicker": "CRV",
+    "displayName": "Curve DAO Token",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/crv_light.svg",
+      "dark": "/images/coin-logos/web3/crv_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "CRV"
+    }
+  },
+  {
+    "id": "CZK",
+    "currencyId": "CZK",
+    "systemId": ".fiat",
+    "displayTicker": "CZK",
+    "displayName": "Czech Koruna",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "Kč",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "CZK"
+    }
+  },
+  {
+    "id": "DAI",
+    "currencyId": "0x6b175474e89094c44da98b954eedeac495271d0f",
+    "systemId": ".eth",
+    "displayTicker": "DAI",
+    "displayName": "Dai",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/dai_light.svg",
+      "dark": "/images/coin-logos/web3/dai_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "DAI"
+    }
+  },
+  {
+    "id": "DAIWYRE",
+    "currencyId": "DAI",
+    "systemId": ".wyre",
+    "displayTicker": "Wyre DAI",
+    "displayName": "Dai on Wyre",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/dai_light.svg",
+      "dark": "/images/coin-logos/web3/dai_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "DAI"
+    }
+  },
+  {
+    "id": "DASH",
+    "currencyId": "",
+    "systemId": ".dash",
+    "displayTicker": "DASH",
+    "displayName": "Dash",
+    "proto": "btc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/dash_light.svg",
+      "dark": "/images/coin-logos/btc/dash_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "DASH"
+    }
+  },
+  {
+    "id": "DGB",
+    "currencyId": "",
+    "systemId": ".dgb",
+    "displayTicker": "DGB",
+    "displayName": "Digibyte",
+    "proto": "btc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/dgb_light.svg",
+      "dark": "/images/coin-logos/btc/dgb_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "DGB"
+    }
+  },
+  {
+    "id": "DKK",
+    "currencyId": "DKK",
+    "systemId": ".fiat",
+    "displayTicker": "DKK",
+    "displayName": "Danish Krone",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "kr",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "DKK"
+    }
+  },
+  {
+    "id": "DOGE",
+    "currencyId": "",
+    "systemId": ".doge",
+    "displayTicker": "DOGE",
+    "displayName": "Dogecoin",
+    "proto": "btc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/doge_light.svg",
+      "dark": "/images/coin-logos/btc/doge_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "DOGE"
+    }
+  },
+  {
+    "id": "ETH",
+    "currencyId": "0x0000000000000000000000000000000000000000",
+    "systemId": ".eth",
+    "displayTicker": "ETH",
+    "displayName": "Ethereum",
+    "proto": "eth",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/eth_light.svg",
+      "dark": "/images/coin-logos/web3/eth_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "ETH"
+    }
+  },
+  {
+    "id": "EUR",
+    "currencyId": "EUR",
+    "systemId": ".fiat",
+    "displayTicker": "EUR",
+    "displayName": "Euro",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "€",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "EUR"
+    }
+  },
+  {
+    "id": "GBP",
+    "currencyId": "GBP",
+    "systemId": ".fiat",
+    "displayTicker": "GBP",
+    "displayName": "British Pound Sterling",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "£",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "GBP"
+    }
+  },
+  {
+    "id": "GETH",
+    "currencyId": "0x0000000000000000000000000000000000000000",
+    "systemId": ".eth",
+    "displayTicker": "gETH",
+    "displayName": "Testnet Ethereum",
+    "proto": "eth",
+    "mappedTo": null,
+    "isTestnet": true,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/eth_light.svg",
+      "dark": "/images/coin-logos/web3/eth_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "ETH"
+    }
+  },
+  {
+    "id": "HKD",
+    "currencyId": "HKD",
+    "systemId": ".fiat",
+    "displayTicker": "HKD",
+    "displayName": "Hong Kong Dollar",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "$",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "HKD"
+    }
+  },
+  {
+    "id": "HOT",
+    "currencyId": "0x6c6ee5e31d828de241282b9606c8e98ea48526e2",
+    "systemId": ".eth",
+    "displayTicker": "HOT",
+    "displayName": "HoloToken",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/hot_light.svg",
+      "dark": "/images/coin-logos/web3/hot_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "HOT"
+    }
+  },
+  {
+    "id": "i3f7tSctFkiPpiedY8QR5Tep9p4qDVebDx",
+    "currencyId": "i3f7tSctFkiPpiedY8QR5Tep9p4qDVebDx",
+    "systemId": "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV",
+    "displayTicker": "Bridge.vETH",
+    "displayName": "Bridge.vETH",
+    "proto": "vrsc",
+    "mappedTo": "0xE6052Dcc60573561ECef2D9A4C0FEA6d3aC5B9A2",
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/pbaas/bridge-veth_light.svg",
+      "dark": "/images/coin-logos/pbaas/bridge-veth_dark.svg",
+      "logoMapped": true,
+      "family": "pbaas",
+      "symbolKey": "BRIDGE_VETH"
+    }
+  },
+  {
+    "id": "i4Xr5TAMrDTD99H69EemhjDxJ4ktNskUtc",
+    "currencyId": "i4Xr5TAMrDTD99H69EemhjDxJ4ktNskUtc",
+    "systemId": "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV",
+    "displayTicker": "Switch",
+    "displayName": "Switch",
+    "proto": "vrsc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/pbaas/switch_light.svg",
+      "dark": "/images/coin-logos/pbaas/switch_dark.svg",
+      "logoMapped": true,
+      "family": "pbaas",
+      "symbolKey": "SWITCH"
+    }
+  },
+  {
+    "id": "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd",
+    "currencyId": "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd",
+    "systemId": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X",
+    "displayTicker": "vUSDC.vETH",
+    "displayName": "USDC on Verus",
+    "proto": "vrsc",
+    "mappedTo": "USDC",
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/usdc_light.svg",
+      "dark": "/images/coin-logos/web3/usdc_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "USDC"
+    }
+  },
+  {
+    "id": "i9kVWKU2VwARALpbXn4RS9zvrhvNRaUibb",
+    "currencyId": "i9kVWKU2VwARALpbXn4RS9zvrhvNRaUibb",
+    "systemId": "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV",
+    "displayTicker": "Kaiju",
+    "displayName": "Kaiju",
+    "proto": "vrsc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/pbaas/kaiju_light.svg",
+      "dark": "/images/coin-logos/pbaas/kaiju_dark.svg",
+      "logoMapped": true,
+      "family": "pbaas",
+      "symbolKey": "KAIJU"
+    }
+  },
+  {
+    "id": "i9nLSK4S1U5sVMq4eJUHR1gbFALz56J9Lj",
+    "currencyId": "i9nLSK4S1U5sVMq4eJUHR1gbFALz56J9Lj",
+    "systemId": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X",
+    "displayTicker": "scrvUSD.vETH",
+    "displayName": "Savings crvUSD on Verus",
+    "proto": "vrsc",
+    "mappedTo": "0x0655977FEb2f289A4aB78af67BAB0d17aAb84367",
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/scrvusd_light.svg",
+      "dark": "/images/coin-logos/web3/scrvusd_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "SCRVUSD"
+    }
+  },
+  {
+    "id": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X",
+    "currencyId": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X",
+    "systemId": "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV",
+    "displayTicker": "vETH",
+    "displayName": "Ethereum on Verus",
+    "proto": "vrsc",
+    "mappedTo": "ETH",
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/eth_light.svg",
+      "dark": "/images/coin-logos/web3/eth_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "ETH"
+    }
+  },
+  {
+    "id": "i9oCSqKALwJtcv49xUKS2U2i79h1kX6NEY",
+    "currencyId": "i9oCSqKALwJtcv49xUKS2U2i79h1kX6NEY",
+    "systemId": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X",
+    "displayTicker": "vUSDT.vETH",
+    "displayName": "Tether on Verus",
+    "proto": "vrsc",
+    "mappedTo": "USDT",
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/usdt_light.svg",
+      "dark": "/images/coin-logos/web3/usdt_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "USDT"
+    }
+  },
+  {
+    "id": "iC5TQFrFXSYLQGkiZ8FYmZHFJzaRF5CYgE",
+    "currencyId": "iC5TQFrFXSYLQGkiZ8FYmZHFJzaRF5CYgE",
+    "systemId": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X",
+    "displayTicker": "EURC.vETH",
+    "displayName": "EURC on Verus",
+    "proto": "vrsc",
+    "mappedTo": "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c",
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/eurc_light.svg",
+      "dark": "/images/coin-logos/web3/eurc_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "EURC"
+    }
+  },
+  {
+    "id": "iCkKJuJScy4Z6NSDK7Mt42ZAB2NEnAE1o4",
+    "currencyId": "iCkKJuJScy4Z6NSDK7Mt42ZAB2NEnAE1o4",
+    "systemId": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X",
+    "displayTicker": "MKR.vETH",
+    "displayName": "MKR on Verus",
+    "proto": "vrsc",
+    "mappedTo": "MKR",
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/mkr_light.svg",
+      "dark": "/images/coin-logos/web3/mkr_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "MKR"
+    }
+  },
+  {
+    "id": "iD5WRg7jdQM1uuoVHsBCAEKfJCKGs1U3TB",
+    "currencyId": "iD5WRg7jdQM1uuoVHsBCAEKfJCKGs1U3TB",
+    "systemId": "iExBJfZYK7KREDpuhj6PzZBzqMAKaFg7d2",
+    "displayTicker": "Bridge.vARRR",
+    "displayName": "Bridge.vARRR",
+    "proto": "vrsc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "generated",
+      "logoMapped": false
+    }
+  },
+  {
+    "id": "iExBJfZYK7KREDpuhj6PzZBzqMAKaFg7d2",
+    "currencyId": "iExBJfZYK7KREDpuhj6PzZBzqMAKaFg7d2",
+    "systemId": "iExBJfZYK7KREDpuhj6PzZBzqMAKaFg7d2",
+    "displayTicker": "vARRR",
+    "displayName": "Pirate Chain (PBaaS)",
+    "proto": "vrsc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/pbaas/varrr_light.svg",
+      "dark": "/images/coin-logos/pbaas/varrr_dark.svg",
+      "logoMapped": true,
+      "family": "pbaas",
+      "symbolKey": "VARRR"
+    }
+  },
+  {
+    "id": "iGBs4DWztRNvNEJBt4mqHszLxfKTNHTkhM",
+    "currencyId": "iGBs4DWztRNvNEJBt4mqHszLxfKTNHTkhM",
+    "systemId": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X",
+    "displayTicker": "DAI.vETH",
+    "displayName": "DAI on Verus",
+    "proto": "vrsc",
+    "mappedTo": "DAI",
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/dai_light.svg",
+      "dark": "/images/coin-logos/web3/dai_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "DAI"
+    }
+  },
+  {
+    "id": "iHax5qYQGbcMGqJKKrPorpzUBX2oFFXGnY",
+    "currencyId": "iHax5qYQGbcMGqJKKrPorpzUBX2oFFXGnY",
+    "systemId": "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV",
+    "displayTicker": "Pure",
+    "displayName": "Pure",
+    "proto": "vrsc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/pbaas/pure_light.svg",
+      "dark": "/images/coin-logos/pbaas/pure_dark.svg",
+      "logoMapped": true,
+      "family": "pbaas",
+      "symbolKey": "PURE"
+    }
+  },
+  {
+    "id": "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N",
+    "currencyId": "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N",
+    "systemId": "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N",
+    "displayTicker": "vDEX",
+    "displayName": "vDEX",
+    "proto": "vrsc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "generated",
+      "logoMapped": false
+    }
+  },
+  {
+    "id": "iJ3WZocnjG9ufv7GKUA4LijQno5gTMb7tP",
+    "currencyId": "iJ3WZocnjG9ufv7GKUA4LijQno5gTMb7tP",
+    "systemId": "iJ3WZocnjG9ufv7GKUA4LijQno5gTMb7tP",
+    "displayTicker": "CHIPS",
+    "displayName": "CHIPS",
+    "proto": "vrsc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/pbaas/chips_light.svg",
+      "dark": "/images/coin-logos/pbaas/chips_dark.svg",
+      "logoMapped": true,
+      "family": "pbaas",
+      "symbolKey": "CHIPS"
+    }
+  },
+  {
+    "id": "ILS",
+    "currencyId": "ILS",
+    "systemId": ".fiat",
+    "displayTicker": "ILS",
+    "displayName": "Israeli Shekel",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "₪",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "ILS"
+    }
+  },
+  {
+    "id": "INR",
+    "currencyId": "INR",
+    "systemId": ".fiat",
+    "displayTicker": "INR",
+    "displayName": "Indian Rupee",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "₹",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "INR"
+    }
+  },
+  {
+    "id": "iQ1mX2VtESKfJ3PoWVcYKfnDEpYkWW59ZB",
+    "currencyId": "iQ1mX2VtESKfJ3PoWVcYKfnDEpYkWW59ZB",
+    "systemId": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X",
+    "displayTicker": "crvUSD.vETH",
+    "displayName": "crvUSD on Verus",
+    "proto": "vrsc",
+    "mappedTo": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/crvusd_light.svg",
+      "dark": "/images/coin-logos/web3/crvusd_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "CRVUSD"
+    }
+  },
+  {
+    "id": "iS8TfRPfVpKo5FVfSUzfHBQxo9KuzpnqLU",
+    "currencyId": "iS8TfRPfVpKo5FVfSUzfHBQxo9KuzpnqLU",
+    "systemId": "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X",
+    "displayTicker": "tBTC.vETH",
+    "displayName": "tBTC on Verus",
+    "proto": "vrsc",
+    "mappedTo": "0x18084fbA666a33d37592fA2633fD49a74DD93a88",
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/tbtc_light.svg",
+      "dark": "/images/coin-logos/web3/tbtc_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "TBTC"
+    }
+  },
+  {
+    "id": "ISK",
+    "currencyId": "ISK",
+    "systemId": ".fiat",
+    "displayTicker": "ISK",
+    "displayName": "Icelandic Krona",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "kr",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "ISK"
+    }
+  },
+  {
+    "id": "JPY",
+    "currencyId": "JPY",
+    "systemId": ".fiat",
+    "displayTicker": "JPY",
+    "displayName": "Japanese Yen",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "¥",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "JPY"
+    }
+  },
+  {
+    "id": "KMD",
+    "currencyId": "",
+    "systemId": ".kmd",
+    "displayTicker": "KMD",
+    "displayName": "Komodo",
+    "proto": "btc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/kmd_light.svg",
+      "dark": "/images/coin-logos/btc/kmd_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "KMD"
+    }
+  },
+  {
+    "id": "KRW",
+    "currencyId": "KRW",
+    "systemId": ".fiat",
+    "displayTicker": "KRW",
+    "displayName": "South Korean Won",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "₩",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "KRW"
+    }
+  },
+  {
+    "id": "LINK",
+    "currencyId": "0x514910771af9ca656af840dff83e8264ecf986ca",
+    "systemId": ".eth",
+    "displayTicker": "LINK",
+    "displayName": "ChainLink",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/link_light.svg",
+      "dark": "/images/coin-logos/web3/link_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "LINK"
+    }
+  },
+  {
+    "id": "LTC",
+    "currencyId": "",
+    "systemId": ".ltc",
+    "displayTicker": "LTC",
+    "displayName": "Litecoin",
+    "proto": "btc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/ltc_light.svg",
+      "dark": "/images/coin-logos/btc/ltc_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "LTC"
+    }
+  },
+  {
+    "id": "MKR",
+    "currencyId": "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2",
+    "systemId": ".eth",
+    "displayTicker": "MKR",
+    "displayName": "Maker",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/mkr_light.svg",
+      "dark": "/images/coin-logos/web3/mkr_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "MKR"
+    }
+  },
+  {
+    "id": "MXN",
+    "currencyId": "MXN",
+    "systemId": ".fiat",
+    "displayTicker": "MXN",
+    "displayName": "Mexican Peso",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "$",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "MXN"
+    }
+  },
+  {
+    "id": "MYR",
+    "currencyId": "MYR",
+    "systemId": ".fiat",
+    "displayTicker": "MYR",
+    "displayName": "Malaysian Ringgit",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "RM",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "MYR"
+    }
+  },
+  {
+    "id": "NEXO",
+    "currencyId": "0xb62132e35a6c13ee1ee0f84dc5d40bad8d815206",
+    "systemId": ".eth",
+    "displayTicker": "NEXO",
+    "displayName": "Nexo",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/nexo_light.svg",
+      "dark": "/images/coin-logos/web3/nexo_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "NEXO"
+    }
+  },
+  {
+    "id": "NOK",
+    "currencyId": "NOK",
+    "systemId": ".fiat",
+    "displayTicker": "NOK",
+    "displayName": "Norwegian Krone",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "kr",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "NOK"
+    }
+  },
+  {
+    "id": "NZD",
+    "currencyId": "NZD",
+    "systemId": ".fiat",
+    "displayTicker": "NZD",
+    "displayName": "New Zealand Dollar",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "$",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "NZD"
+    }
+  },
+  {
+    "id": "OOT",
+    "currencyId": "oot",
+    "systemId": ".kmd",
+    "displayTicker": "OOT",
+    "displayName": "Utrum",
+    "proto": "btc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/oot_light.svg",
+      "dark": "/images/coin-logos/btc/oot_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "OOT"
+    }
+  },
+  {
+    "id": "PHP",
+    "currencyId": "PHP",
+    "systemId": ".fiat",
+    "displayTicker": "PHP",
+    "displayName": "Philippine Peso",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "₱",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "PHP"
+    }
+  },
+  {
+    "id": "PLN",
+    "currencyId": "PLN",
+    "systemId": ".fiat",
+    "displayTicker": "PLN",
+    "displayName": "Polish Zloty",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "zł",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "PLN"
+    }
+  },
+  {
+    "id": "RFOX",
+    "currencyId": "0xa1d6Df714F91DeBF4e0802A542E13067f31b8262",
+    "systemId": ".eth",
+    "displayTicker": "RFOX",
+    "displayName": "RedFOX Labs",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/rfox_light.svg",
+      "dark": "/images/coin-logos/web3/rfox_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "RFOX"
+    }
+  },
+  {
+    "id": "SEK",
+    "currencyId": "SEK",
+    "systemId": ".fiat",
+    "displayTicker": "SEK",
+    "displayName": "Swedish Krona",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "kr",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "SEK"
+    }
+  },
+  {
+    "id": "SGD",
+    "currencyId": "SGD",
+    "systemId": ".fiat",
+    "displayTicker": "SGD",
+    "displayName": "Singapore Dollar",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "$",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "SGD"
+    }
+  },
+  {
+    "id": "SUSHI",
+    "currencyId": "0x6b3595068778dd592e39a122f4f5a5cf09c90fe2",
+    "systemId": ".eth",
+    "displayTicker": "SUSHI",
+    "displayName": "SushiToken",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/sushi_light.svg",
+      "dark": "/images/coin-logos/web3/sushi_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "SUSHI"
+    }
+  },
+  {
+    "id": "THB",
+    "currencyId": "THB",
+    "systemId": ".fiat",
+    "displayTicker": "THB",
+    "displayName": "Thai Baht",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "฿",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "THB"
+    }
+  },
+  {
+    "id": "UNI",
+    "currencyId": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+    "systemId": ".eth",
+    "displayTicker": "UNI",
+    "displayName": "Uniswap",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/uni_light.svg",
+      "dark": "/images/coin-logos/web3/uni_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "UNI"
+    }
+  },
+  {
+    "id": "USD",
+    "currencyId": "USD",
+    "systemId": ".fiat",
+    "displayTicker": "USD",
+    "displayName": "US Dollar",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "$",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "USD"
+    }
+  },
+  {
+    "id": "USDC",
+    "currencyId": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "systemId": ".eth",
+    "displayTicker": "USDC",
+    "displayName": "USDC",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/usdc_light.svg",
+      "dark": "/images/coin-logos/web3/usdc_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "USDC"
+    }
+  },
+  {
+    "id": "USDCWYRE",
+    "currencyId": "USDC",
+    "systemId": ".wyre",
+    "displayTicker": "Wyre USDC",
+    "displayName": "USDC on Wyre",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/usdc_light.svg",
+      "dark": "/images/coin-logos/web3/usdc_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "USDC"
+    }
+  },
+  {
+    "id": "USDT",
+    "currencyId": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "systemId": ".eth",
+    "displayTicker": "USDT",
+    "displayName": "Tether",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/usdt_light.svg",
+      "dark": "/images/coin-logos/web3/usdt_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "USDT"
+    }
+  },
+  {
+    "id": "USDTWYRE",
+    "currencyId": "USDT",
+    "systemId": ".wyre",
+    "displayTicker": "Wyre USDT",
+    "displayName": "Tether on Wyre",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/usdt_light.svg",
+      "dark": "/images/coin-logos/web3/usdt_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "USDT"
+    }
+  },
+  {
+    "id": "VEN",
+    "currencyId": "0xd850942ef8811f2a866692a623011bde52a462c1",
+    "systemId": ".eth",
+    "displayTicker": "VEN",
+    "displayName": "VeChain",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/ven_light.svg",
+      "dark": "/images/coin-logos/web3/ven_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "VEN"
+    }
+  },
+  {
+    "id": "VND",
+    "currencyId": "VND",
+    "systemId": ".fiat",
+    "displayTicker": "VND",
+    "displayName": "Vietnamese Dong",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "₫",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "VND"
+    }
+  },
+  {
+    "id": "VRSC",
+    "currencyId": "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV",
+    "systemId": "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV",
+    "displayTicker": "VRSC",
+    "displayName": "Verus",
+    "proto": "vrsc",
+    "mappedTo": "0xBc2738BA63882891094C99E59a02141Ca1A1C36a",
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/vrsc_light.svg",
+      "dark": "/images/coin-logos/btc/vrsc_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "VRSC"
+    }
+  },
+  {
+    "id": "VRSCTEST",
+    "currencyId": "iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq",
+    "systemId": "iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq",
+    "displayTicker": "VRSCTEST",
+    "displayName": "Verus Testnet",
+    "proto": "vrsc",
+    "mappedTo": null,
+    "isTestnet": true,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/vrsctest_light.svg",
+      "dark": "/images/coin-logos/btc/vrsctest_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "VRSCTEST"
+    }
+  },
+  {
+    "id": "WBTC",
+    "currencyId": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+    "systemId": ".eth",
+    "displayTicker": "wBTC",
+    "displayName": "Wrapped BTC",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/wbtc_light.svg",
+      "dark": "/images/coin-logos/web3/wbtc_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "WBTC"
+    }
+  },
+  {
+    "id": "YFI",
+    "currencyId": "0x0bc529c00C6401aEF6D220BE8C6Ea1667F6Ad93e",
+    "systemId": ".eth",
+    "displayTicker": "YFI",
+    "displayName": "yearn.finance",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/yfi_light.svg",
+      "dark": "/images/coin-logos/web3/yfi_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "YFI"
+    }
+  },
+  {
+    "id": "ZAR",
+    "currencyId": "ZAR",
+    "systemId": ".fiat",
+    "displayTicker": "ZAR",
+    "displayName": "South African Rand",
+    "proto": "fiat",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "fiat-symbol",
+      "symbol": "R",
+      "logoMapped": true,
+      "family": "fiat",
+      "symbolKey": "ZAR"
+    }
+  },
+  {
+    "id": "ZEC",
+    "currencyId": "",
+    "systemId": ".zec",
+    "displayTicker": "ZEC",
+    "displayName": "Zcash",
+    "proto": "btc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/zec_light.svg",
+      "dark": "/images/coin-logos/btc/zec_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "ZEC"
+    }
+  },
+  {
+    "id": "ZILLA",
+    "currencyId": "zilla",
+    "systemId": ".kmd",
+    "displayTicker": "ZILLA",
+    "displayName": "ChainZilla",
+    "proto": "btc",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/btc/zilla_light.svg",
+      "dark": "/images/coin-logos/btc/zilla_dark.svg",
+      "logoMapped": true,
+      "family": "btc",
+      "symbolKey": "ZILLA"
+    }
+  },
+  {
+    "id": "ZRX",
+    "currencyId": "0xe41d2489571d322189246dafa5ebde1f4699f498",
+    "systemId": ".eth",
+    "displayTicker": "ZRX",
+    "displayName": "0x",
+    "proto": "erc20",
+    "mappedTo": null,
+    "isTestnet": false,
+    "icon": {
+      "kind": "asset",
+      "light": "/images/coin-logos/web3/zrx_light.svg",
+      "dark": "/images/coin-logos/web3/zrx_dark.svg",
+      "logoMapped": true,
+      "family": "web3",
+      "symbolKey": "ZRX"
+    }
+  }
+]

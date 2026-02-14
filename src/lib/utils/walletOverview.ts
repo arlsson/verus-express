@@ -1,5 +1,6 @@
 import type { WalletChannelsState } from '$lib/stores/walletChannels.js';
 import type { BalanceResult, CoinDefinition, WalletNetwork } from '$lib/types/wallet.js';
+import { resolveCoinPresentation } from '$lib/coins/presentation.js';
 
 export const OVERVIEW_UNAVAILABLE_DISPLAY = '—';
 export const OVERVIEW_FIAT_CODE = 'USD';
@@ -7,6 +8,7 @@ export const OVERVIEW_FIAT_CODE = 'USD';
 export interface WalletOverviewRowViewModel {
   key: string;
   coinId: string;
+  proto: CoinDefinition['proto'];
   ticker: string;
   name: string;
   hasBalance: boolean;
@@ -22,6 +24,8 @@ export interface WalletOverviewViewModel {
   heroFiatSymbolDisplay: string;
   heroFiatValueDisplay: string;
   heroPrimaryCryptoDisplay: string;
+  assetCount: number;
+  identityCount: number;
   rows: WalletOverviewRowViewModel[];
   hasUsableLiveData: boolean;
   primaryTicker: string;
@@ -160,14 +164,18 @@ export function buildWalletOverviewViewModel({
   network
 }: BuildWalletOverviewParams): WalletOverviewViewModel {
   const primaryCoin = resolvePrimaryCoin(coins, walletChannels, network);
+  const primaryPresentation = primaryCoin ? resolveCoinPresentation(primaryCoin) : null;
   const fallbackPrimaryTicker = network === 'testnet' ? 'VRSCTEST' : 'VRSC';
-  const primaryTicker = primaryCoin?.displayTicker ?? fallbackPrimaryTicker;
+  const primaryTicker = primaryPresentation?.displayTicker ?? fallbackPrimaryTicker;
   const primaryChannelId =
     (primaryCoin ? walletChannels.byCoinId[primaryCoin.id] : null) ?? walletChannels.primaryChannelId;
   const hasPrimarySnapshot = primaryChannelId ? hasOwn(balances, primaryChannelId) : false;
   const primaryTotal = hasPrimarySnapshot && primaryChannelId ? toFiniteNumber(balances[primaryChannelId]?.total) : null;
 
   const rows = coins.map<WalletOverviewRowViewModel>((coin) => {
+    const coinPresentation = resolveCoinPresentation(coin);
+    const displayTicker = coinPresentation.displayTicker;
+    const displayName = coinPresentation.displayName;
     const channelId = walletChannels.byCoinId[coin.id];
     const hasSnapshot = channelId ? hasOwn(balances, channelId) : false;
     const totalAmount = hasSnapshot && channelId ? toFiniteNumber(balances[channelId]?.total) : null;
@@ -180,13 +188,14 @@ export function buildWalletOverviewViewModel({
     return {
       key: coin.id,
       coinId: coin.id,
-      ticker: coin.displayTicker,
-      name: coin.displayName,
+      proto: coin.proto,
+      ticker: displayTicker,
+      name: displayName,
       hasBalance,
       hasSnapshot,
       cryptoAmountDisplay: hasSnapshot
-        ? formatCryptoAmount(amountValue, coin.displayTicker, intlLocale, rowFractionDigits, rowFractionDigits)
-        : `${OVERVIEW_UNAVAILABLE_DISPLAY} ${coin.displayTicker}`,
+        ? formatCryptoAmount(amountValue, displayTicker, intlLocale, rowFractionDigits, rowFractionDigits)
+        : `${OVERVIEW_UNAVAILABLE_DISPLAY} ${displayTicker}`,
       fiatValueDisplay:
         fiatValue === null ? OVERVIEW_UNAVAILABLE_DISPLAY : formatUsdAmount(fiatValue, intlLocale),
       unitRateDisplay: usdRate === null ? null : formatUsdAmount(usdRate, intlLocale),
@@ -220,6 +229,8 @@ export function buildWalletOverviewViewModel({
       primaryTotal === null
         ? `${OVERVIEW_UNAVAILABLE_DISPLAY} ${primaryTicker}`
         : formatCryptoAmount(primaryTotal, primaryTicker, intlLocale, 0, 4),
+    assetCount: rows.length,
+    identityCount: 0,
     rows,
     hasUsableLiveData: hasNonZeroRows || hasPrimarySnapshot,
     primaryTicker

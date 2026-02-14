@@ -17,6 +17,7 @@
   import { i18nStore } from '$lib/i18n';
   import { buildWalletOverviewViewModel } from '$lib/utils/walletOverview.js';
   import { getWalletOverviewDemoSnapshot } from '$lib/utils/walletOverviewDemo.js';
+  import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
 
   interface WalletData {
     name: string;
@@ -62,8 +63,8 @@
 </script>
 
 <div class="mx-auto w-full max-w-6xl px-6 pb-6 pt-0 sm:px-8">
-  <section class="border-border border-b pb-5 pt-0">
-    <div class="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+  <section class="border-border border-b pb-5 pt-4 sm:pt-5">
+    <div class="flex flex-col gap-5 md:flex-row md:items-start md:justify-between md:gap-24">
       <div class="min-w-0">
         <div class="flex items-start">
           {#if overview.heroFiatSymbolDisplay}
@@ -75,10 +76,27 @@
             {overview.heroFiatValueDisplay}
           </p>
         </div>
-        <p class="text-muted-foreground mt-2 text-base">{overview.heroPrimaryCryptoDisplay}</p>
       </div>
 
-      <div class="grid w-full grid-cols-3 gap-2 xl:w-[420px] xl:max-w-[420px]">
+      <div class="w-full max-w-[172px] text-xs md:self-start">
+        <div class="flex items-center justify-between py-1.5">
+          <span class="text-muted-foreground/90">{i18n.t('wallet.overview.identitiesLabel')}</span>
+          <span class="text-foreground min-w-4 text-right text-xs font-medium tabular-nums">
+            {overview.identityCount}
+          </span>
+        </div>
+        <div class="bg-border/20 h-px"></div>
+        <div class="flex items-center justify-between py-1.5">
+          <span class="text-muted-foreground/90">{i18n.t('wallet.overview.assetsLabel')}</span>
+          <span class="text-foreground min-w-4 text-right text-xs font-medium tabular-nums">
+            {overview.assetCount}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 w-full md:max-w-[620px]">
+      <div class="grid w-full grid-cols-3 gap-2">
         <Button variant="secondary" size="lg" class="h-10 w-full gap-1.5 rounded-md px-3" onclick={onNavigateToReceive}>
           <DownloadIcon class="h-4 w-4" />
           <span>{i18n.t('wallet.overview.receive')}</span>
@@ -102,9 +120,12 @@
       <ul class="divide-border divide-y">
         {#each overview.rows as row (row.key)}
           <li class="flex items-center justify-between gap-4 py-4 first:pt-3">
-            <div class="min-w-0">
-              <p class="text-foreground truncate text-[15px] leading-tight font-medium">{row.name}</p>
-              <p class="text-muted-foreground mt-1 text-xs">{row.ticker}</p>
+            <div class="min-w-0 flex items-center gap-3">
+              <CoinIcon coinId={row.coinId} coinName={row.name} proto={row.proto} size={30} showBadge decorative />
+              <div class="min-w-0">
+                <p class="text-foreground truncate text-[15px] leading-tight font-medium">{row.name}</p>
+                <p class="text-muted-foreground mt-1 text-xs">{row.ticker}</p>
+              </div>
             </div>
             <div class="shrink-0 text-right">
               <p class="text-foreground text-[15px] font-semibold">{row.fiatValueDisplay}</p>

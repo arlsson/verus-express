@@ -1,6 +1,6 @@
 <!-- 
   Component: WalletLayout
-  Purpose: Main layout component that assembles sidebar, topbar, and content sections
+  Purpose: Main layout component that assembles sidebar and content sections
   Last Updated: Initial creation
   Security: No sensitive operations - layout and navigation only
 -->
@@ -8,7 +8,6 @@
 <script lang="ts">
   import * as Sidebar from '$lib/components/ui/sidebar';
   import AppSidebar from './AppSidebar.svelte';
-  import TopBar from './TopBar.svelte';
   import Overview from './sections/Overview.svelte';
   import Send from './sections/Send.svelte';
   import Receive from './sections/Receive.svelte';
@@ -49,7 +48,6 @@
   <Sidebar.Provider>
     <AppSidebar bind:activeSection {walletData} />
     <Sidebar.Inset class="dark:bg-[#111111]">
-      <TopBar />
       {#if latestError}
         <div class="mx-6 mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <div class="flex items-start justify-between gap-3">

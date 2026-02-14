@@ -19,6 +19,8 @@
   import SendIcon from '@lucide/svelte/icons/send';
   import { i18nStore } from '$lib/i18n';
   import type { PreflightParams } from '$lib/types/wallet.js';
+  import { resolveCoinPresentation } from '$lib/coins/presentation.js';
+  import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
 
   const { snapshot: txSnapshot, send } = useMachine(txMachine);
   const coins = $derived($coinsStore);
@@ -26,6 +28,16 @@
 
   const sendableCoins = $derived(
     coins.filter((c) => c.compatibleChannels.includes('vrpc') || c.compatibleChannels.includes('btc'))
+  );
+  const sendableCoinOptions = $derived(
+    sendableCoins.map((coin) => {
+      const presentation = resolveCoinPresentation(coin);
+      return {
+        coin,
+        displayTicker: presentation.displayTicker,
+        displayName: presentation.displayName,
+      };
+    })
   );
 
   let selectedCoinId = $state('VRSC');
@@ -41,6 +53,9 @@
   });
 
   const selectedCoin = $derived(sendableCoins.find((c) => c.id === selectedCoinId) ?? sendableCoins[0]);
+  const selectedCoinPresentation = $derived(
+    selectedCoin ? resolveCoinPresentation(selectedCoin) : null
+  );
   const walletChannels = $derived($walletChannelsStore);
   const channelId = $derived(
     selectedCoin
@@ -99,14 +114,29 @@
       <Card.Content class="space-y-4">
         <div>
           <label for="send-coin" class="text-sm font-medium mb-2 block">{i18n.t('wallet.send.coinLabel')}</label>
+          {#if selectedCoin && selectedCoinPresentation}
+            <div class="mb-2 flex items-center gap-2 rounded-md border border-border/70 bg-muted/20 px-2 py-1.5">
+              <CoinIcon
+                coinId={selectedCoin.id}
+                coinName={selectedCoinPresentation.displayName}
+                proto={selectedCoin.proto}
+                size={24}
+                showBadge
+                decorative
+              />
+              <p class="text-xs font-medium text-foreground">
+                {selectedCoinPresentation.displayTicker} - {selectedCoinPresentation.displayName}
+              </p>
+            </div>
+          {/if}
           <select
             id="send-coin"
             class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             bind:value={selectedCoinId}
             disabled={value === 'preflighting'}
           >
-            {#each sendableCoins as coin}
-              <option value={coin.id}>{coin.displayTicker} - {coin.displayName}</option>
+            {#each sendableCoinOptions as option}
+              <option value={option.coin.id}>{option.displayTicker} - {option.displayName}</option>
             {/each}
           </select>
         </div>

@@ -18,6 +18,7 @@
   import * as walletService from '$lib/services/walletService.js';
   import { i18nStore } from '$lib/i18n';
   import type { WalletNetwork } from '$lib/types/wallet.js';
+  import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
 
   let addresses = $state<{ vrsc_address: string; eth_address: string; btc_address: string } | null>(null);
   let network = $state<WalletNetwork>('mainnet');
@@ -35,6 +36,8 @@
       ? i18n.t('wallet.receive.btcAddressTestnet')
       : i18n.t('wallet.receive.btcAddress')
   );
+  const vrscCoinId = $derived(network === 'testnet' ? 'VRSCTEST' : 'VRSC');
+  const btcCoinId = $derived(network === 'testnet' ? 'BTCTEST' : 'BTC');
 
   onMount(async () => {
     try {
@@ -83,7 +86,12 @@
         <p class="text-destructive text-sm">{error}</p>
       {:else if addresses}
         <div>
-          <Label.Root for="receive-vrsc" class="mb-2 block">{vrscLabel}</Label.Root>
+          <Label.Root for="receive-vrsc" class="mb-2 block">
+            <span class="inline-flex items-center gap-2">
+              <CoinIcon coinId={vrscCoinId} proto="vrsc" size={18} decorative />
+              <span>{vrscLabel}</span>
+            </span>
+          </Label.Root>
           <div class="flex gap-2 items-center">
             <Input
               id="receive-vrsc"
@@ -107,7 +115,12 @@
           </div>
         </div>
         <div>
-          <Label.Root for="receive-btc" class="mb-2 block">{btcLabel}</Label.Root>
+          <Label.Root for="receive-btc" class="mb-2 block">
+            <span class="inline-flex items-center gap-2">
+              <CoinIcon coinId={btcCoinId} proto="btc" size={18} decorative />
+              <span>{btcLabel}</span>
+            </span>
+          </Label.Root>
           <div class="flex gap-2 items-center">
             <Input
               id="receive-btc"

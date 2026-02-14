@@ -1,0 +1,20 @@
+{
+  "generatedAt": "2026-02-09T19:45:37+01:00",
+  "source": {
+    "repoPath": "/Users/maxtheyse/dev/valu-mobile",
+    "branch": "newsend2",
+    "commit": "bf775254f82b055e1cf08ea069a20b6e45a9a362",
+    "commitDate": "2026-02-09T19:45:37+01:00"
+  },
+  "counts": {
+    "totalCoins": 87,
+    "directLogoHits": 85,
+    "generatedIcons": 2,
+    "assetIcons": 56,
+    "fiatSymbolIcons": 29
+  },
+  "output": {
+    "catalogPath": "src/lib/coins/valuCoinCatalog.generated.json",
+    "iconRoot": "static/images/coin-logos"
+  }
+}

@@ -13,6 +13,8 @@
     "tauri": "tauri",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "sync:valu-coins": "node ./scripts/sync-valu-coin-catalog.mjs",
+    "check:valu-coins": "node ./scripts/check-valu-coin-catalog.mjs",
     "docs:check": "node ./scripts/docs-check.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
