@@ -41,14 +41,21 @@
   const walletErrors = $derived($walletErrorsStore);
   const latestError = $derived(walletErrors.latest);
   const i18n = $derived($i18nStore);
+  const isTransferFocusMode = $derived(activeSection === 'send' || activeSection === 'conversions');
 </script>
 
 <div class="relative h-screen overflow-hidden">
-  <div class="absolute top-0 left-0 z-40 h-11 w-[15.25rem]" data-tauri-drag-region aria-hidden="true"></div>
+  {#if !isTransferFocusMode}
+    <div class="absolute top-0 left-0 z-40 h-11 w-[15.25rem]" data-tauri-drag-region aria-hidden="true"></div>
+  {/if}
   <Sidebar.Provider class="h-full overflow-hidden">
-    <AppSidebar bind:activeSection {walletData} />
+    {#if !isTransferFocusMode}
+      <AppSidebar bind:activeSection {walletData} />
+    {/if}
     <Sidebar.Inset class="h-full min-h-0 dark:bg-[#111111]">
-      <div class="h-6 shrink-0" data-tauri-drag-region aria-hidden="true"></div>
+      {#if !isTransferFocusMode}
+        <div class="h-6 shrink-0" data-tauri-drag-region aria-hidden="true"></div>
+      {/if}
       {#if latestError}
         <div class="mx-6 mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <div class="flex items-start justify-between gap-3">
@@ -59,7 +66,11 @@
           </div>
         </div>
       {/if}
-      <main class={activeSection === 'overview' ? 'flex flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-auto'}>
+      <main
+        class={isTransferFocusMode || activeSection === 'overview'
+          ? 'flex flex-1 min-h-0 overflow-hidden'
+          : 'flex-1 min-h-0 overflow-auto'}
+      >
         {#if activeSection === 'overview'}
           <Overview
             {walletData}

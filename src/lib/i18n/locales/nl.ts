@@ -22,8 +22,10 @@ export const nl: Record<string, string> = {
   'unlock.button.unlock': 'Ontgrendel',
   'unlock.button.createWallet': 'Nieuwe wallet maken',
   'unlock.error.invalidPassword': 'Verkeerd wachtwoord. Probeer opnieuw.',
-  'unlock.error.operationFailed': 'Wallet kon niet op dit apparaat worden ontgrendeld. Probeer opnieuw of maak hem opnieuw aan.',
-  'unlock.error.invalidArgs': 'Ontgrendelverzoek was ongeldig. Start de app opnieuw en probeer het nogmaals.',
+  'unlock.error.operationFailed':
+    'Wallet kon niet op dit apparaat worden ontgrendeld. Probeer opnieuw of maak hem opnieuw aan.',
+  'unlock.error.invalidArgs':
+    'Ontgrendelverzoek was ongeldig. Start de app opnieuw en probeer het nogmaals.',
   'unlock.error.generic': 'Kan wallet nu niet ontgrendelen. Probeer opnieuw.',
   'unlock.switcher.title': 'Kies wallet',
   'unlock.switcher.description': 'Selecteer de wallet die je wilt ontgrendelen.',
@@ -32,11 +34,13 @@ export const nl: Record<string, string> = {
   'unlock.create.newTitle': 'Maak een nieuwe wallet',
   'unlock.create.newDescription': 'Genereer een nieuwe herstelzin en stel een frisse wallet in.',
   'unlock.create.importTitle': 'Importeer een bestaande wallet',
-  'unlock.create.importDescription': 'Gebruik je bestaande herstelzin om een wallet op dit apparaat te herstellen.',
+  'unlock.create.importDescription':
+    'Gebruik je bestaande herstelzin om een wallet op dit apparaat te herstellen.',
   'unlock.importMethods.title': 'Wallet importeren',
   'unlock.importMethods.back': 'Terug',
   'unlock.importMethods.seed24Title': 'Importeer 24-woorden-herstelzin',
-  'unlock.importMethods.seed24Description': 'Voer je 24 herstelwoorden in om deze wallet te herstellen.',
+  'unlock.importMethods.seed24Description':
+    'Voer je 24 herstelwoorden in om deze wallet te herstellen.',
   'unlock.importMethods.textTitle': 'Plak private key of seedtekst',
   'unlock.importMethods.textDescription':
     'Plak handmatig een private key, herstelzin of seedtekst.',
@@ -50,11 +54,14 @@ export const nl: Record<string, string> = {
   'guard.dock.ariaUnlock': 'Open VerusID Guard vanuit het ontgrendelscherm',
   'guard.sheet.title': 'VerusID Guard',
   'guard.sheet.revokeTitle': 'VerusID intrekken',
-  'guard.sheet.revokeDescription': 'Maak je VerusID meteen onbeschikbaar. Hiermee stopt al het uitgeven tot je hem herstelt.',
+  'guard.sheet.revokeDescription':
+    'Maak je VerusID meteen onbeschikbaar. Hiermee stopt al het uitgeven tot je hem herstelt.',
   'guard.sheet.recoverTitle': 'VerusID herstellen',
-  'guard.sheet.recoverDescription': 'Herstel toegang tot een ingetrokken VerusID en beveilig deze met nieuwe sleutels.',
+  'guard.sheet.recoverDescription':
+    'Herstel toegang tot een ingetrokken VerusID en beveilig deze met nieuwe sleutels.',
   'guard.flow.secret.title': 'Importeer {action}-autoriteitssleutel',
-  'guard.flow.secret.description': 'Importeer het geheim dat bevoegd is om deze identiteit te {action}.',
+  'guard.flow.secret.description':
+    'Importeer het geheim dat bevoegd is om deze identiteit te {action}.',
   'guard.flow.secret.modePastePhrase': 'Plak herstelzin',
   'guard.flow.secret.modeTypeOneByOne': 'Typ woord voor woord',
   'guard.flow.secret.modeWifPrivateSeed': 'WIF, private key of seedtekst',
@@ -72,7 +79,8 @@ export const nl: Record<string, string> = {
   'guard.flow.target.preflightRecover': 'Doorgaan',
   'guard.flow.target.preflightRevoke': 'Intrekking reviewen',
   'guard.flow.patch.title': 'Herstelgegevens',
-  'guard.flow.patch.description': 'Stel een nieuw primair adres en optionele velden in en review daarna het herstel.',
+  'guard.flow.patch.description':
+    'Stel een nieuw primair adres en optionele velden in en review daarna het herstel.',
   'guard.flow.patch.advancedTitle': 'Geavanceerde velden',
   'guard.flow.patch.primaryAddressLabel': 'Primair adres',
   'guard.flow.patch.recoveryAuthorityLabel': 'Nieuwe herstelautoriteit',
@@ -114,14 +122,16 @@ export const nl: Record<string, string> = {
   'guard.error.identityInvalidState': 'De status van deze VerusID staat deze actie niet toe.',
   'guard.error.identityUnsupportedAuthority': 'Autoriteit wordt niet ondersteund voor deze actie.',
   'guard.error.invalidPreflight': 'Preflight verlopen. Voer preflight opnieuw uit.',
-  'guard.error.insufficientFunds': 'Onvoldoende VRSC op dit autoriteitsadres om de netwerkkosten te betalen.',
+  'guard.error.insufficientFunds':
+    'Onvoldoende VRSC op dit autoriteitsadres om de netwerkkosten te betalen.',
   'guard.error.network': 'Netwerkfout. Probeer opnieuw.',
   'guard.error.operationFailed': 'Actie mislukt. Probeer opnieuw.',
   'guard.error.identityBuildFailed': 'Kon de identiteitstransactie niet opbouwen.',
   'guard.error.identitySignFailed': 'Kon de identiteitstransactie niet ondertekenen.',
   'guard.error.targetRequired': 'Voer een doel-VerusID in.',
   'guard.error.primaryRequired': 'Voer een nieuw primair adres in voor herstellen.',
-  'guard.error.patchFieldInvalid': 'Vul geavanceerde velden volledig in of maak ze leeg voordat je doorgaat.',
+  'guard.error.patchFieldInvalid':
+    'Vul geavanceerde velden volledig in of maak ze leeg voordat je doorgaat.',
   'guard.error.generic': 'Er ging iets mis. Probeer opnieuw.',
 
   'languageGate.title': 'Kies je taal',
@@ -160,7 +170,8 @@ export const nl: Record<string, string> = {
   'wallet.overview.mainWallet': 'Hoofdwallet',
   'wallet.overview.available': 'Beschikbaar:',
   'wallet.overview.pending': 'In behandeling:',
-  'wallet.overview.noChannelRefresh': 'Nog geen actief kanaal gevonden. Open de wallet opnieuw om kanalen te verversen.',
+  'wallet.overview.noChannelRefresh':
+    'Nog geen actief kanaal gevonden. Open de wallet opnieuw om kanalen te verversen.',
   'wallet.overview.send': 'Versturen',
   'wallet.overview.receive': 'Ontvangen',
   'wallet.overview.convert': 'Omwisselen',
@@ -248,35 +259,73 @@ export const nl: Record<string, string> = {
   'wallet.transfer.closeDiscardTitle': 'Transfer verwerpen?',
   'wallet.transfer.closeDiscardDescription': 'Je voortgang in deze transfer gaat verloren.',
   'wallet.transfer.closeDiscardConfirm': 'Transfer verwerpen',
+  'wallet.transfer.step.details.title': 'Transferdetails',
+  'wallet.transfer.step.details.description':
+    'Stel in wat je verzendt en wat je ontvangt bij omwisselen.',
+  'wallet.transfer.step.route.title': 'Route kiezen',
+  'wallet.transfer.step.route.description': 'Kies de bron en bestemmingsroute voor deze transfer.',
   'wallet.transfer.step.source.title': 'Bron kiezen',
   'wallet.transfer.step.source.description': 'Kies de asset die je wilt versturen.',
   'wallet.transfer.step.target.title': 'Bestemming kiezen',
   'wallet.transfer.step.target.description': 'Kies wat de ontvanger moet ontvangen.',
+  'wallet.transfer.stepLabel.details': 'Details',
+  'wallet.transfer.stepLabel.route': 'Route',
+  'wallet.transfer.stepLabel.amount': 'Bedrag',
+  'wallet.transfer.stepLabel.recipient': 'Ontvanger',
+  'wallet.transfer.stepLabel.review': 'Controle',
   'wallet.transfer.step.amount.title': 'Bedrag invoeren',
   'wallet.transfer.step.amount.description': 'Stel bedrag en optionele memo in.',
   'wallet.transfer.step.recipient.title': 'Ontvanger invoeren',
   'wallet.transfer.step.recipient.description': 'Voer een bestemmingsadres in voor deze route.',
   'wallet.transfer.step.review.title': 'Transfer controleren',
-  'wallet.transfer.step.review.description': 'Controleer kosten, route en waarschuwingen voor verzending.',
+  'wallet.transfer.step.review.description':
+    'Controleer kosten, route en waarschuwingen voor verzending.',
   'wallet.transfer.step.success.title': 'Transfer verzonden',
   'wallet.transfer.step.success.description': 'Je transactie is succesvol uitgezonden.',
+  'wallet.transfer.youSend': 'Je verzendt',
+  'wallet.transfer.youReceive': 'Je ontvangt',
+  'wallet.transfer.doConversion': 'Omwisselen',
+  'wallet.transfer.receiveAsset': 'Ontvangst-asset',
+  'wallet.transfer.receiveSheetTitle': 'Ontvangst-asset kiezen',
+  'wallet.transfer.via': 'Via',
+  'wallet.transfer.viaSheetTitle': 'Route via kiezen',
+  'wallet.transfer.viaBest': 'Beste',
+  'wallet.transfer.viaResetBest': 'Reset naar beste',
+  'wallet.transfer.viaNoOptions': 'Geen omwisselopties beschikbaar voor deze selectie.',
+  'wallet.transfer.rate': 'Koers: {value}',
+  'wallet.transfer.estimatedForAmount': 'Geschat: {value}',
   'wallet.transfer.sourceAsset': 'Bron-asset',
   'wallet.transfer.sourceBalance': 'Beschikbaar saldo: {value}',
   'wallet.transfer.sourceChannel': 'Kanaal: {value}',
   'wallet.transfer.sourceSheetOpen': 'Brondetails',
-  'wallet.transfer.sourceSheetTitle': 'Brondetails',
+  'wallet.transfer.sourceSheetTitle': 'Bron-asset',
   'wallet.transfer.sourceSummaryTitle': 'Huidige bron',
   'wallet.transfer.sourceChannelLabel': 'Kanaal',
   'wallet.transfer.sourceAddressLabel': 'Adres',
   'wallet.transfer.noAssets': 'Er zijn nog geen assets beschikbaar om te versturen.',
   'wallet.transfer.sameAssetOption': '{ticker} versturen',
+  'wallet.transfer.routeGroupSend': 'Dezelfde asset versturen',
+  'wallet.transfer.routeGroupConvert': 'Omwisselroutes',
+  'wallet.transfer.routeSearchPlaceholder': 'Routes zoeken',
+  'wallet.transfer.routeNoMatches': 'Geen routes gevonden voor je zoekopdracht.',
   'wallet.transfer.loadingTargets': 'Bestemmingsopties laden…',
-  'wallet.transfer.noRoutes': 'Geen omwisselroutes beschikbaar. Je kunt wel dezelfde asset versturen.',
+  'wallet.transfer.noRoutes':
+    'Geen omwisselroutes beschikbaar. Je kunt wel dezelfde asset versturen.',
   'wallet.transfer.convertUnavailableEvm':
     'Omwisselen is nog niet beschikbaar voor deze bron. Je kunt doorgaan met versturen.',
   'wallet.transfer.routeDetails': 'Routedetails',
   'wallet.transfer.routeDetailsTitle': 'Geselecteerde route',
   'wallet.transfer.noRouteDetails': 'Geen routedetails beschikbaar.',
+  'wallet.transfer.summary.title': 'Transferoverzicht',
+  'wallet.transfer.summary.from': 'Van',
+  'wallet.transfer.summary.to': 'Naar',
+  'wallet.transfer.summary.amount': 'Bedrag',
+  'wallet.transfer.summary.recipient': 'Ontvanger',
+  'wallet.transfer.summary.estimatedReceive': 'Geschatte ontvangst',
+  'wallet.transfer.summary.networkFee': 'Netwerkkosten',
+  'wallet.transfer.summary.route': 'Route',
+  'wallet.transfer.summary.notSet': 'Niet ingesteld',
+  'wallet.transfer.viewSummary': 'Overzicht bekijken',
   'wallet.transfer.amountLabel': 'Bedrag',
   'wallet.transfer.amountPlaceholder': '0.00',
   'wallet.transfer.amountInvalid': 'Voer een geldig bedrag groter dan nul in.',
@@ -286,7 +335,8 @@ export const nl: Record<string, string> = {
   'wallet.transfer.recipientPlaceholderVrpc': 'R-adres, i-adres of handle@',
   'wallet.transfer.recipientPlaceholderEth': '0x…',
   'wallet.transfer.recipientPlaceholderBtc': 'bc1…',
-  'wallet.transfer.recipientHintVrpc': 'Gebruik een geldig Verus-bestemmingsadres voor deze transfer.',
+  'wallet.transfer.recipientHintVrpc':
+    'Gebruik een geldig Verus-bestemmingsadres voor deze transfer.',
   'wallet.transfer.recipientHintEth': 'Gebruik een geldig Ethereum-adres voor deze transfer.',
   'wallet.transfer.recipientHintBtc': 'Gebruik een geldig Bitcoin-adres voor deze transfer.',
   'wallet.transfer.recipientInvalid': 'Het bestemmingsadres is ongeldig voor deze route.',
@@ -297,13 +347,20 @@ export const nl: Record<string, string> = {
   'wallet.transfer.routeSectionTitle': 'Route',
   'wallet.transfer.warningsTitle': 'Waarschuwingen',
   'wallet.transfer.noWarnings': 'Geen waarschuwingen.',
-  'wallet.transfer.reviewUnavailable': 'Reviewgegevens zijn niet beschikbaar. Voer preflight opnieuw uit.',
+  'wallet.transfer.review.changeRoute': 'Route wijzigen',
+  'wallet.transfer.review.changeAmount': 'Bedrag wijzigen',
+  'wallet.transfer.review.changeDetails': 'Details wijzigen',
+  'wallet.transfer.review.changeRecipient': 'Ontvanger wijzigen',
+  'wallet.transfer.review.refresh': 'Controle vernieuwen',
+  'wallet.transfer.reviewUnavailable':
+    'Reviewgegevens zijn niet beschikbaar. Voer preflight opnieuw uit.',
   'wallet.transfer.pathConvertTo': 'Omzetten naar: {value}',
   'wallet.transfer.pathExportTo': 'Exporteren naar: {value}',
   'wallet.transfer.pathVia': 'Via: {value}',
   'wallet.transfer.pathMapTo': 'Mappen naar: {value}',
   'wallet.transfer.pathPrice': 'Prijs: {value}',
-  'wallet.transfer.error.bridgeNotImplemented': 'Deze omwisselroute is nog niet beschikbaar op desktop.',
+  'wallet.transfer.error.bridgeNotImplemented':
+    'Deze omwisselroute is nog niet beschikbaar op desktop.',
   'wallet.transfer.error.unsupportedChannel': 'Dit kanaal wordt niet ondersteund voor transfers.',
   'wallet.transfer.error.invalidAddress': 'Het bestemmingsadres is ongeldig.',
   'wallet.transfer.error.insufficientFunds': 'Onvoldoende saldo voor deze transfer.',
@@ -360,8 +417,7 @@ export const nl: Record<string, string> = {
   'walletImport.seed.error.empty': 'Voer je herstelzin van 24 woorden in om door te gaan.',
   'walletImport.seed.error.wordCount':
     'Herstelzin moet precies {required} woorden bevatten. Huidig: {current}.',
-  'walletImport.seed.error.invalid':
-    'Herstelzin is ongeldig. Controleer spelling en volgorde.',
+  'walletImport.seed.error.invalid': 'Herstelzin is ongeldig. Controleer spelling en volgorde.',
   'walletImport.seed.error.invalidWord': '"{word}" is geen geldig herstelwoord.',
   'walletImport.seed.error.wordlist':
     'Woordsuggesties zijn nu niet beschikbaar. Je kunt je volledige herstelzin nog steeds plakken.',
@@ -394,9 +450,12 @@ export const nl: Record<string, string> = {
 
   'walletCreation.error.walletExists': 'Er bestaat al een wallet met deze naam.',
   'walletCreation.error.createFailed': 'Wallet maken is mislukt. Probeer opnieuw.',
-  'walletCreation.error.openMissingData': 'Wallet kon niet worden geopend. Ga terug naar ontgrendelen en probeer het opnieuw.',
-  'walletCreation.error.openFailed': 'Wallet kon niet op dit apparaat worden ontgrendeld. Probeer opnieuw of maak hem opnieuw aan.',
-  'walletCreation.error.openInvalidArgs': 'Wallet-openverzoek was ongeldig. Start de app opnieuw en probeer het nogmaals.',
+  'walletCreation.error.openMissingData':
+    'Wallet kon niet worden geopend. Ga terug naar ontgrendelen en probeer het opnieuw.',
+  'walletCreation.error.openFailed':
+    'Wallet kon niet op dit apparaat worden ontgrendeld. Probeer opnieuw of maak hem opnieuw aan.',
+  'walletCreation.error.openInvalidArgs':
+    'Wallet-openverzoek was ongeldig. Start de app opnieuw en probeer het nogmaals.',
   'walletCreation.error.openGeneric': 'Kan wallet nu niet openen. Probeer opnieuw.',
 
   'walletCreation.step2.title': 'Personaliseer je wallet',
@@ -507,7 +566,8 @@ export const nl: Record<string, string> = {
   'help.keepSafe.itemsQuestion': 'Wat moet ik precies veilig bewaren?',
   'help.keepSafe.itemsAnswer':
     'Bewaar je herstelzin en private keys veilig en privé. Iedereen die ze heeft, kan je wallet beheren.',
-  'help.keepSafe.phoneQuestion': 'Wat gebeurt er als ik van apparaat wissel of mijn apparaat verlies?',
+  'help.keepSafe.phoneQuestion':
+    'Wat gebeurt er als ik van apparaat wissel of mijn apparaat verlies?',
   'help.keepSafe.phoneAnswer':
     'Herstel je wallet met dezelfde herstelzin en je data komt terug. Je hebt geen herstelmail of back-upcode nodig.',
   'help.keepSafe.compromisedQuestion': 'Wat als mijn sleutels gecompromitteerd zijn?',
@@ -537,5 +597,5 @@ export const nl: Record<string, string> = {
   'help.lostAccess.needQuestion': 'Wat heb ik nodig?',
   'help.lostAccess.needAnswer':
     'Gebruik exact dezelfde 24 woorden in dezelfde volgorde. Zonder herstelzin is herstel niet mogelijk.',
-  'help.communityHangout': 'Communitykanaal'
+  'help.communityHangout': 'Communitykanaal',
 };
