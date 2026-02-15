@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
   import SearchIcon from '@lucide/svelte/icons/search';
   import AlertCircleIcon from '@lucide/svelte/icons/alert-circle';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
@@ -19,8 +20,8 @@
   import { buildWalletChannels, walletChannelsStore } from '$lib/stores/walletChannels.js';
   import * as coinsService from '$lib/services/coinsService.js';
   import {
-    applyCatalogMetadataToCoinDefinition,
     type AddAssetEntry,
+    applyCatalogMetadataToCoinDefinition,
     buildAddAssetCatalogView,
     catalogEntryToCoinDefinition,
     erc20ContractValue,
@@ -38,23 +39,18 @@
 
   let searchInput = $state('');
   let debouncedSearch = $state('');
+  let view = $state<'catalog' | 'manual'>('catalog');
 
   let actionError = $state('');
   let actionSuccess = $state('');
   let activeRowKey = $state<string | null>(null);
 
-  let pbaasQuery = $state('');
-  let pbaasResolving = $state(false);
-  let pbaasAdding = $state(false);
-  let pbaasError = $state('');
-  let pbaasResolvedCoin = $state<CoinDefinition | null>(null);
-  let pbaasCandidates = $state<PbaasCandidate[]>([]);
-
-  let erc20Contract = $state('');
-  let erc20Resolving = $state(false);
-  let erc20Adding = $state(false);
-  let erc20Error = $state('');
-  let erc20ResolvedCoin = $state<CoinDefinition | null>(null);
+  let manualInput = $state('');
+  let manualResolving = $state(false);
+  let manualAdding = $state(false);
+  let manualError = $state('');
+  let manualResolvedCoin = $state<CoinDefinition | null>(null);
+  let manualCandidates = $state<PbaasCandidate[]>([]);
 
   const catalogView = $derived(
     buildAddAssetCatalogView({
@@ -82,24 +78,19 @@
   }
 
   function resetSheetState() {
+    view = 'catalog';
     searchInput = '';
     debouncedSearch = '';
     actionError = '';
     actionSuccess = '';
     activeRowKey = null;
 
-    pbaasQuery = '';
-    pbaasResolving = false;
-    pbaasAdding = false;
-    pbaasError = '';
-    pbaasResolvedCoin = null;
-    pbaasCandidates = [];
-
-    erc20Contract = '';
-    erc20Resolving = false;
-    erc20Adding = false;
-    erc20Error = '';
-    erc20ResolvedCoin = null;
+    manualInput = '';
+    manualResolving = false;
+    manualAdding = false;
+    manualError = '';
+    manualResolvedCoin = null;
+    manualCandidates = [];
   }
 
   function extractWalletErrorType(error: unknown): string | null {
@@ -243,88 +234,67 @@
     }
   }
 
-  async function resolvePbaas() {
-    pbaasError = '';
-    pbaasCandidates = [];
-    pbaasResolvedCoin = null;
+  function normalizedErc20ContractCandidate(value: string): string | null {
+    const trimmed = value.trim();
+    if (/^0x[a-fA-F0-9]{40}$/.test(trimmed)) return trimmed;
+    if (/^[a-fA-F0-9]{40}$/.test(trimmed)) return `0x${trimmed}`;
+    return null;
+  }
+
+  async function resolveManualAsset() {
+    manualError = '';
+    manualCandidates = [];
+    manualResolvedCoin = null;
     actionSuccess = '';
 
-    if (!pbaasQuery.trim()) {
-      pbaasError = i18n.t('wallet.addAsset.error.pbaasInputRequired');
+    const input = manualInput.trim();
+    if (!input) {
+      manualError = i18n.t('wallet.addAsset.error.manualInputRequired');
       return;
     }
 
-    pbaasResolving = true;
+    const contractCandidate = normalizedErc20ContractCandidate(input);
+    manualResolving = true;
     try {
-      const result = await coinsService.resolvePbaasCurrency(pbaasQuery.trim());
-      if (result.status === 'ambiguous') {
-        pbaasCandidates = result.candidates;
-        pbaasError = i18n.t('wallet.addAsset.error.pbaasAmbiguous');
+      if (contractCandidate) {
+        const result = await coinsService.resolveErc20Contract(contractCandidate);
+        manualResolvedCoin = result.coin;
         return;
       }
 
-      pbaasResolvedCoin = result.coin;
+      const result = await coinsService.resolvePbaasCurrency(input);
+      if (result.status === 'ambiguous') {
+        manualCandidates = result.candidates;
+        manualError = i18n.t('wallet.addAsset.error.pbaasAmbiguous');
+        return;
+      }
+
+      manualResolvedCoin = result.coin;
     } catch (error) {
-      pbaasError = translateAssetError(error, 'wallet.addAsset.error.pbaasResolveFailed');
+      manualError = translateAssetError(
+        error,
+        contractCandidate ? 'wallet.addAsset.error.erc20ResolveFailed' : 'wallet.addAsset.error.pbaasResolveFailed'
+      );
     } finally {
-      pbaasResolving = false;
+      manualResolving = false;
     }
   }
 
-  async function addResolvedPbaas() {
-    if (!pbaasResolvedCoin) return;
-    pbaasAdding = true;
-    pbaasError = '';
+  async function addResolvedManualAsset() {
+    if (!manualResolvedCoin) return;
+    manualAdding = true;
+    manualError = '';
 
     try {
-      const hydratedCoin = applyCatalogMetadataToCoinDefinition(pbaasResolvedCoin);
+      const hydratedCoin = applyCatalogMetadataToCoinDefinition(manualResolvedCoin);
       await addCoinToRegistry(hydratedCoin, 'wallet.addAsset.toast.added');
-      pbaasQuery = '';
-      pbaasResolvedCoin = null;
-      pbaasCandidates = [];
+      manualInput = '';
+      manualResolvedCoin = null;
+      manualCandidates = [];
     } catch (error) {
-      pbaasError = translateAssetError(error, 'wallet.addAsset.error.addFailed');
+      manualError = translateAssetError(error, 'wallet.addAsset.error.addFailed');
     } finally {
-      pbaasAdding = false;
-    }
-  }
-
-  async function resolveErc20() {
-    erc20Error = '';
-    erc20ResolvedCoin = null;
-    actionSuccess = '';
-
-    if (!erc20Contract.trim()) {
-      erc20Error = i18n.t('wallet.addAsset.error.contractRequired');
-      return;
-    }
-
-    erc20Resolving = true;
-    try {
-      const result = await coinsService.resolveErc20Contract(erc20Contract.trim());
-      erc20ResolvedCoin = result.coin;
-    } catch (error) {
-      erc20Error = translateAssetError(error, 'wallet.addAsset.error.erc20ResolveFailed');
-    } finally {
-      erc20Resolving = false;
-    }
-  }
-
-  async function addResolvedErc20() {
-    if (!erc20ResolvedCoin) return;
-
-    erc20Adding = true;
-    erc20Error = '';
-
-    try {
-      const hydratedCoin = applyCatalogMetadataToCoinDefinition(erc20ResolvedCoin);
-      await addCoinToRegistry(hydratedCoin, 'wallet.addAsset.toast.added');
-      erc20Contract = '';
-      erc20ResolvedCoin = null;
-    } catch (error) {
-      erc20Error = translateAssetError(error, 'wallet.addAsset.error.addFailed');
-    } finally {
-      erc20Adding = false;
+      manualAdding = false;
     }
   }
 </script>
@@ -332,179 +302,178 @@
 <StandardRightSheet
   bind:isOpen
   title={i18n.t('wallet.addAsset.title')}
+  hideTitle
+  bodyClass="mt-0"
   onOpenAutoFocus={handleOpenAutoFocus}
 >
   <div class="flex h-full min-h-0 flex-col">
-    <div class="min-h-0 flex-1 overflow-y-auto pr-1">
-      <div class="sticky top-0 z-10 bg-background pb-3">
-        <div class="relative">
-          <SearchIcon class="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-          <Input
-            type="text"
-            bind:value={searchInput}
-            placeholder={i18n.t('wallet.addAsset.searchPlaceholder')}
-            class="h-10 pl-9 focus-visible:ring-[2px] focus-visible:ring-ring/40"
-          />
+    {#if view === 'catalog'}
+      <div class="pr-8 pt-4">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-base font-semibold text-foreground">{i18n.t('wallet.addAsset.title')}</h2>
+          <button
+            type="button"
+            class="text-muted-foreground text-xs underline-offset-4 hover:text-foreground hover:underline"
+            onclick={() => {
+              view = 'manual';
+            }}
+          >
+            {i18n.t('wallet.addAsset.cantFindTitle')}
+          </button>
         </div>
-
-        {#if actionError}
-          <div class="mt-2 flex items-start gap-2 rounded-md border border-destructive/35 bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
-            <AlertCircleIcon class="mt-0.5 h-4 w-4 shrink-0" />
-            <p>{actionError}</p>
-          </div>
-        {/if}
-
-        {#if actionSuccess}
-          <div class="mt-2 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-2 text-xs text-emerald-700 dark:text-emerald-300">
-            {actionSuccess}
-          </div>
-        {/if}
       </div>
+    {/if}
 
-      <section class="mt-1 space-y-2">
-        <h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          {i18n.t('wallet.addAsset.sectionAdded')}
-        </h3>
-        {#if catalogView.addedEntries.length === 0}
-          <p class="rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
-            {i18n.t('wallet.addAsset.emptySearch')}
-          </p>
-        {:else}
-          <ul class="space-y-1.5">
-            {#each catalogView.addedEntries as entry (entry.key)}
-              <AddAssetRow
-                {entry}
-                busy={activeRowKey === entry.key}
-                onAction={handleCatalogAction}
-              />
-            {/each}
-          </ul>
-        {/if}
-      </section>
-
-      <section class="mt-4 space-y-2">
-        <h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          {i18n.t('wallet.addAsset.sectionAvailable')}
-        </h3>
-        {#if catalogView.availableEntries.length === 0}
-          <p class="rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
-            {i18n.t('wallet.addAsset.emptySearch')}
-          </p>
-        {:else}
-          <ul class="space-y-1.5">
-            {#each catalogView.availableEntries as entry (entry.key)}
-              <AddAssetRow
-                {entry}
-                busy={activeRowKey === entry.key}
-                onAction={handleCatalogAction}
-              />
-            {/each}
-          </ul>
-        {/if}
-      </section>
-
-      <section class="mt-5 space-y-4 border-t border-border/70 pt-4">
-        <div>
-          <h3 class="text-sm font-semibold text-foreground">{i18n.t('wallet.addAsset.cantFindTitle')}</h3>
-          <p class="mt-1 text-xs text-muted-foreground">{i18n.t('wallet.addAsset.cantFindDescription')}</p>
-        </div>
-
-        <div class="space-y-2 rounded-md border border-border/70 p-3">
-          <p class="text-xs font-semibold text-foreground">{i18n.t('wallet.addAsset.pbaasTitle')}</p>
-          <Input
-            type="text"
-            bind:value={pbaasQuery}
-            placeholder={i18n.t('wallet.addAsset.pbaasPlaceholder')}
-            class="h-10"
-          />
-          <div class="flex gap-2">
-            <Button
-              variant="secondary"
-              class="h-8"
-              onclick={resolvePbaas}
-              disabled={pbaasResolving || pbaasAdding}
-            >
-              {pbaasResolving ? i18n.t('wallet.addAsset.resolving') : i18n.t('wallet.addAsset.resolve')}
-            </Button>
-
-            {#if pbaasResolvedCoin}
-              <Button class="h-8" onclick={addResolvedPbaas} disabled={pbaasAdding || pbaasResolving}>
-                {pbaasAdding ? i18n.t('wallet.addAsset.adding') : i18n.t('wallet.addAsset.add')}
-              </Button>
-            {/if}
+    {#if view === 'catalog'}
+      <div class="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
+        <div class="sticky top-0 z-10 bg-background pb-3">
+          <div class="relative">
+            <SearchIcon
+              class="text-foreground/60 pointer-events-none absolute top-1/2 left-3.5 h-[17px] w-[17px] -translate-y-1/2"
+              absoluteStrokeWidth
+            />
+            <Input
+              type="text"
+              bind:value={searchInput}
+              placeholder={i18n.t('wallet.addAsset.searchPlaceholder')}
+              class="pl-10 focus-visible:ring-0 focus-visible:ring-transparent"
+            />
           </div>
 
-          {#if pbaasResolvedCoin}
-            <div class="flex items-center gap-2 rounded-md border border-border/60 bg-muted/15 px-2.5 py-2">
-              <CoinIcon coinId={pbaasResolvedCoin.id} coinName={pbaasResolvedCoin.displayName} size={20} decorative />
-              <p class="text-xs text-foreground">
-                {pbaasResolvedCoin.displayTicker} - {pbaasResolvedCoin.displayName}
-              </p>
+          {#if actionError}
+            <div class="mt-2 flex items-start gap-2 rounded-md bg-destructive/12 px-2.5 py-2 text-xs text-destructive">
+              <AlertCircleIcon class="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{actionError}</p>
             </div>
           {/if}
 
-          {#if pbaasCandidates.length > 1}
-            <div class="space-y-1 rounded-md border border-border/60 px-2.5 py-2">
-              <p class="text-[11px] text-muted-foreground">{i18n.t('wallet.addAsset.pbaasMatches')}</p>
-              {#each pbaasCandidates as candidate}
-                <button
-                  type="button"
-                  class="text-left text-xs text-foreground underline-offset-2 hover:underline"
-                  onclick={() => {
-                    pbaasQuery = candidate.currencyId;
-                    resolvePbaas();
-                  }}
-                >
-                  {candidate.displayTicker} ({candidate.currencyId})
-                </button>
+          {#if actionSuccess}
+            <div class="mt-2 rounded-md bg-emerald-500/12 px-2.5 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+              {actionSuccess}
+            </div>
+          {/if}
+        </div>
+
+        <section class="mt-1 space-y-2">
+          <h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            {i18n.t('wallet.addAsset.sectionAdded')}
+          </h3>
+          {#if catalogView.addedEntries.length === 0}
+            <p class="rounded-lg bg-muted/55 px-3 py-2.5 text-xs text-muted-foreground dark:bg-muted/50">
+              {i18n.t('wallet.addAsset.emptySearch')}
+            </p>
+          {:else}
+            <ul class="space-y-2">
+              {#each catalogView.addedEntries as entry (entry.key)}
+                <AddAssetRow
+                  {entry}
+                  busy={activeRowKey === entry.key}
+                  onAction={handleCatalogAction}
+                />
               {/each}
-            </div>
+            </ul>
           {/if}
+        </section>
 
-          {#if pbaasError}
-            <p class="text-xs text-destructive">{pbaasError}</p>
+        <section class="mt-4 space-y-2 pb-1">
+          <h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            {i18n.t('wallet.addAsset.sectionAvailable')}
+          </h3>
+          {#if catalogView.availableEntries.length === 0}
+            <p class="rounded-lg bg-muted/55 px-3 py-2.5 text-xs text-muted-foreground dark:bg-muted/50">
+              {i18n.t('wallet.addAsset.emptySearch')}
+            </p>
+          {:else}
+            <ul class="space-y-2">
+              {#each catalogView.availableEntries as entry (entry.key)}
+                <AddAssetRow
+                  {entry}
+                  busy={activeRowKey === entry.key}
+                  onAction={handleCatalogAction}
+                />
+              {/each}
+            </ul>
           {/if}
-        </div>
+        </section>
+      </div>
+    {:else}
+      <div class="mt-2 flex min-h-0 flex-1 flex-col">
+        <button
+          type="button"
+          class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+          onclick={() => {
+            view = 'catalog';
+          }}
+        >
+          <ArrowLeftIcon class="size-4" />
+          {i18n.t('common.back')}
+        </button>
 
-        <div class="space-y-2 rounded-md border border-border/70 p-3">
-          <p class="text-xs font-semibold text-foreground">{i18n.t('wallet.addAsset.erc20Title')}</p>
-          <Input
-            type="text"
-            bind:value={erc20Contract}
-            placeholder={i18n.t('wallet.addAsset.erc20Placeholder')}
-            class="h-10"
-          />
-          <div class="flex gap-2">
-            <Button
-              variant="secondary"
-              class="h-8"
-              onclick={resolveErc20}
-              disabled={erc20Resolving || erc20Adding}
-            >
-              {erc20Resolving ? i18n.t('wallet.addAsset.resolving') : i18n.t('wallet.addAsset.resolve')}
-            </Button>
-
-            {#if erc20ResolvedCoin}
-              <Button class="h-8" onclick={addResolvedErc20} disabled={erc20Resolving || erc20Adding}>
-                {erc20Adding ? i18n.t('wallet.addAsset.adding') : i18n.t('wallet.addAsset.add')}
-              </Button>
+        <div class="min-h-0 flex-1 overflow-y-auto pr-1">
+          <section class="mt-3 space-y-4 pb-1">
+            {#if actionSuccess}
+              <div class="rounded-md bg-emerald-500/12 px-2.5 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                {actionSuccess}
+              </div>
             {/if}
-          </div>
 
-          {#if erc20ResolvedCoin}
-            <div class="flex items-center gap-2 rounded-md border border-border/60 bg-muted/15 px-2.5 py-2">
-              <CoinIcon coinId={erc20ResolvedCoin.id} coinName={erc20ResolvedCoin.displayName} size={20} decorative />
-              <p class="text-xs text-foreground">
-                {erc20ResolvedCoin.displayTicker} - {erc20ResolvedCoin.displayName}
-              </p>
+            <Input
+              type="text"
+              bind:value={manualInput}
+              placeholder={i18n.t('wallet.addAsset.manualPlaceholder')}
+              class="h-10"
+            />
+
+            <div class="flex gap-2">
+              <Button
+                variant="secondary"
+                class="h-8"
+                onclick={resolveManualAsset}
+                disabled={manualResolving || manualAdding}
+              >
+                {manualResolving ? i18n.t('wallet.addAsset.resolving') : i18n.t('wallet.addAsset.resolve')}
+              </Button>
+
+              {#if manualResolvedCoin}
+                <Button class="h-8" onclick={addResolvedManualAsset} disabled={manualAdding || manualResolving}>
+                  {manualAdding ? i18n.t('wallet.addAsset.adding') : i18n.t('wallet.addAsset.add')}
+                </Button>
+              {/if}
             </div>
-          {/if}
 
-          {#if erc20Error}
-            <p class="text-xs text-destructive">{erc20Error}</p>
-          {/if}
+            {#if manualResolvedCoin}
+              <div class="flex items-center gap-2 px-0.5 py-1">
+                <CoinIcon coinId={manualResolvedCoin.id} coinName={manualResolvedCoin.displayName} size={20} decorative />
+                <p class="text-xs text-foreground">
+                  {manualResolvedCoin.displayTicker} - {manualResolvedCoin.displayName}
+                </p>
+              </div>
+            {/if}
+
+            {#if manualCandidates.length > 1}
+              <div class="space-y-1">
+                <p class="text-[11px] text-muted-foreground">{i18n.t('wallet.addAsset.pbaasMatches')}</p>
+                {#each manualCandidates as candidate}
+                  <button
+                    type="button"
+                    class="text-left text-xs text-foreground underline-offset-2 hover:underline"
+                    onclick={() => {
+                      manualInput = candidate.currencyId;
+                      resolveManualAsset();
+                    }}
+                  >
+                    {candidate.displayTicker} ({candidate.currencyId})
+                  </button>
+                {/each}
+              </div>
+            {/if}
+
+            {#if manualError}
+              <p class="text-xs text-destructive">{manualError}</p>
+            {/if}
+          </section>
         </div>
-      </section>
-    </div>
+      </div>
+    {/if}
   </div>
 </StandardRightSheet>

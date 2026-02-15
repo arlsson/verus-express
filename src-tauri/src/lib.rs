@@ -7,7 +7,7 @@ mod commands;
 mod core;
 mod types;
 
-use commands::{coins, guard, identity, transaction, vrpc_transfer, wallet};
+use commands::{bridge_transfer, coins, guard, identity, transaction, vrpc_transfer, wallet};
 use core::channels::btc::BtcProviderPool;
 use core::channels::eth::EthProviderPool;
 use core::channels::vrpc::VrpcProviderPool;
@@ -160,6 +160,8 @@ pub fn run() {
             transaction::get_balances,
             transaction::get_transaction_history,
             vrpc_transfer::preflight_vrpc_transfer,
+            bridge_transfer::get_bridge_conversion_paths,
+            bridge_transfer::preflight_bridge_transfer,
             // Identity commands
             identity::preflight_identity_update,
             identity::send_identity_update,

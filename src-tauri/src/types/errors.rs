@@ -72,6 +72,9 @@ pub enum WalletError {
     #[error("Invalid ERC20 contract")]
     InvalidContract,
 
+    #[error("Bridge transfer is not implemented for this channel")]
+    BridgeNotImplemented,
+
     #[error("Identity not found")]
     IdentityNotFound,
 

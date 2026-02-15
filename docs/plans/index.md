@@ -17,6 +17,8 @@ Plans are first-class artifacts for multi-step work.
 
 - ETH/ERC20 desktop core parity:
   [`./active/eth-erc20-desktop-core.md`](./active/eth-erc20-desktop-core.md)
+- ETH/ERC20 bridge backend and command surface:
+  [`./active/eth-erc20-bridge-backend-surface.md`](./active/eth-erc20-bridge-backend-surface.md)
 
 ## Recent completed plans
 

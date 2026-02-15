@@ -3,12 +3,18 @@
 // Last Updated: Added transaction module and Module 8 preflight/send types
 
 pub mod errors;
+pub mod bridge;
 pub mod guard;
 pub mod identity;
 pub mod transaction;
 pub mod vrpc_transfer;
 pub mod wallet;
 
+pub use bridge::{
+    BridgeConversionPathQuote, BridgeConversionPathRequest, BridgeConversionPathsResult,
+    BridgeExecutionHint, BridgeTransferPreflightParams, BridgeTransferPreflightResult,
+    BridgeTransferRoute,
+};
 pub use errors::WalletError;
 pub use guard::{
     BeginGuardSessionRequest, BeginGuardSessionResult, EndGuardSessionRequest,

@@ -24,6 +24,12 @@ export interface AddressResponse {
   btc_address: string;
 }
 
+export interface StartUpdateEngineOptions {
+  includeTransactions?: boolean;
+  priorityCoinIds?: string[];
+  priorityChannelIds?: string[];
+}
+
 export async function unlockWallet(payload: UnlockWalletPayload): Promise<void> {
   await invoke('unlock_wallet', {
     account_id: payload.account_id,
@@ -35,8 +41,19 @@ export async function lockWallet(): Promise<void> {
   await invoke('lock_wallet');
 }
 
-export async function startUpdateEngine(includeTransactions = false): Promise<void> {
-  await invoke('start_update_engine', { include_transactions: includeTransactions });
+export async function startUpdateEngine(options: StartUpdateEngineOptions | boolean = false): Promise<void> {
+  const resolvedOptions =
+    typeof options === 'boolean'
+      ? { includeTransactions: options }
+      : options;
+
+  await invoke('start_update_engine', {
+    request: {
+      include_transactions: resolvedOptions.includeTransactions ?? false,
+      priority_coin_ids: resolvedOptions.priorityCoinIds ?? [],
+      priority_channel_ids: resolvedOptions.priorityChannelIds ?? []
+    }
+  });
 }
 
 export async function isUnlocked(): Promise<boolean> {

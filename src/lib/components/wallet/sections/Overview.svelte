@@ -12,9 +12,7 @@
   import ArrowLeftRightIcon from '@lucide/svelte/icons/arrow-left-right';
   import PlusIcon from '@lucide/svelte/icons/plus';
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
-  import TrendingDownIcon from '@lucide/svelte/icons/trending-down';
-  import TrendingUpIcon from '@lucide/svelte/icons/trending-up';
-  import MinusIcon from '@lucide/svelte/icons/minus';
+  import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
   import { balanceStore } from '$lib/stores/balances.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { ratesStore } from '$lib/stores/rates.js';
@@ -88,7 +86,7 @@
       updateScrollAffordance();
     });
     resizeObserver.observe(element);
-    const content = element.firstElementChild;
+    const content = element.lastElementChild;
     if (content instanceof HTMLElement) {
       resizeObserver.observe(content);
     }
@@ -121,12 +119,14 @@
       ? getWalletOverviewDemoSnapshot(walletData.network, i18n.intlLocale)
       : liveOverview
   );
+  const visibleRows = $derived(overview.rows);
+  const rowIconSize = 34;
 </script>
 
 <div class="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col px-6 pb-6 pt-0 sm:px-8">
   <section class="flex min-h-0 flex-1 flex-col overflow-hidden">
     <div
-      class={`z-10 bg-background pb-4 pt-3 sm:pt-4 ${
+      class={`z-10 bg-background pb-4 pt-3 sm:pt-4 dark:bg-[#111111] ${
         hasOverviewScroll ? 'shadow-[0_10px_22px_-18px_rgba(0,0,0,0.72)]' : ''
       }`}
     >
@@ -141,6 +141,11 @@
             {overview.heroFiatValueDisplay}
           </p>
         </div>
+        {#if overview.heroHasPartialRates}
+          <p class="text-muted-foreground mt-0.5 text-xs">
+            {i18n.t('wallet.overview.partialRatesNotice')}
+          </p>
+        {/if}
       </div>
 
       <div class="mt-5 w-full md:max-w-[700px]">
@@ -175,24 +180,37 @@
     </div>
 
     <div class="relative min-h-0 flex-1">
-      <div class="h-full overflow-y-auto overscroll-contain" bind:this={listScrollElement} onscroll={onOverviewScroll}>
-        {#if overview.rows.length === 0}
+      <div
+        class="overview-list-scroll h-full overflow-y-auto overscroll-contain pr-4"
+        bind:this={listScrollElement}
+        onscroll={onOverviewScroll}
+      >
+        {#if visibleRows.length === 0}
           <p class="text-muted-foreground px-1 py-8 text-sm">{i18n.t('wallet.overview.noChannel')}</p>
         {:else}
-          <ul class="space-y-0.5 pb-3">
-            {#each overview.rows as row (row.key)}
-              <li class="grid grid-cols-[minmax(0,1fr)_11rem_10.25rem] items-center gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-muted/40">
-                <div class="min-w-0 flex items-center gap-3">
-                  <CoinIcon coinId={row.coinId} coinName={row.name} proto={row.proto} size={28} showBadge decorative />
-                  <div class="min-w-0 flex min-h-7 items-center">
-                    <p class="text-foreground truncate text-[15px] leading-tight font-medium">{row.name}</p>
+          <ul class="space-y-1 pb-3">
+            {#each visibleRows as row (row.key)}
+              <li
+                class="grid grid-cols-[minmax(0,1fr)_11rem_10.25rem_auto] items-center gap-3.5 rounded-md px-3.5 py-3 transition-colors hover:bg-muted/40"
+              >
+                <div class="min-w-0 flex items-center gap-3.5">
+                  <CoinIcon
+                    coinId={row.coinId}
+                    coinName={row.name}
+                    proto={row.proto}
+                    size={rowIconSize}
+                    showBadge
+                    decorative
+                  />
+                  <div class="min-w-0 flex min-h-8 items-center">
+                    <p class="text-foreground truncate text-base leading-tight font-medium">{row.name}</p>
                   </div>
                 </div>
 
-                <div class="pl-1 text-left tabular-nums">
-                  <p class="text-foreground text-[14px] font-medium">{row.marketPriceDisplay}</p>
+                <div class="justify-self-end pr-4 text-right tabular-nums">
+                  <p class="text-foreground/75 text-xs font-medium">{row.marketPriceDisplay}</p>
                   <div
-                    class={`mt-0.5 inline-flex items-center gap-1 text-xs ${
+                    class={`mt-0.5 flex items-center justify-end text-xs ${
                       row.change24hDirection === 'up'
                         ? 'text-emerald-700 dark:text-emerald-300'
                         : row.change24hDirection === 'down'
@@ -200,21 +218,16 @@
                           : 'text-muted-foreground'
                     }`}
                   >
-                    {#if row.change24hDirection === 'up'}
-                      <TrendingUpIcon class="h-3.5 w-3.5" aria-hidden="true" />
-                    {:else if row.change24hDirection === 'down'}
-                      <TrendingDownIcon class="h-3.5 w-3.5" aria-hidden="true" />
-                    {:else if row.change24hDirection === 'flat'}
-                      <MinusIcon class="h-3.5 w-3.5" aria-hidden="true" />
-                    {/if}
                     <span>{row.change24hDisplay}</span>
                   </div>
                 </div>
 
                 <div class="text-right tabular-nums">
-                  <p class="text-foreground text-[15px] font-semibold">{row.fiatValueDisplay}</p>
-                  <p class="text-muted-foreground mt-0.5 text-xs">{row.cryptoAmountDisplay}</p>
+                  <p class="text-foreground text-base font-semibold">{row.fiatValueDisplay}</p>
+                  <p class="text-muted-foreground mt-0.5 text-[13px]">{row.cryptoAmountDisplay}</p>
                 </div>
+
+                <ChevronRightIcon class="text-muted-foreground/70 h-[18px] w-[18px] justify-self-end" aria-hidden="true" />
               </li>
             {/each}
           </ul>
@@ -222,7 +235,9 @@
       </div>
 
       {#if canScrollDown}
-        <div class="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-background to-transparent"></div>
+        <div
+          class="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-background to-transparent dark:from-[#111111]"
+        ></div>
       {/if}
 
       {#if canScrollDown && !hasOverviewScroll && !hasSeenScrollHint}
@@ -240,6 +255,10 @@
 <AddAssetSheet bind:isOpen={showAddAssetSheet} network={walletNetwork} />
 
 <style>
+  .overview-list-scroll {
+    scrollbar-gutter: stable;
+  }
+
   .scroll-hint {
     animation: scroll-hint-nudge 1.8s ease-in-out infinite;
   }

@@ -4,6 +4,7 @@
 // Last Updated: Module 10 — unlock/session and update-engine start are decoupled
 
 use secp256k1::SecretKey;
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -16,6 +17,7 @@ use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::coins::CoinRegistry;
 use crate::core::crypto::wif_encoding::decode_wif_unchecked_network;
+use crate::core::updates::UpdateEngineStartConfig;
 use crate::core::wallet::WalletManager;
 use crate::core::{GuardSessionManager, PreflightStore, UpdateEngine};
 use crate::types::{
@@ -23,6 +25,14 @@ use crate::types::{
     GenerateMnemonicRequest, ImportWalletTextRequest, MnemonicResult, WalletError, WalletListItem,
     WalletSecretKind,
 };
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct StartUpdateEngineRequest {
+    pub include_transactions: Option<bool>,
+    pub priority_coin_ids: Option<Vec<String>>,
+    pub priority_channel_ids: Option<Vec<String>>,
+}
 
 /// Generate a new BIP39 mnemonic phrase
 #[tauri::command(rename_all = "snake_case")]
@@ -287,7 +297,7 @@ pub async fn unlock_wallet(
 /// Start update engine polling after frontend event listeners are registered.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn start_update_engine(
-    include_transactions: Option<bool>,
+    request: Option<StartUpdateEngineRequest>,
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     coin_registry: State<'_, Arc<CoinRegistry>>,
     vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
@@ -302,7 +312,12 @@ pub async fn start_update_engine(
     }
     drop(session);
 
-    let poll_transactions = include_transactions.unwrap_or(false);
+    let request = request.unwrap_or_default();
+    let start_config = UpdateEngineStartConfig {
+        poll_transactions: request.include_transactions.unwrap_or(false),
+        priority_coin_ids: request.priority_coin_ids.unwrap_or_default(),
+        priority_channel_ids: request.priority_channel_ids.unwrap_or_default(),
+    };
 
     update_engine
         .start(
@@ -312,7 +327,7 @@ pub async fn start_update_engine(
             vrpc_provider_pool.inner().clone(),
             btc_provider_pool.inner().clone(),
             eth_provider_pool.inner().clone(),
-            poll_transactions,
+            start_config,
         )
         .await;
 

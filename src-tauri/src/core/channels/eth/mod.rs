@@ -1,4 +1,5 @@
 mod balance;
+pub mod bridge;
 mod config;
 mod preflight;
 mod provider;

@@ -27,6 +27,7 @@ export interface WalletOverviewViewModel {
   heroFiatDisplay: string;
   heroFiatSymbolDisplay: string;
   heroFiatValueDisplay: string;
+  heroHasPartialRates: boolean;
   heroPrimaryCryptoDisplay: string;
   assetCount: number;
   identityCount: number;
@@ -246,14 +247,19 @@ export function buildWalletOverviewViewModel({
   sortWalletOverviewRows(rows);
 
   const hasNonZeroRows = rows.some((row) => row.hasBalance);
+  const hasHoldings = rows.some((row) => row.hasBalance);
   const hasAnySnapshot = rows.some((row) => row.hasSnapshot) || hasPrimarySnapshot;
+  const hasAnyFiatForHoldings = rows.some(
+    (row) => row.hasBalance && row.fiatSortValue !== Number.NEGATIVE_INFINITY
+  );
   const hasMissingFiatForHoldings = rows.some(
     (row) => row.hasBalance && row.fiatSortValue === Number.NEGATIVE_INFINITY
   );
+  const heroHasPartialRates = hasHoldings && hasAnyFiatForHoldings && hasMissingFiatForHoldings;
   const totalFiat = rows
     .filter((row) => row.hasBalance && row.fiatSortValue !== Number.NEGATIVE_INFINITY)
     .reduce((sum, row) => sum + row.fiatSortValue, 0);
-  const heroFiatIsUnavailable = !hasAnySnapshot || hasMissingFiatForHoldings;
+  const heroFiatIsUnavailable = !hasAnySnapshot || (hasHoldings && !hasAnyFiatForHoldings);
   const heroFiatDisplay = heroFiatIsUnavailable
     ? OVERVIEW_UNAVAILABLE_DISPLAY
     : formatUsdAmount(totalFiat, intlLocale);
@@ -265,6 +271,7 @@ export function buildWalletOverviewViewModel({
     heroFiatDisplay,
     heroFiatSymbolDisplay: heroFiatParts?.symbol ?? '',
     heroFiatValueDisplay: heroFiatParts?.value ?? OVERVIEW_UNAVAILABLE_DISPLAY,
+    heroHasPartialRates,
     heroPrimaryCryptoDisplay:
       primaryTotal === null
         ? `${OVERVIEW_UNAVAILABLE_DISPLAY} ${primaryTicker}`

@@ -173,6 +173,7 @@ export function getWalletOverviewDemoSnapshot(
     heroFiatDisplay,
     heroFiatSymbolDisplay: heroFiatParts.symbol,
     heroFiatValueDisplay: heroFiatParts.value,
+    heroHasPartialRates: false,
     heroPrimaryCryptoDisplay: primarySeed
       ? formatCryptoAmount(primarySeed.amount, primaryDisplayTicker, intlLocale, 0, 4)
       : '—',
