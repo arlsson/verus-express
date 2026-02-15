@@ -14,7 +14,7 @@
     "fiatSymbolIcons": 29
   },
   "output": {
-    "catalogPath": "src/lib/coins/valuCoinCatalog.generated.json",
+    "catalogPath": "src/lib/coins/verusCoinCatalog.generated.json",
     "iconRoot": "static/images/coin-logos"
   }
 }

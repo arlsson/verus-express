@@ -13,8 +13,8 @@ External references and source repos used for parity or implementation checks.
   `newsend2`)
 - Rust identity signing parity report:
   [`./verus-identity-rust-parity.md`](./verus-identity-rust-parity.md)
-- Valu coin catalog parity and sync workflow:
-  [`./valu-coin-catalog-parity.md`](./valu-coin-catalog-parity.md)
+- Verus coin catalog parity and sync workflow:
+  [`./verus-coin-catalog-parity.md`](./verus-coin-catalog-parity.md)
 - ETH/ERC20 runtime config and phase-1 parity boundaries:
   [`./eth-erc20-runtime-config.md`](./eth-erc20-runtime-config.md)
 
@@ -23,5 +23,5 @@ External references and source repos used for parity or implementation checks.
 - Prefer primary source code over stale copied notes.
 - When parity behavior changes, update both references and local product-spec
   docs.
-- Regenerate coin catalog artifacts with `yarn sync:valu-coins`.
-- Verify catalog parity and drift with `yarn check:valu-coins`.
+- Regenerate coin catalog artifacts with `yarn sync:verus-coins`.
+- Verify catalog parity and drift with `yarn check:verus-coins`.

@@ -18,6 +18,7 @@
     children?: Snippet;
     aside?: Snippet;
     footer?: Snippet;
+    footerAside?: Snippet;
   };
 
   const defaultCloseHandler = () => {};
@@ -34,13 +35,15 @@
     mobileAsideTitle = '',
     children,
     aside,
-    footer
+    footer,
+    footerAside
   }: WalletTransferStepperShellProps = $props();
   /* eslint-enable prefer-const */
 
   const i18n = $derived($i18nStore);
   const asideSnippet = $derived(aside);
   const footerSnippet = $derived(footer);
+  const footerAsideSnippet = $derived(footerAside);
   let showDiscardDialog = $state(false);
 
   function requestClose() {
@@ -77,6 +80,10 @@
 
   {#snippet footer()}
     {@render footerSnippet?.()}
+  {/snippet}
+
+  {#snippet footerAside()}
+    {@render footerAsideSnippet?.()}
   {/snippet}
 
   {@render children?.()}

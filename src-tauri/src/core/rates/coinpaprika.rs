@@ -12,8 +12,8 @@ use serde_json::Value;
 use crate::core::coins::CoinDefinition;
 
 const COINPAPRIKA_BASE_URL: &str = "https://api.coinpaprika.com";
-const VALU_CATALOG_JSON: &str =
-    include_str!("../../../../src/lib/coins/valuCoinCatalog.generated.json");
+const VERUS_CATALOG_JSON: &str =
+    include_str!("../../../../src/lib/coins/verusCoinCatalog.generated.json");
 
 static CATALOG_COINPAPRIKA_OVERRIDES: OnceLock<HashMap<String, String>> = OnceLock::new();
 
@@ -33,7 +33,7 @@ impl CoinPaprikaIdSource {
     fn as_str(self) -> &'static str {
         match self {
             Self::ExplicitOverride => "coin.coin_paprika_id",
-            Self::CatalogOverride => "valu_catalog",
+            Self::CatalogOverride => "verus_catalog",
             Self::InferredSlug => "inferred_slug",
         }
     }
@@ -57,11 +57,11 @@ fn catalog_lookup_key(value: &str, is_testnet: bool) -> String {
 }
 
 fn load_catalog_coinpaprika_overrides() -> HashMap<String, String> {
-    let entries = match serde_json::from_str::<Vec<CatalogCoinEntry>>(VALU_CATALOG_JSON) {
+    let entries = match serde_json::from_str::<Vec<CatalogCoinEntry>>(VERUS_CATALOG_JSON) {
         Ok(entries) => entries,
         Err(err) => {
             println!(
-                "[RATES] Failed to parse valu coin catalog for CoinPaprika overrides: {}",
+                "[RATES] Failed to parse verus coin catalog for CoinPaprika overrides: {}",
                 err
             );
             return HashMap::new();

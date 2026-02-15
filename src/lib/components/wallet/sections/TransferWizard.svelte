@@ -1,12 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
+  import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
   import CheckCircle2Icon from '@lucide/svelte/icons/check-circle-2';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
   import * as Card from '$lib/components/ui/card';
+  import * as Tabs from '$lib/components/ui/tabs';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import WalletTransferStepperShell from '$lib/components/shared/WalletTransferStepperShell.svelte';
+  import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
   import TransferSummaryRail from './transfer-wizard/TransferSummaryRail.svelte';
   import { i18nStore } from '$lib/i18n';
   import { resolveCoinPresentation } from '$lib/coins/presentation.js';
@@ -98,12 +102,26 @@
   const sendableCoinOptions = $derived(
     sendableCoins.map((coin) => {
       const presentation = resolveCoinPresentation(coin);
+      const channelId =
+        walletChannels.byCoinId[coin.id] ?? channelIdForCoin(coin, walletChannels.vrpcAddress ?? undefined);
+      const balanceTotal = channelId ? getBalance(channelId, coin.id, balances)?.total ?? '0' : '0';
       return {
         coin,
+        channelId,
+        balanceTotal,
+        balanceValue: toFiniteNumber(balanceTotal),
         displayName: presentation.displayName,
         displayTicker: presentation.displayTicker
       };
     })
+  );
+
+  const positiveSendableCoinOptions = $derived(
+    sendableCoinOptions.filter((option) => option.channelId && option.balanceValue > 0)
+  );
+
+  const selectedCoinOption = $derived(
+    positiveSendableCoinOptions.find((option) => option.coin.id === selectedCoinId) ?? null
   );
 
   let selectedCoinId = $state('');
@@ -115,6 +133,7 @@
   let selectedReceiveAssetKey = $state('');
   let selectedViaOptionId = $state('');
   let manualViaLocked = $state(false);
+  let sourceCoinManuallyChosen = $state(false);
   let discoveredPathOptions = $state<ViaRouteOption[]>([]);
 
   let loadingTargets = $state(false);
@@ -122,7 +141,6 @@
   let sending = $state(false);
   let targetsError = $state('');
   let transferError = $state('');
-  let addressesError = $state('');
 
   let simplePreflightResult = $state<PreflightResult | null>(null);
   let bridgePreflightResult = $state<BridgeTransferPreflightResult | null>(null);
@@ -133,29 +151,19 @@
   let showReceiveAssetSheet = $state(false);
   let showViaSheet = $state(false);
 
-  const selectedCoin = $derived(
-    sendableCoins.find((coin) => coin.id === selectedCoinId) ?? sendableCoins[0] ?? null
-  );
+  const selectedCoin = $derived(selectedCoinOption?.coin ?? null);
 
   const selectedCoinPresentation = $derived(
     selectedCoin ? resolveCoinPresentation(selectedCoin) : null
   );
 
-  const selectedChannelId = $derived(
-    selectedCoin
-      ? walletChannels.byCoinId[selectedCoin.id] ??
-          channelIdForCoin(selectedCoin, walletChannels.vrpcAddress ?? undefined)
-      : null
-  );
+  const selectedChannelId = $derived(selectedCoinOption?.channelId ?? null);
 
   const selectedChannelPrefix = $derived(selectedChannelId?.split('.')[0] ?? '');
   const sourceSupportsConversion = $derived(selectedChannelPrefix === 'vrpc');
 
-  const selectedBalance = $derived(
-    selectedChannelId && selectedCoin
-      ? getBalance(selectedChannelId, selectedCoin.id, balances)?.total ?? '0'
-      : '0'
-  );
+  const selectedBalance = $derived(selectedCoinOption?.balanceTotal ?? '0');
+  const selectedBalanceValue = $derived(toFiniteNumber(selectedBalance));
 
   const selectedSourceAddress = $derived(
     !addresses
@@ -166,6 +174,12 @@
           ? addresses.btc_address
           : addresses.eth_address
   );
+
+  const showChooseCurrencyCallToAction = $derived(
+    (entryIntent === 'send' || entryIntent === 'convert') && !sourceCoinManuallyChosen
+  );
+
+  const receiveAssetSelectionEnabled = $derived(sourceCoinManuallyChosen && !!selectedCoin);
 
   const sameAssetOption = $derived<ViaRouteOption | null>(
     selectedCoin && selectedCoinPresentation
@@ -216,9 +230,7 @@
   );
 
   const selectedReceiveAssetOption = $derived(
-    receiveAssetOptions.find((option) => option.key === selectedReceiveAssetKey) ??
-      receiveAssetOptions[0] ??
-      null
+    receiveAssetOptions.find((option) => option.key === selectedReceiveAssetKey) ?? null
   );
 
   const rankedViaOptions = $derived(
@@ -268,6 +280,22 @@
       const numericPrice = Number(activeConvertRoute.price);
       if (!Number.isFinite(numericAmount) || !Number.isFinite(numericPrice)) return null;
       return (numericAmount * numericPrice).toFixed(8);
+    })()
+  );
+
+  const activeConvertRouteRate = $derived(formatRouteRateValue(activeConvertRoute?.price));
+
+  const activeConvertRouteRateText = $derived(
+    (() => {
+      if (!selectedCoinPresentation || !selectedReceiveAssetOption || !activeConvertRouteRate) {
+        return i18n.t('wallet.transfer.rate', { value: i18n.t('wallet.transfer.summary.notSet') });
+      }
+
+      return i18n.t('wallet.transfer.ratePair', {
+        from: selectedCoinPresentation.displayTicker,
+        rate: activeConvertRouteRate,
+        to: selectedReceiveAssetOption.label
+      });
     })()
   );
 
@@ -412,9 +440,19 @@
   });
 
   $effect(() => {
-    if (sendableCoins.length === 0) return;
-    if (!selectedCoinId || !sendableCoins.some((coin) => coin.id === selectedCoinId)) {
-      selectedCoinId = sendableCoins[0].id;
+    if (positiveSendableCoinOptions.length === 0) {
+      selectedCoinId = '';
+      sourceCoinManuallyChosen = false;
+      return;
+    }
+
+    const selectedStillAvailable = positiveSendableCoinOptions.some(
+      (option) => option.coin.id === selectedCoinId
+    );
+
+    if (!selectedStillAvailable) {
+      selectedCoinId = '';
+      sourceCoinManuallyChosen = false;
     }
   });
 
@@ -446,7 +484,8 @@
     }
 
     if (!receiveAssetOptions.some((option) => option.key === selectedReceiveAssetKey)) {
-      selectedReceiveAssetKey = receiveAssetOptions[0].key;
+      selectedReceiveAssetKey = '';
+      selectedViaOptionId = '';
       manualViaLocked = false;
     }
   });
@@ -488,6 +527,16 @@
 
     previousPreflightInputSignature = signature;
     clearPreflightState();
+  });
+
+  $effect(() => {
+    if (!selectedCoinOption) return;
+    const trimmedAmount = amount.trim();
+    if (!trimmedAmount) return;
+    const numericAmount = Number(trimmedAmount);
+    if (!Number.isFinite(numericAmount)) return;
+    if (numericAmount <= selectedBalanceValue) return;
+    amount = selectedBalance;
   });
 
   $effect(() => {
@@ -538,10 +587,8 @@
     void (async () => {
       try {
         addresses = await walletService.getAddresses();
-        addressesError = '';
       } catch {
         addresses = null;
-        addressesError = i18n.t('wallet.receive.errorLoad');
       }
     })();
   });
@@ -614,6 +661,27 @@
     return Number.isFinite(value) && value > 0;
   }
 
+  function toFiniteNumber(value: unknown): number {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : 0;
+    }
+
+    if (typeof value === 'string') {
+      const parsed = Number(value.trim());
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    return 0;
+  }
+
+  function formatSheetBalance(value: string): string {
+    const numeric = toFiniteNumber(value);
+    return i18n.formatNumber(numeric, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 8
+    });
+  }
+
   function validateDestinationAddress(value: string, kind: DestinationAddressKind): boolean {
     const input = value.trim();
     if (!input) return false;
@@ -636,6 +704,12 @@
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed <= 0) return null;
     return parsed;
+  }
+
+  function formatRouteRateValue(value?: string | null): string | null {
+    const numeric = parsePrice(value);
+    if (numeric === null) return null;
+    return numeric.toFixed(8).replace(/\.?0+$/, '');
   }
 
   function routeScore(option: ViaRouteOption, amountInput: string): number | null {
@@ -820,13 +894,14 @@
     amount = selectedBalance;
   }
 
-  function handleEnableConversion() {
-    if (!sourceSupportsConversion || convertUnavailableForSource) return;
-    conversionEnabled = true;
-    manualViaLocked = false;
-  }
+  function setTransferMode(mode: 'send' | 'convert') {
+    if (mode === 'convert') {
+      if (!sourceSupportsConversion || convertUnavailableForSource) return;
+      conversionEnabled = true;
+      manualViaLocked = false;
+      return;
+    }
 
-  function handleDisableConversion() {
     conversionEnabled = false;
     manualViaLocked = false;
     selectedViaOptionId = '';
@@ -834,6 +909,7 @@
 
   function selectSourceCoin(coinId: string) {
     selectedCoinId = coinId;
+    sourceCoinManuallyChosen = true;
     showSourceAssetSheet = false;
     transferError = '';
   }
@@ -890,7 +966,7 @@
 
   {#snippet footer()}
     {#if currentStep === 'success'}
-      <div class="flex justify-end">
+      <div class="flex justify-end md:hidden">
         <Button onclick={handleDone}>
           {i18n.t('common.done')}
         </Button>
@@ -900,6 +976,22 @@
         <Button variant="secondary" onclick={goBack} disabled={isBusy}>
           {currentStep === 'details' ? i18n.t('common.cancel') : i18n.t('common.back')}
         </Button>
+        <Button class="md:hidden" onclick={continueFlow} disabled={primaryDisabled}>
+          {primaryLabel}
+        </Button>
+      </div>
+    {/if}
+  {/snippet}
+
+  {#snippet footerAside()}
+    {#if currentStep === 'success'}
+      <div class="hidden w-full justify-end md:flex">
+        <Button onclick={handleDone}>
+          {i18n.t('common.done')}
+        </Button>
+      </div>
+    {:else}
+      <div class="hidden w-full justify-end md:flex">
         <Button onclick={continueFlow} disabled={primaryDisabled}>
           {primaryLabel}
         </Button>
@@ -907,10 +999,12 @@
     {/if}
   {/snippet}
 
-  <div class="space-y-5">
-    <div>
-      <p class="text-lg font-semibold">{viewTitle}</p>
-    </div>
+  <div class={currentStep === 'details' ? 'space-y-4' : 'space-y-5'}>
+    {#if currentStep !== 'details'}
+      <div>
+        <p class="text-lg font-semibold">{viewTitle}</p>
+      </div>
+    {/if}
 
     {#if transferError}
       <div class="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -920,85 +1014,183 @@
 
     {#if currentStep === 'details'}
       <Card.Root class="border-0 bg-transparent py-0 shadow-none">
-        <Card.Header class="px-0">
-          <Card.Title>{stepCopy.details.title}</Card.Title>
-        </Card.Header>
         <Card.Content class="space-y-4 px-0">
-          <div class="space-y-3 rounded-lg border border-border/60 p-4">
-            <div class="flex items-center justify-between gap-3">
-              <p class="text-sm font-medium">{i18n.t('wallet.transfer.youSend')}</p>
-              <Button variant="outline" size="sm" onclick={() => (showSourceAssetSheet = true)}>
-                {sourceSummaryValue || i18n.t('wallet.transfer.sourceAsset')}
-              </Button>
+          <div class="-mt-1 flex w-full justify-center">
+            <Tabs.Root value={conversionEnabled ? 'convert' : 'send'} class="w-auto">
+              <Tabs.List class="mx-auto rounded-xl bg-muted/80 p-1 dark:bg-muted/55">
+                <Tabs.Trigger
+                  value="send"
+                  class="h-8 min-w-[5.75rem] rounded-lg px-3 text-sm font-semibold data-[state=active]:shadow-none"
+                  onclick={() => setTransferMode('send')}
+                >
+                  {i18n.t('wallet.overview.send')}
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="convert"
+                  class="h-8 min-w-[5.75rem] rounded-lg px-3 text-sm font-semibold data-[state=active]:shadow-none"
+                  disabled={!sourceSupportsConversion || convertUnavailableForSource}
+                  onclick={() => setTransferMode('convert')}
+                >
+                  {i18n.t('wallet.overview.convert')}
+                </Tabs.Trigger>
+              </Tabs.List>
+            </Tabs.Root>
+          </div>
+
+          <div class="mx-auto w-full max-w-[560px] space-y-3.5">
+            <div class="space-y-1.5">
+              <p class="text-muted-foreground px-1 text-[10px] font-semibold tracking-[0.06em] uppercase">
+                {i18n.t('wallet.transfer.youSend')}
+              </p>
+              <section class="rounded-[20px] bg-transparent p-4">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0 flex-1">
+                    <Label for="transfer-amount" class="sr-only">{i18n.t('wallet.transfer.amountLabel')}</Label>
+                    <Input
+                      id="transfer-amount"
+                      type="text"
+                      inputmode="decimal"
+                      placeholder={i18n.t('wallet.transfer.amountPlaceholder')}
+                      bind:value={amount}
+                      class="h-auto min-h-0 border-0 !bg-transparent dark:!bg-transparent px-0 py-0 text-[2.5rem] md:text-[2.5rem] font-semibold leading-none tracking-tight focus-visible:ring-0"
+                    />
+                  </div>
+
+                  <div class="flex h-12 max-w-[72%] shrink-0 flex-col items-end">
+                    <Button
+                      variant={showChooseCurrencyCallToAction ? 'default' : 'ghost'}
+                      class="max-w-full
+                        {showChooseCurrencyCallToAction
+                          ? 'h-9 self-center rounded-md px-4 justify-center text-sm font-semibold'
+                          : 'h-12 rounded-full px-3.5 justify-start gap-2.5 bg-muted/60 hover:bg-muted/70 dark:bg-muted/45 dark:hover:bg-muted/55'}"
+                      onclick={() => (showSourceAssetSheet = true)}
+                    >
+                      {#if showChooseCurrencyCallToAction}
+                        <span class="truncate text-sm font-semibold">{i18n.t('wallet.transfer.chooseCurrency')}</span>
+                      {:else}
+                        {#if selectedCoin}
+                          <CoinIcon
+                            coinId={selectedCoin.id}
+                            coinName={selectedCoinPresentation?.displayName}
+                            size={24}
+                            decorative={true}
+                          />
+                        {/if}
+                        <span class="min-w-0 text-left leading-tight">
+                          <span class="block truncate text-base font-semibold">
+                            {selectedCoinPresentation?.displayName || i18n.t('wallet.transfer.sourceAsset')}
+                          </span>
+                          {#if selectedCoinPresentation?.displayTicker}
+                            <span class="text-muted-foreground block truncate text-xs">
+                              {selectedCoinPresentation.displayTicker}
+                            </span>
+                          {/if}
+                        </span>
+                        <ChevronRightIcon class="text-foreground/45 ml-auto size-4 shrink-0" />
+                      {/if}
+                    </Button>
+                  </div>
+                </div>
+
+                <div class="mt-2 min-h-6 flex flex-wrap items-center justify-end gap-2">
+                  {#if selectedCoinOption}
+                    <p class="text-muted-foreground truncate text-xs">{formatSheetBalance(selectedBalance)}</p>
+                    <Button variant="secondary" size="sm" class="h-6 rounded-full px-2.5 text-[11px]" onclick={setMaxAmount}>
+                      {i18n.t('wallet.transfer.max')}
+                    </Button>
+                  {/if}
+                </div>
+
+                {#if !amountValid && amount.trim()}
+                  <p class="text-destructive mt-2 text-xs">{i18n.t('wallet.transfer.amountInvalid')}</p>
+                {/if}
+              </section>
             </div>
 
-            <div class="space-y-2">
-              <Label for="transfer-amount">{i18n.t('wallet.transfer.amountLabel')}</Label>
-              <div class="flex items-center gap-2">
-                <Input
-                  id="transfer-amount"
-                  placeholder={i18n.t('wallet.transfer.amountPlaceholder')}
-                  bind:value={amount}
-                />
-                <Button variant="secondary" onclick={setMaxAmount}>
-                  {i18n.t('wallet.transfer.max')}
-                </Button>
+            {#if conversionEnabled}
+              <div class="-my-1 flex justify-center">
+                <div class="text-muted-foreground bg-background flex h-8 w-8 items-center justify-center rounded-full border border-border/70">
+                  <ArrowDownIcon class="size-3.5" />
+                </div>
               </div>
-            </div>
 
-            {#if !amountValid && amount.trim()}
-              <p class="text-destructive text-xs">{i18n.t('wallet.transfer.amountInvalid')}</p>
+              <div class="space-y-1.5">
+                <p class="text-muted-foreground px-1 text-[10px] font-semibold tracking-[0.06em] uppercase">
+                  {i18n.t('wallet.transfer.youReceive')}
+                </p>
+                <section class="rounded-[20px] bg-transparent p-4">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                      <p class="text-[2.5rem] md:text-[2.5rem] font-semibold leading-none tracking-tight">
+                        {estimatedConversionValue || '0'}
+                      </p>
+                    </div>
+                    <Button
+                      variant={selectedReceiveAssetOption ? 'ghost' : 'default'}
+                      class="max-w-[72%] shrink-0
+                        {selectedReceiveAssetOption
+                          ? 'h-12 rounded-full px-3.5 justify-start gap-2.5 bg-muted/60 hover:bg-muted/70 dark:bg-muted/45 dark:hover:bg-muted/55'
+                          : 'h-9 rounded-md px-4 justify-center text-sm font-semibold'}"
+                      disabled={!receiveAssetSelectionEnabled}
+                      onclick={() => {
+                        if (!receiveAssetSelectionEnabled) return;
+                        showReceiveAssetSheet = true;
+                      }}
+                    >
+                      {#if selectedReceiveAssetOption}
+                        <CoinIcon
+                          coinId={selectedReceiveAssetOption.destinationId}
+                          coinName={selectedReceiveAssetOption.label}
+                          size={24}
+                          decorative={true}
+                        />
+                        <span class="truncate text-base font-semibold">
+                          {selectedReceiveAssetOption.label}
+                        </span>
+                        <ChevronRightIcon class="text-foreground/45 ml-auto size-4 shrink-0" />
+                      {:else}
+                        <span class="truncate text-sm font-semibold">{i18n.t('wallet.transfer.receiveAsset')}</span>
+                      {/if}
+                    </Button>
+                  </div>
+
+                  {#if selectedReceiveAssetOption}
+                    <div class="mt-4 space-y-2 border-t border-border/60 pt-3">
+                      <button
+                        type="button"
+                        class="focus-visible:ring-ring/60 flex w-full items-center justify-between rounded-md px-1 py-1.5 text-left outline-none focus-visible:ring-2"
+                        onclick={() => (showViaSheet = true)}
+                      >
+                        <span class="text-muted-foreground text-xs">{i18n.t('wallet.transfer.conversionRoute')}</span>
+                        <span class="flex items-center gap-1 text-xs font-semibold">
+                          {activeConvertRoute?.via || i18n.t('wallet.transfer.viaBest')}
+                          <ChevronRightIcon class="text-foreground/45 size-3.5 shrink-0" />
+                        </span>
+                      </button>
+
+                      <p class="text-muted-foreground px-1 text-xs">{activeConvertRouteRateText}</p>
+
+                      {#if manualViaLocked}
+                        <div class="px-1">
+                          <Button variant="ghost" size="sm" class="h-7 px-2.5 text-xs" onclick={resetViaToBest}>
+                            {i18n.t('wallet.transfer.viaResetBest')}
+                          </Button>
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
+
+                  {#if targetsError}
+                    <p class="text-destructive mt-2 text-xs">{targetsError}</p>
+                  {/if}
+                </section>
+              </div>
             {/if}
-
-            <p class="text-muted-foreground text-xs">
-              {i18n.t('wallet.transfer.sourceBalance', { value: selectedBalance })}
-            </p>
           </div>
 
           {#if showEvmConvertUnavailable}
             <div class="rounded-md border border-border/60 px-3 py-2 text-sm text-muted-foreground">
               {i18n.t('wallet.transfer.convertUnavailableEvm')}
-            </div>
-          {/if}
-
-          {#if !conversionEnabled}
-            {#if sourceSupportsConversion && !convertUnavailableForSource}
-              <div>
-                <Button variant="ghost" size="sm" onclick={handleEnableConversion}>
-                  {i18n.t('wallet.transfer.doConversion')}
-                </Button>
-              </div>
-            {/if}
-          {:else}
-            <div class="space-y-3 rounded-lg border border-border/60 p-4">
-              <div class="flex items-center justify-between gap-3">
-                <p class="text-sm font-medium">{i18n.t('wallet.transfer.youReceive')}</p>
-                <Button variant="outline" size="sm" onclick={() => (showReceiveAssetSheet = true)}>
-                  {selectedReceiveAssetOption?.label || i18n.t('wallet.transfer.receiveAsset')}
-                </Button>
-              </div>
-
-              <p class="text-base font-medium">
-                {estimatedReceiveSummaryValue || i18n.t('wallet.transfer.summary.notSet')}
-              </p>
-
-              <div class="flex flex-wrap items-center gap-2">
-                <Button variant="ghost" size="sm" onclick={() => (showViaSheet = true)}>
-                  {i18n.t('wallet.transfer.via')}: {activeConvertRoute?.via || i18n.t('wallet.transfer.viaBest')}
-                </Button>
-                {#if manualViaLocked}
-                  <Button variant="ghost" size="sm" onclick={resetViaToBest}>
-                    {i18n.t('wallet.transfer.viaResetBest')}
-                  </Button>
-                {/if}
-                <Button variant="ghost" size="sm" onclick={handleDisableConversion}>
-                  {i18n.t('wallet.transfer.routeGroupSend')}
-                </Button>
-              </div>
-
-              {#if targetsError}
-                <p class="text-destructive text-xs">{targetsError}</p>
-              {/if}
             </div>
           {/if}
 
@@ -1010,7 +1202,7 @@
             <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.noRoutes')}</p>
           {/if}
 
-          {#if sendableCoinOptions.length === 0}
+          {#if positiveSendableCoinOptions.length === 0}
             <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.noAssets')}</p>
           {/if}
         </Card.Content>
@@ -1131,39 +1323,40 @@
   </div>
 </WalletTransferStepperShell>
 
-<StandardRightSheet bind:isOpen={showSourceAssetSheet} title={i18n.t('wallet.transfer.sourceSheetTitle')}>
-  <div class="space-y-3">
-    {#if sendableCoinOptions.length === 0}
+<StandardRightSheet bind:isOpen={showSourceAssetSheet} title={i18n.t('wallet.transfer.youSend')}>
+  <div class="flex h-full min-h-0 flex-col">
+    {#if positiveSendableCoinOptions.length === 0}
       <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.noAssets')}</p>
     {:else}
-      <div class="space-y-2">
-        {#each sendableCoinOptions as option}
-          <button
-            type="button"
-            class="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left transition-colors
-              {selectedCoinId === option.coin.id
-                ? 'border-primary/70 bg-primary/5'
-                : 'border-border/60 hover:bg-muted/30'}"
-            onclick={() => selectSourceCoin(option.coin.id)}
-          >
-            <div class="min-w-0">
-              <p class="truncate text-sm font-medium">{option.displayTicker} - {option.displayName}</p>
-            </div>
-          </button>
-        {/each}
+      <div class="min-h-0 flex-1 overflow-y-auto pr-1">
+        <div class="space-y-2 pb-1">
+          {#each positiveSendableCoinOptions as option}
+            <button
+              type="button"
+              class="group flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
+                {selectedCoinId === option.coin.id
+                  ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
+                  : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'}"
+              onclick={() => selectSourceCoin(option.coin.id)}
+            >
+              <div class="flex min-w-0 items-center gap-2.5">
+                <CoinIcon
+                  coinId={option.coin.id}
+                  coinName={option.displayName}
+                  size={18}
+                  decorative={true}
+                />
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-semibold">{option.displayName}</p>
+                  <p class="text-muted-foreground truncate text-xs">{option.displayTicker}</p>
+                </div>
+              </div>
+              <p class="ml-3 shrink-0 text-sm font-medium">{formatSheetBalance(option.balanceTotal)}</p>
+            </button>
+          {/each}
+        </div>
       </div>
-    {/if}
-
-    <div class="rounded-md border border-border/60 p-3 text-sm">
-      <p class="text-muted-foreground text-xs">{i18n.t('wallet.transfer.sourceChannelLabel')}</p>
-      <p class="break-all">{selectedChannelId ?? '—'}</p>
-    </div>
-    <div class="rounded-md border border-border/60 p-3 text-sm">
-      <p class="text-muted-foreground text-xs">{i18n.t('wallet.transfer.sourceAddressLabel')}</p>
-      <p class="break-all">{selectedSourceAddress || '—'}</p>
-    </div>
-    {#if addressesError}
-      <p class="text-destructive text-xs">{addressesError}</p>
     {/if}
   </div>
 </StandardRightSheet>
@@ -1192,11 +1385,19 @@
                 : 'border-border/60 hover:bg-muted/30'}"
             onclick={() => selectReceiveAsset(option.key)}
           >
-            <div class="min-w-0">
-              <p class="truncate text-sm font-medium">{option.label}</p>
-              {#if option.subtitle}
-                <p class="text-muted-foreground truncate text-xs">{option.subtitle}</p>
-              {/if}
+            <div class="flex min-w-0 items-start gap-2">
+              <CoinIcon
+                coinId={option.destinationId}
+                coinName={option.label}
+                size={18}
+                decorative={true}
+              />
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium">{option.label}</p>
+                {#if option.subtitle}
+                  <p class="text-muted-foreground truncate text-xs">{option.subtitle}</p>
+                {/if}
+              </div>
             </div>
             {#if bestRoute}
               <p class="text-muted-foreground ml-3 text-xs">{formatEstimatedReceive(bestRoute)}</p>

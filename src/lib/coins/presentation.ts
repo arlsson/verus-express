@@ -1,4 +1,4 @@
-import valuCoinCatalog from '$lib/coins/valuCoinCatalog.generated.json';
+import verusCoinCatalog from '$lib/coins/verusCoinCatalog.generated.json';
 import type { CoinDefinition, Protocol } from '$lib/types/wallet.js';
 
 export type CoinIconKind = 'asset' | 'fiat-symbol' | 'generated';
@@ -56,7 +56,7 @@ interface CatalogCoin {
   icon: CoinIcon;
 }
 
-const catalogCoins = valuCoinCatalog as CatalogCoin[];
+const catalogCoins = verusCoinCatalog as CatalogCoin[];
 const catalogById = new Map<string, CatalogCoin>(catalogCoins.map((coin) => [coin.id, coin]));
 
 function cloneIcon(icon: CoinIcon): CoinIcon {

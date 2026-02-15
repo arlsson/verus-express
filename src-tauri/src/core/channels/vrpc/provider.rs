@@ -513,10 +513,26 @@ impl VrpcProvider {
         self.call("createrawtransaction", params, 0).await
     }
 
-    /// fundrawtransaction: hex (string) -> funded hex + fee etc.
-    pub async fn fundrawtransaction(&self, hex_tx: &str) -> Result<Value, WalletError> {
-        let params = serde_json::json!([hex_tx]);
-        self.call("fundrawtransaction", params, 0).await
+    /// fundrawtransaction with optional UTXOs/change/explicit fee.
+    /// Parity path used by valu-mobile against public VRPC endpoints.
+    pub async fn fundrawtransaction_with_options(
+        &self,
+        hex_tx: &str,
+        utxos: Option<&[Value]>,
+        change_address: Option<&str>,
+        explicit_fee: Option<f64>,
+    ) -> Result<Value, WalletError> {
+        let mut params = vec![Value::String(hex_tx.to_string())];
+        if let Some(utxo_list) = utxos {
+            params.push(Value::Array(utxo_list.to_vec()));
+            if let Some(change) = change_address {
+                params.push(Value::String(change.to_string()));
+                if let Some(fee) = explicit_fee {
+                    params.push(Value::from(fee));
+                }
+            }
+        }
+        self.call("fundrawtransaction", Value::Array(params), 0).await
     }
 
     /// sendrawtransaction: signed hex

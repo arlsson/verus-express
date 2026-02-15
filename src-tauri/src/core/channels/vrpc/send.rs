@@ -67,9 +67,14 @@ pub async fn send(
 
     let fallback_script_pubkey = p2pkh_script(&public_key.serialize());
     for i in 0..tx.input.len() {
-        let script_pubkey = payload
-            .inputs
+        let prevout = tx
+            .input
             .get(i)
+            .ok_or(WalletError::OperationFailed)?
+            .previous_output;
+        let txid = prevout.txid.to_string();
+        let vout = prevout.vout;
+        let script_pubkey = find_payload_input(&payload.inputs, &txid, vout)
             .and_then(|input| input.script_pub_key.clone())
             .and_then(|raw| hex::decode(raw).ok())
             .map(ScriptBuf::from_bytes)
@@ -185,4 +190,12 @@ fn hash160(data: &[u8]) -> [u8; 20] {
     let mut out = [0u8; 20];
     out.copy_from_slice(&ripemd[..]);
     out
+}
+
+fn find_payload_input<'a>(
+    inputs: &'a [crate::core::channels::vrpc::preflight::VrpcInputRef],
+    txid: &str,
+    vout: u32,
+) -> Option<&'a crate::core::channels::vrpc::preflight::VrpcInputRef> {
+    inputs.iter().find(|input| input.txid == txid && input.vout == vout)
 }

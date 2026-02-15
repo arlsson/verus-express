@@ -7,6 +7,7 @@
 
 <script lang="ts">
   import { Button } from '$lib/components/ui/button';
+  import * as ScrollArea from '$lib/components/ui/scroll-area';
   import SendIcon from '@lucide/svelte/icons/send';
   import DownloadIcon from '@lucide/svelte/icons/download';
   import ArrowLeftRightIcon from '@lucide/svelte/icons/arrow-left-right';
@@ -89,9 +90,14 @@
       updateScrollAffordance();
     });
     resizeObserver.observe(element);
-    const content = element.lastElementChild;
-    if (content instanceof HTMLElement) {
-      resizeObserver.observe(content);
+    const viewportContent = element.querySelector('[data-scroll-area-content]');
+    if (viewportContent instanceof HTMLElement) {
+      resizeObserver.observe(viewportContent);
+    } else {
+      const fallbackContent = element.lastElementChild;
+      if (fallbackContent instanceof HTMLElement) {
+        resizeObserver.observe(fallbackContent);
+      }
     }
     const frame = window.requestAnimationFrame(() => {
       updateScrollAffordance();
@@ -205,63 +211,66 @@
     </div>
 
     <div class="relative min-h-0 flex-1">
-      <div
-        class="overview-list-scroll h-full overflow-y-auto overscroll-contain pr-4"
-        bind:this={listScrollElement}
-        onscroll={onOverviewScroll}
-      >
-        {#if visibleRows.length === 0}
-          <p class="text-muted-foreground px-1 py-8 text-sm">{i18n.t('wallet.overview.noChannel')}</p>
-        {:else}
-          <ul class="space-y-1 pb-3">
-            {#each visibleRows as row (row.key)}
-              <li
-                class="grid grid-cols-[minmax(0,1fr)_11rem_10.25rem_auto] items-center gap-3.5 rounded-md px-3.5 py-3 transition-colors hover:bg-muted/40"
-              >
-                <div class="min-w-0 flex items-center gap-3.5">
-                  <CoinIcon
-                    coinId={row.coinId}
-                    coinName={row.name}
-                    proto={row.proto}
-                    size={rowIconSize}
-                    showBadge
-                    decorative
-                  />
-                  <div class="min-w-0 flex min-h-8 items-center">
-                    <p class="text-foreground truncate text-base leading-tight font-medium">{row.name}</p>
+      <ScrollArea.Root class="h-full">
+        <ScrollArea.Viewport
+          class="overview-list-scroll h-full overscroll-contain pr-4"
+          bind:ref={listScrollElement}
+          onscroll={onOverviewScroll}
+        >
+          {#if visibleRows.length === 0}
+            <p class="text-muted-foreground px-1 py-8 text-sm">{i18n.t('wallet.overview.noChannel')}</p>
+          {:else}
+            <ul class="space-y-1 pb-3">
+              {#each visibleRows as row (row.key)}
+                <li
+                  class="grid grid-cols-[minmax(0,1fr)_11rem_10.25rem_auto] items-center gap-3.5 rounded-md px-3.5 py-3 transition-colors hover:bg-muted/40"
+                >
+                  <div class="min-w-0 flex items-center gap-3.5">
+                    <CoinIcon
+                      coinId={row.coinId}
+                      coinName={row.name}
+                      proto={row.proto}
+                      size={rowIconSize}
+                      showBadge
+                      decorative
+                    />
+                    <div class="min-w-0 flex min-h-8 items-center">
+                      <p class="text-foreground truncate text-base leading-tight font-medium">{row.name}</p>
+                    </div>
                   </div>
-                </div>
 
-                <div class="justify-self-end pr-4 text-right tabular-nums">
-                  <p class="text-foreground/75 text-xs font-medium">{row.marketPriceDisplay}</p>
-                  <div
-                    class={`mt-0.5 flex items-center justify-end text-xs ${
-                      row.change24hDirection === 'up'
-                        ? 'text-emerald-700 dark:text-emerald-300'
-                        : row.change24hDirection === 'down'
-                          ? 'text-destructive'
-                          : 'text-muted-foreground'
-                    }`}
-                  >
-                    <span>{row.change24hDisplay}</span>
+                  <div class="justify-self-end pr-4 text-right tabular-nums">
+                    <p class="text-foreground/75 text-xs font-medium">{row.marketPriceDisplay}</p>
+                    <div
+                      class={`mt-0.5 flex items-center justify-end text-xs ${
+                        row.change24hDirection === 'up'
+                          ? 'text-emerald-700 dark:text-emerald-300'
+                          : row.change24hDirection === 'down'
+                            ? 'text-destructive'
+                            : 'text-muted-foreground'
+                      }`}
+                    >
+                      <span>{row.change24hDisplay}</span>
+                    </div>
                   </div>
-                </div>
 
-                <div class="text-right tabular-nums">
-                  <p class={`text-foreground text-base font-semibold ${hideHoldings ? 'holdings-obscured' : ''}`}>
-                    {row.fiatValueDisplay}
-                  </p>
-                  <p class={`text-muted-foreground mt-0.5 text-[13px] ${hideHoldings ? 'holdings-obscured' : ''}`}>
-                    {row.cryptoAmountDisplay}
-                  </p>
-                </div>
+                  <div class="text-right tabular-nums">
+                    <p class={`text-foreground text-base font-semibold ${hideHoldings ? 'holdings-obscured' : ''}`}>
+                      {row.fiatValueDisplay}
+                    </p>
+                    <p class={`text-muted-foreground mt-0.5 text-[13px] ${hideHoldings ? 'holdings-obscured' : ''}`}>
+                      {row.cryptoAmountDisplay}
+                    </p>
+                  </div>
 
-                <ChevronRightIcon class="text-muted-foreground/70 h-[18px] w-[18px] justify-self-end" aria-hidden="true" />
-              </li>
-            {/each}
-          </ul>
-        {/if}
-      </div>
+                  <ChevronRightIcon class="text-muted-foreground/70 h-[18px] w-[18px] justify-self-end" aria-hidden="true" />
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </ScrollArea.Viewport>
+        <ScrollArea.Scrollbar orientation="vertical" />
+      </ScrollArea.Root>
 
       {#if canScrollDown}
         <div

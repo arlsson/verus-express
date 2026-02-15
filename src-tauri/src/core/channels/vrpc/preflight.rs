@@ -4,6 +4,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
+use bitcoin::consensus::Decodable;
+use std::collections::HashSet;
+use std::io::Cursor;
 
 use crate::core::channels::store::{PreflightRecord, PreflightStore};
 use crate::core::channels::vrpc::provider::VrpcProvider;
@@ -69,6 +72,43 @@ fn parse_i64(value: Option<&Value>) -> Option<i64> {
     None
 }
 
+fn parse_fee_sat(value: Option<&Value>, fallback_sat: i64) -> i64 {
+    let fallback = fallback_sat.max(1);
+    let normalize = |candidate: i64| if candidate > 0 { candidate } else { fallback };
+
+    let Some(v) = value else {
+        return fallback;
+    };
+
+    if let Some(raw_sat) = v.as_i64() {
+        return normalize(raw_sat);
+    }
+    if let Some(raw_sat) = v.as_u64() {
+        return i64::try_from(raw_sat)
+            .map(normalize)
+            .unwrap_or(fallback);
+    }
+    if let Some(raw_coin) = v.as_f64() {
+        let raw_sat = ((raw_coin.max(0.0)) * SATOSHIS_PER_COIN as f64).round() as i64;
+        return normalize(raw_sat);
+    }
+    if let Some(raw_str) = v.as_str() {
+        let trimmed = raw_str.trim();
+        if trimmed.contains('.') || trimmed.contains('e') || trimmed.contains('E') {
+            if let Ok(raw_coin) = trimmed.parse::<f64>() {
+                let raw_sat = ((raw_coin.max(0.0)) * SATOSHIS_PER_COIN as f64).round() as i64;
+                return normalize(raw_sat);
+            }
+            return fallback;
+        }
+        if let Ok(raw_sat) = trimmed.parse::<i64>() {
+            return normalize(raw_sat);
+        }
+    }
+
+    fallback
+}
+
 fn parse_amount_sat(amount: &str) -> Result<i64, WalletError> {
     let parsed = amount
         .trim()
@@ -105,6 +145,45 @@ fn resolve_send_value(
         true,
         Some("Fee was deducted from the submitted amount due to available balance.".to_string()),
     ))
+}
+
+fn collect_payload_inputs_from_funded_tx(
+    funded_hex: &str,
+    candidates: &[(String, u32, i64, Option<String>)],
+) -> Result<Vec<VrpcInputRef>, WalletError> {
+    let raw = hex::decode(funded_hex.trim_start_matches("0x"))
+        .or_else(|_| hex::decode(funded_hex))
+        .map_err(|_| WalletError::OperationFailed)?;
+    let mut cursor = Cursor::new(&raw[..]);
+    let funded_tx: bitcoin::Transaction = bitcoin::Transaction::consensus_decode(&mut cursor)
+        .map_err(|_| WalletError::OperationFailed)?;
+
+    let mut seen = HashSet::<(String, u32)>::new();
+    let mut out = Vec::with_capacity(funded_tx.input.len());
+    for input in funded_tx.input {
+        let txid = input.previous_output.txid.to_string();
+        let vout = input.previous_output.vout;
+        if !seen.insert((txid.clone(), vout)) {
+            return Err(WalletError::OperationFailed);
+        }
+        let Some((_, _, satoshis, script_pub_key)) =
+            candidates.iter().find(|(c_txid, c_vout, _, _)| c_txid == &txid && *c_vout == vout)
+        else {
+            return Err(WalletError::OperationFailed);
+        };
+
+        out.push(VrpcInputRef {
+            txid,
+            vout,
+            satoshis: *satoshis,
+            script_pub_key: script_pub_key.clone(),
+        });
+    }
+
+    if out.is_empty() {
+        return Err(WalletError::OperationFailed);
+    }
+    Ok(out)
 }
 
 /// Run VRPC preflight: validate, build/fund tx, store record, return UI result.
@@ -144,43 +223,41 @@ pub async fn preflight(
     let (send_value_sat, fee_taken_from_amount, fee_taken_message) =
         resolve_send_value(submitted_sat, total, fee_estimate)?;
 
-    let inputs: Vec<Value> = selected
-        .iter()
-        .map(|(txid, vout, _, _)| serde_json::json!({"txid": txid, "vout": *vout}))
-        .collect();
     let amount_vrsc = send_value_sat as f64 / SATOSHIS_PER_COIN as f64;
     let outputs = serde_json::json!({ params.to_address.clone(): amount_vrsc });
 
+    // Keep the tx unfunded at this stage. Funding (with chosen UTXOs + fee) is done via fundrawtransaction.
+    let raw_inputs: Vec<Value> = Vec::new();
     let hex_unfunded = provider
-        .createrawtransaction(&inputs, &outputs)
+        .createrawtransaction(&raw_inputs, &outputs)
         .await?
         .as_str()
         .ok_or(WalletError::OperationFailed)?
         .to_string();
 
-    let funded = provider.fundrawtransaction(&hex_unfunded).await?;
+    let funding_utxos: Vec<Value> = selected
+        .iter()
+        .map(|(txid, vout, _, _)| serde_json::json!({"txid": txid, "voutnum": *vout}))
+        .collect();
+    let explicit_fee = fee_estimate as f64 / SATOSHIS_PER_COIN as f64;
+    let funded = provider
+        .fundrawtransaction_with_options(
+            &hex_unfunded,
+            Some(&funding_utxos),
+            Some(from_address),
+            Some(explicit_fee),
+        )
+        .await?;
     let funded_hex = funded
         .get("hex")
         .and_then(|v| v.as_str())
         .ok_or(WalletError::OperationFailed)?
         .to_string();
-    let fee_sat = funded
-        .get("fee")
-        .and_then(|v| v.as_f64().or_else(|| parse_i64(Some(v)).map(|i| i as f64)))
-        .unwrap_or(fee_estimate as f64);
-
-    let payload_inputs: Vec<VrpcInputRef> = selected
-        .iter()
-        .map(|(txid, vout, satoshis, script_pub_key)| VrpcInputRef {
-            txid: txid.clone(),
-            vout: *vout,
-            satoshis: *satoshis,
-            script_pub_key: script_pub_key.clone(),
-        })
-        .collect();
+    let fee_sat = parse_fee_sat(funded.get("fee"), fee_estimate);
+    let payload_inputs = collect_payload_inputs_from_funded_tx(&funded_hex, &selected)?;
 
     let preflight_id = Uuid::new_v4().to_string();
-    let fee_str = format!("{:.8}", fee_sat / SATOSHIS_PER_COIN as f64);
+    let fee_str = format!("{:.8}", fee_sat as f64 / SATOSHIS_PER_COIN as f64);
     let value_str = format!("{:.8}", send_value_sat as f64 / SATOSHIS_PER_COIN as f64);
     let payload = VrpcPreflightPayload {
         hex: funded_hex,
@@ -299,6 +376,26 @@ mod tests {
         assert_eq!(
             parsed[0].3.as_deref(),
             Some("76a914111111111111111111111111111111111111111188ac")
+        );
+    }
+
+    #[test]
+    fn parse_fee_sat_uses_fallback_when_rpc_reports_non_positive_fee() {
+        assert_eq!(
+            parse_fee_sat(Some(&json!(0)), DEFAULT_FEE_ESTIMATE_SAT),
+            DEFAULT_FEE_ESTIMATE_SAT
+        );
+        assert_eq!(
+            parse_fee_sat(Some(&json!("0.00000000")), DEFAULT_FEE_ESTIMATE_SAT),
+            DEFAULT_FEE_ESTIMATE_SAT
+        );
+    }
+
+    #[test]
+    fn parse_fee_sat_parses_decimal_coin_fee() {
+        assert_eq!(
+            parse_fee_sat(Some(&json!(0.0001)), DEFAULT_FEE_ESTIMATE_SAT),
+            10_000
         );
     }
 }

@@ -1,4 +1,4 @@
-import valuCoinCatalog from '$lib/coins/valuCoinCatalog.generated.json';
+import verusCoinCatalog from '$lib/coins/verusCoinCatalog.generated.json';
 import { resolveCoinPresentation } from '$lib/coins/presentation.js';
 import { isWalletSupportedAsset } from '$lib/coins/supportedAssets.js';
 import type { CoinDefinition, WalletNetwork } from '$lib/types/wallet.js';
@@ -46,7 +46,7 @@ interface BuildAddAssetCatalogInput {
   query: string;
 }
 
-const catalogCoins = valuCoinCatalog as CatalogCoin[];
+const catalogCoins = verusCoinCatalog as CatalogCoin[];
 
 const STATUS_ORDER: Record<AddAssetStatus, number> = {
   added: 0,

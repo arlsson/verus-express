@@ -33,8 +33,8 @@ const sourcePaths = {
 };
 
 const outputPaths = {
-  catalog: path.join(repoRoot, 'src/lib/coins/valuCoinCatalog.generated.json'),
-  meta: path.join(repoRoot, 'src/lib/coins/valuCoinCatalog.meta.json'),
+  catalog: path.join(repoRoot, 'src/lib/coins/verusCoinCatalog.generated.json'),
+  meta: path.join(repoRoot, 'src/lib/coins/verusCoinCatalog.meta.json'),
   iconRoot: path.join(repoRoot, 'static/images/coin-logos'),
 };
 
@@ -484,14 +484,14 @@ async function main() {
   if (checkMode) {
     await checkOutputs(payload);
     console.log(
-      `valu coin catalog up-to-date (${payload.counts.totalCoins} coins, ${payload.counts.directLogoHits} direct logo hits, ${payload.counts.generatedIcons} generated fallbacks).`
+      `verus coin catalog up-to-date (${payload.counts.totalCoins} coins, ${payload.counts.directLogoHits} direct logo hits, ${payload.counts.generatedIcons} generated fallbacks).`
     );
     return;
   }
 
   await writeOutputs(payload);
   console.log(
-    `valu coin catalog synced (${payload.counts.totalCoins} coins, ${payload.counts.directLogoHits} direct logo hits, ${payload.counts.generatedIcons} generated fallbacks).`
+    `verus coin catalog synced (${payload.counts.totalCoins} coins, ${payload.counts.directLogoHits} direct logo hits, ${payload.counts.generatedIcons} generated fallbacks).`
   );
 }
 

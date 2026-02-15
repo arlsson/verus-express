@@ -17,6 +17,7 @@ use crate::types::{VrpcTransferPreflightParams, VrpcTransferPreflightResult, Wal
 
 const SATOSHIS_PER_COIN: i64 = 100_000_000;
 const DEFAULT_PARENT_FEE: f64 = 0.0001;
+const DEFAULT_PARENT_FEE_SAT: i64 = 10_000;
 const TRANSFER_PREFLIGHT_TTL: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Debug, Clone)]
@@ -50,25 +51,6 @@ fn parse_u32(value: Option<&Value>) -> Option<u32> {
     parse_i64(value).and_then(|x| (x >= 0).then_some(x as u32))
 }
 
-fn parse_f64(value: Option<&Value>) -> Option<f64> {
-    let v = value?;
-    if let Some(x) = v.as_f64() {
-        return Some(x);
-    }
-    if let Some(x) = v.as_i64() {
-        return Some(x as f64);
-    }
-    if let Some(x) = v.as_u64() {
-        return Some(x as f64);
-    }
-    if let Some(x) = v.as_str() {
-        if let Ok(parsed) = x.parse::<f64>() {
-            return Some(parsed);
-        }
-    }
-    None
-}
-
 fn parse_string(value: Option<&Value>) -> Option<String> {
     value?.as_str().map(ToString::to_string)
 }
@@ -83,10 +65,46 @@ fn parse_sendcurrency_hex(raw: Value) -> Result<String, WalletError> {
     Err(WalletError::OperationFailed)
 }
 
+fn parse_fee_sat(value: Option<&Value>, fallback_sat: i64) -> i64 {
+    let fallback = fallback_sat.max(1);
+    let normalize = |candidate: i64| if candidate > 0 { candidate } else { fallback };
+
+    let Some(v) = value else {
+        return fallback;
+    };
+
+    if let Some(raw_sat) = v.as_i64() {
+        return normalize(raw_sat);
+    }
+    if let Some(raw_sat) = v.as_u64() {
+        return i64::try_from(raw_sat)
+            .map(normalize)
+            .unwrap_or(fallback);
+    }
+    if let Some(raw_coin) = v.as_f64() {
+        let raw_sat = ((raw_coin.max(0.0)) * SATOSHIS_PER_COIN as f64).round() as i64;
+        return normalize(raw_sat);
+    }
+    if let Some(raw_str) = v.as_str() {
+        let trimmed = raw_str.trim();
+        if trimmed.contains('.') || trimmed.contains('e') || trimmed.contains('E') {
+            if let Ok(raw_coin) = trimmed.parse::<f64>() {
+                let raw_sat = ((raw_coin.max(0.0)) * SATOSHIS_PER_COIN as f64).round() as i64;
+                return normalize(raw_sat);
+            }
+            return fallback;
+        }
+        if let Ok(raw_sat) = trimmed.parse::<i64>() {
+            return normalize(raw_sat);
+        }
+    }
+
+    fallback
+}
+
 fn parse_fund_result(raw: Value) -> Result<(String, i64), WalletError> {
     let hex = parse_string(raw.get("hex")).ok_or(WalletError::OperationFailed)?;
-    let fee_coin = parse_f64(raw.get("fee")).unwrap_or(DEFAULT_PARENT_FEE);
-    let fee_sat = (fee_coin * SATOSHIS_PER_COIN as f64).round() as i64;
+    let fee_sat = parse_fee_sat(raw.get("fee"), DEFAULT_PARENT_FEE_SAT);
     Ok((hex, fee_sat))
 }
 
@@ -269,7 +287,18 @@ pub async fn preflight_transfer(
         return Err(WalletError::InsufficientFunds);
     }
 
-    let funded_raw = provider.fundrawtransaction(&unfunded_hex).await?;
+    let funding_utxos: Vec<Value> = available_utxos
+        .iter()
+        .map(|utxo| serde_json::json!({"txid": utxo.txid, "voutnum": utxo.vout}))
+        .collect();
+    let funded_raw = provider
+        .fundrawtransaction_with_options(
+            &unfunded_hex,
+            Some(&funding_utxos),
+            Some(from_address),
+            Some(DEFAULT_PARENT_FEE),
+        )
+        .await?;
     let (funded_hex, fee_sat) = parse_fund_result(funded_raw)?;
     let payload_inputs = collect_payload_inputs(&funded_hex, &available_utxos)?;
     if payload_inputs.is_empty() {
@@ -387,5 +416,19 @@ mod tests {
             parse_sendcurrency_hex(json!({"hex": "babe"})).expect("hex shape"),
             "babe"
         );
+    }
+
+    #[test]
+    fn parse_fund_result_uses_default_fee_when_non_positive_reported() {
+        let (hex, fee_sat) = parse_fund_result(json!({"hex": "deadbeef", "fee": 0})).expect("parse");
+        assert_eq!(hex, "deadbeef");
+        assert_eq!(fee_sat, DEFAULT_PARENT_FEE_SAT);
+    }
+
+    #[test]
+    fn parse_fund_result_parses_decimal_coin_fee() {
+        let (_, fee_sat) =
+            parse_fund_result(json!({"hex": "deadbeef", "fee": 0.0001})).expect("parse");
+        assert_eq!(fee_sat, DEFAULT_PARENT_FEE_SAT);
     }
 }

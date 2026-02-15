@@ -22,12 +22,12 @@ async function ensureFileExists(filePath) {
 }
 
 function fail(message) {
-  console.error(`check:valu-coins failed: ${message}`);
+  console.error(`check:verus-coins failed: ${message}`);
   process.exit(1);
 }
 
 function runSyncCheck() {
-  const syncScriptPath = path.join(repoRoot, 'scripts/sync-valu-coin-catalog.mjs');
+  const syncScriptPath = path.join(repoRoot, 'scripts/sync-verus-coin-catalog.mjs');
   const result = spawnSync(process.execPath, [syncScriptPath, '--check'], {
     cwd: repoRoot,
     stdio: 'pipe',
@@ -170,13 +170,13 @@ async function validateCatalog(catalogPath, metaPath) {
 async function main() {
   runSyncCheck();
 
-  const catalogPath = path.join(repoRoot, 'src/lib/coins/valuCoinCatalog.generated.json');
-  const metaPath = path.join(repoRoot, 'src/lib/coins/valuCoinCatalog.meta.json');
+  const catalogPath = path.join(repoRoot, 'src/lib/coins/verusCoinCatalog.generated.json');
+  const metaPath = path.join(repoRoot, 'src/lib/coins/verusCoinCatalog.meta.json');
 
   const stats = await validateCatalog(catalogPath, metaPath);
 
   console.log(
-    `check:valu-coins passed (${stats.totalCoins} coins, ${stats.directLogoHits} direct logo hits, ${stats.generatedIcons} generated fallbacks).`
+    `check:verus-coins passed (${stats.totalCoins} coins, ${stats.directLogoHits} direct logo hits, ${stats.generatedIcons} generated fallbacks).`
   );
 }
 

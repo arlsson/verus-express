@@ -3,7 +3,7 @@ owner: lite-wallet-team
 last_reviewed: 2026-02-14
 ---
 
-# Valu coin catalog parity
+# Verus coin catalog parity
 
 This document defines how desktop `lite-wallet` imports coin display metadata and
 iconography from `valu-mobile` (`newsend2`) without changing backend operational
@@ -25,8 +25,8 @@ coin registry scope.
 
 ## Generated desktop artifacts
 
-- Catalog JSON: `src/lib/coins/valuCoinCatalog.generated.json`
-- Catalog metadata: `src/lib/coins/valuCoinCatalog.meta.json`
+- Catalog JSON: `src/lib/coins/verusCoinCatalog.generated.json`
+- Catalog metadata: `src/lib/coins/verusCoinCatalog.meta.json`
 - Copied icon assets: `static/images/coin-logos/**`
 
 Catalog entries may include `coinPaprikaId` when Valu defines
@@ -35,9 +35,9 @@ Catalog entries may include `coinPaprikaId` when Valu defines
 ## Sync commands
 
 - Regenerate:
-  - `yarn sync:valu-coins`
+  - `yarn sync:verus-coins`
 - Validate drift + parity invariants:
-  - `yarn check:valu-coins`
+  - `yarn check:verus-coins`
 
 ## Runtime fallback rules
 
@@ -62,6 +62,6 @@ Current baseline (from `valu-mobile` `newsend2`):
 
 If these counts change, update:
 
-- `scripts/check-valu-coin-catalog.mjs` expected invariants.
+- `scripts/check-verus-coin-catalog.mjs` expected invariants.
 - This document's baseline section.
 - Any impacted UI behavior assumptions.
