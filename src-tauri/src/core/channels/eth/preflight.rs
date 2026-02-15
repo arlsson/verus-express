@@ -171,7 +171,8 @@ pub async fn preflight_erc20(
     let amount_raw = parse_token_amount(&params.amount, coin.decimals as usize)?;
 
     let fee_params = current_fee_params(provider).await?;
-    let abi: Abi = serde_json::from_str(ERC20_SEND_ABI).map_err(|_| WalletError::OperationFailed)?;
+    let abi: Abi =
+        serde_json::from_str(ERC20_SEND_ABI).map_err(|_| WalletError::OperationFailed)?;
     let rpc = Arc::new(provider.rpc_provider.clone());
     let contract = Contract::new(token_address, abi, rpc.clone());
 

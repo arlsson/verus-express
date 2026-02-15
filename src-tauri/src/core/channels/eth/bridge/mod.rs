@@ -24,16 +24,13 @@ use crate::types::bridge::{
     BridgeTransferPreflightResult,
 };
 use crate::types::transaction::SendResult;
-use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
 
 pub async fn get_conversion_paths(
     request: &BridgeConversionPathRequest,
-    network: WalletNetwork,
     vrpc_provider: &VrpcProvider,
-    eth_provider: &EthNetworkProvider,
 ) -> Result<BridgeConversionPathsResult, WalletError> {
-    paths::get_conversion_paths(request, network, vrpc_provider, eth_provider).await
+    paths::get_conversion_paths(request, vrpc_provider).await
 }
 
 pub async fn preflight(
@@ -61,5 +58,11 @@ pub async fn send(
     session_manager: &Arc<Mutex<SessionManager>>,
     provider_pool: &EthProviderPool,
 ) -> Result<SendResult, WalletError> {
-    send::send(preflight_id, preflight_store, session_manager, provider_pool).await
+    send::send(
+        preflight_id,
+        preflight_store,
+        session_manager,
+        provider_pool,
+    )
+    .await
 }

@@ -68,11 +68,11 @@
             onNavigateToConvert={() => (activeSection = 'conversions')}
           />
         {:else if activeSection === 'send'}
-          <Send />
+          <Send onClose={() => (activeSection = 'overview')} />
         {:else if activeSection === 'receive'}
           <Receive />
         {:else if activeSection === 'conversions'}
-          <Conversions />
+          <Conversions onClose={() => (activeSection = 'overview')} />
         {:else if activeSection === 'identity'}
           <Identity />
         {:else if activeSection === 'apps'}

@@ -23,21 +23,67 @@ use crate::types::{
 pub async fn get_bridge_conversion_paths(
     request: BridgeConversionPathRequest,
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
-    _coin_registry: State<'_, Arc<CoinRegistry>>,
-    _vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
+    coin_registry: State<'_, Arc<CoinRegistry>>,
+    vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
     _eth_provider_pool: State<'_, Arc<EthProviderPool>>,
 ) -> Result<BridgeConversionPathsResult, WalletError> {
     let session = session_manager.lock().await;
     if !session.is_unlocked() {
         return Err(WalletError::WalletLocked);
     }
+    let (session_vrpc_address, _, _) = session.get_addresses()?;
+    let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
     drop(session);
 
     let prefix = request.channel_id.split('.').next().unwrap_or_default();
     match prefix {
-        "vrpc" | "eth" | "erc20" => Err(WalletError::BridgeNotImplemented),
+        "vrpc" => {
+            get_bridge_conversion_paths_vrpc(
+                request,
+                &session_vrpc_address,
+                network,
+                coin_registry.as_ref(),
+                vrpc_provider_pool.inner().as_ref(),
+            )
+            .await
+        }
+        "eth" | "erc20" => Err(WalletError::BridgeNotImplemented),
         _ => Err(WalletError::UnsupportedChannel),
     }
+}
+
+async fn get_bridge_conversion_paths_vrpc(
+    request: BridgeConversionPathRequest,
+    session_vrpc_address: &str,
+    network: WalletNetwork,
+    coin_registry: &CoinRegistry,
+    vrpc_provider_pool: &VrpcProviderPool,
+) -> Result<BridgeConversionPathsResult, WalletError> {
+    let resolved = vrpc::parse_vrpc_channel_id(&request.channel_id, Some(session_vrpc_address))?;
+    if resolved.address != session_vrpc_address {
+        return Err(WalletError::InvalidAddress);
+    }
+
+    let is_testnet = matches!(network, WalletNetwork::Testnet);
+    let source_coin = coin_registry
+        .find_by_id(&request.coin_id, is_testnet)
+        .ok_or(WalletError::UnsupportedChannel)?;
+    if !source_coin
+        .compatible_channels
+        .iter()
+        .any(|channel| matches!(channel, Channel::Vrpc))
+    {
+        return Err(WalletError::UnsupportedChannel);
+    }
+    if source_coin.system_id != resolved.system_id {
+        return Err(WalletError::UnsupportedChannel);
+    }
+
+    crate::core::channels::eth::bridge::get_conversion_paths(
+        &request,
+        vrpc_provider_pool.for_network(network),
+    )
+    .await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -128,7 +174,8 @@ async fn preflight_bridge_vrpc(
     }
 
     let mut vrpc_params = to_vrpc_bridge_params(&params);
-    vrpc_params.channel_id = vrpc::canonical_vrpc_channel_id(&resolved.address, &resolved.system_id);
+    vrpc_params.channel_id =
+        vrpc::canonical_vrpc_channel_id(&resolved.address, &resolved.system_id);
 
     let vrpc_result = vrpc::preflight_transfer(
         vrpc_params,
@@ -181,7 +228,8 @@ async fn preflight_bridge_eth(
     let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
     drop(session);
 
-    let coin_id = crate::core::channels::eth::parse_coin_channel_id(&params.channel_id, expected_prefix)?;
+    let coin_id =
+        crate::core::channels::eth::parse_coin_channel_id(&params.channel_id, expected_prefix)?;
     let is_testnet = matches!(network, WalletNetwork::Testnet);
     let coin = coin_registry
         .find_by_id(&coin_id, is_testnet)
@@ -191,7 +239,11 @@ async fn preflight_bridge_eth(
     } else {
         Channel::Erc20
     };
-    if !coin.compatible_channels.iter().any(|ch| ch == &expected_channel) {
+    if !coin
+        .compatible_channels
+        .iter()
+        .any(|ch| ch == &expected_channel)
+    {
         return Err(WalletError::UnsupportedChannel);
     }
 
@@ -237,7 +289,7 @@ fn bridge_route_from_params(params: &BridgeTransferPreflightParams) -> BridgeTra
 
 #[cfg(test)]
 mod tests {
-    use super::bridge_route_from_params;
+    use super::{bridge_route_from_params, to_vrpc_bridge_params};
     use crate::types::BridgeTransferPreflightParams;
 
     #[test]

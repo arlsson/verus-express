@@ -187,6 +187,80 @@ export interface VrpcTransferPreflightResult {
   memo?: string | null;
 }
 
+export interface BridgeConversionPathRequest {
+  coinId: string;
+  channelId: string;
+  sourceCurrency: string;
+  destinationCurrency?: string | null;
+}
+
+export interface BridgeConversionPathQuote {
+  destinationId: string;
+  destinationDisplayName?: string | null;
+  destinationDisplayTicker?: string | null;
+  convertTo?: string | null;
+  exportTo?: string | null;
+  via?: string | null;
+  mapTo?: string | null;
+  price?: string | null;
+  viaPriceInRoot?: string | null;
+  destPriceInVia?: string | null;
+  gateway: boolean;
+  mapping: boolean;
+  bounceback: boolean;
+  ethDestination: boolean;
+}
+
+export interface BridgeConversionPathsResult {
+  sourceCurrency: string;
+  paths: Record<string, BridgeConversionPathQuote[]>;
+}
+
+export interface BridgeTransferPreflightParams {
+  coinId: string;
+  channelId: string;
+  sourceAddress?: string | null;
+  destination: string;
+  amount: string;
+  convertTo?: string | null;
+  exportTo?: string | null;
+  via?: string | null;
+  feeCurrency?: string | null;
+  feeSatoshis?: string | null;
+  preconvert?: boolean | null;
+  mapTo?: string | null;
+  vdxfTag?: string | null;
+  memo?: string | null;
+}
+
+export interface BridgeTransferRoute {
+  convertTo?: string | null;
+  exportTo?: string | null;
+  via?: string | null;
+  mapTo?: string | null;
+}
+
+export interface BridgeExecutionHint {
+  engine: string;
+  requiresTokenApproval: boolean;
+  bridgeContract?: string | null;
+}
+
+export interface BridgeTransferPreflightResult {
+  preflightId: string;
+  fee: string;
+  feeCurrency: string;
+  value: string;
+  amountSubmitted: string;
+  amountAdjusted?: string | null;
+  toAddress: string;
+  fromAddress: string;
+  warnings: PreflightWarning[];
+  memo?: string | null;
+  route: BridgeTransferRoute;
+  execution: BridgeExecutionHint;
+}
+
 export interface BeginGuardSessionRequest {
   importText: string;
   importMode: GuardImportMode;

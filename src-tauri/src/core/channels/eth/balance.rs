@@ -46,13 +46,16 @@ pub async fn get_erc20_balance(
     from_address: &str,
     coin: &CoinDefinition,
 ) -> Result<BalanceResult, WalletError> {
-    let parsed_from: Address = from_address.parse().map_err(|_| WalletError::InvalidAddress)?;
+    let parsed_from: Address = from_address
+        .parse()
+        .map_err(|_| WalletError::InvalidAddress)?;
     let token_address: Address = coin
         .currency_id
         .parse()
         .map_err(|_| WalletError::InvalidAddress)?;
 
-    let abi: Abi = serde_json::from_str(ERC20_BALANCE_ABI).map_err(|_| WalletError::OperationFailed)?;
+    let abi: Abi =
+        serde_json::from_str(ERC20_BALANCE_ABI).map_err(|_| WalletError::OperationFailed)?;
     let rpc = Arc::new(provider.rpc_provider.clone());
     let contract = Contract::new(token_address, abi, rpc);
 

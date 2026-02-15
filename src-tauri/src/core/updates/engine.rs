@@ -586,11 +586,8 @@ async fn run_update_loop(
 
         if !bootstrap_completed {
             let bootstrap_started_at = Instant::now();
-            let (prioritized_channels, remainder_channels) = partition_bootstrap_channels(
-                &channels,
-                &priority_coin_ids,
-                &priority_channel_ids,
-            );
+            let (prioritized_channels, remainder_channels) =
+                partition_bootstrap_channels(&channels, &priority_coin_ids, &priority_channel_ids);
             println!(
                 "[UPDATE] Bootstrap start: prioritized_channels={} remaining_channels={}",
                 prioritized_channels.len(),
@@ -1007,8 +1004,12 @@ mod tests {
         let rate_coins = vec![vrsc.clone(), pure.clone()];
         let prioritized_channels = vec![(pure.id.clone(), "vrpc.Raddr.iSystem".to_string())];
 
-        let prioritized = prioritized_rate_coins(&rate_coins, &prioritized_channels, &HashSet::new());
-        let prioritized_ids = prioritized.into_iter().map(|coin| coin.id).collect::<HashSet<_>>();
+        let prioritized =
+            prioritized_rate_coins(&rate_coins, &prioritized_channels, &HashSet::new());
+        let prioritized_ids = prioritized
+            .into_iter()
+            .map(|coin| coin.id)
+            .collect::<HashSet<_>>();
 
         assert!(prioritized_ids.contains(&pure.id));
         assert!(prioritized_ids.contains(&vrsc.id));

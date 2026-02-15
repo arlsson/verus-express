@@ -1,7 +1,7 @@
 use ethers::types::U256;
 use ethers::utils::format_units;
 
-use crate::core::channels::eth::provider::{EtherscanTxRecord, EthNetworkProvider};
+use crate::core::channels::eth::provider::{EthNetworkProvider, EtherscanTxRecord};
 use crate::core::coins::CoinDefinition;
 use crate::types::transaction::Transaction;
 use crate::types::wallet::WalletNetwork;

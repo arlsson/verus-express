@@ -401,10 +401,7 @@ mod tests {
         let pure_id = infer_coinpaprika_id(&pure);
         assert_ne!(bridge_id, "vrsc-verus-coin");
         assert_ne!(pure_id, "vrsc-verus-coin");
-        assert_eq!(
-            bridge_id,
-            "i3f7tsctfkippiedy8qr5tep9p4qdvebdx-bridge-veth"
-        );
+        assert_eq!(bridge_id, "i3f7tsctfkippiedy8qr5tep9p4qdvebdx-bridge-veth");
         assert_eq!(pure_id, "ihax5qyqgbcmgqjkkrporpzubx2offxgny-pure");
     }
 

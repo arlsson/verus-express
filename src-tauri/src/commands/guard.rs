@@ -20,8 +20,8 @@ use crate::types::wallet::{WalletNetwork, WalletSecretKind};
 use crate::types::{
     BeginGuardSessionRequest, BeginGuardSessionResult, EndGuardSessionRequest,
     EndGuardSessionResult, GuardIdentityLookupRequest, GuardIdentityLookupResult,
-    GuardIdentityPreflightRequest, GuardIdentitySendRequest, GuardImportMode,
-    GuardPreflightResult, GuardSendResult, WalletError,
+    GuardIdentityPreflightRequest, GuardIdentitySendRequest, GuardImportMode, GuardPreflightResult,
+    GuardSendResult, WalletError,
 };
 
 fn normalize_hex_private_key_candidate(input: &str) -> Option<String> {
@@ -57,7 +57,9 @@ fn classify_import_text(import_text: &str) -> Result<(WalletSecretKind, String),
     Ok((WalletSecretKind::SeedText, trimmed.to_string()))
 }
 
-fn classify_mnemonic24_import_text(import_text: &str) -> Result<(WalletSecretKind, String), WalletError> {
+fn classify_mnemonic24_import_text(
+    import_text: &str,
+) -> Result<(WalletSecretKind, String), WalletError> {
     let normalized_words = import_text
         .split_whitespace()
         .map(|word| word.trim().to_lowercase())
@@ -290,7 +292,8 @@ mod tests {
 
     #[test]
     fn classify_text_auto_resolves_wif() {
-        let keys = derive_keys_v1("guard-wif-classification", Network::Mainnet).expect("derive keys");
+        let keys =
+            derive_keys_v1("guard-wif-classification", Network::Mainnet).expect("derive keys");
         let (secret_kind, normalized) =
             classify_import_text_by_mode(&keys.wif, GuardImportMode::TextAuto)
                 .expect("wif should be classified correctly");
@@ -301,7 +304,8 @@ mod tests {
 
     #[test]
     fn classify_text_auto_resolves_private_key_hex() {
-        let keys = derive_keys_v1("guard-hex-classification", Network::Mainnet).expect("derive keys");
+        let keys =
+            derive_keys_v1("guard-hex-classification", Network::Mainnet).expect("derive keys");
         let hex_with_prefix = format!("0x{}", keys.eth_private_key.to_uppercase());
         let (secret_kind, normalized) =
             classify_import_text_by_mode(&hex_with_prefix, GuardImportMode::TextAuto)

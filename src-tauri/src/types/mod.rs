@@ -2,8 +2,8 @@
 // Type definition re-exports
 // Last Updated: Added transaction module and Module 8 preflight/send types
 
-pub mod errors;
 pub mod bridge;
+pub mod errors;
 pub mod guard;
 pub mod identity;
 pub mod transaction;
@@ -19,8 +19,8 @@ pub use errors::WalletError;
 pub use guard::{
     BeginGuardSessionRequest, BeginGuardSessionResult, EndGuardSessionRequest,
     EndGuardSessionResult, GuardIdentityLookupRequest, GuardIdentityLookupResult,
-    GuardIdentityPreflightRequest, GuardIdentitySendRequest, GuardImportMode,
-    GuardPreflightResult, GuardSendResult,
+    GuardIdentityPreflightRequest, GuardIdentitySendRequest, GuardImportMode, GuardPreflightResult,
+    GuardSendResult,
 };
 pub use identity::{
     HighRiskChange, IdentityOperation, IdentityPatch, IdentityPreflightParams,

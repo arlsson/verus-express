@@ -220,7 +220,10 @@ impl EtherscanHistoryClient {
             return Err(WalletError::NetworkError);
         }
 
-        let payload: Value = response.json().await.map_err(|_| WalletError::OperationFailed)?;
+        let payload: Value = response
+            .json()
+            .await
+            .map_err(|_| WalletError::OperationFailed)?;
 
         let status = payload
             .get("status")
@@ -242,8 +245,8 @@ impl EtherscanHistoryClient {
 
         let mut out = Vec::with_capacity(records.len());
         for entry in records {
-            let tx: EtherscanTxRecord = serde_json::from_value(entry.clone())
-                .map_err(|_| WalletError::OperationFailed)?;
+            let tx: EtherscanTxRecord =
+                serde_json::from_value(entry.clone()).map_err(|_| WalletError::OperationFailed)?;
             out.push(tx);
         }
 

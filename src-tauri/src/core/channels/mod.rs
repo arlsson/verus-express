@@ -167,7 +167,10 @@ pub async fn route_preflight(
 
             let coin_id = eth::parse_coin_channel_id(channel_id, "eth")?;
             let coin = resolve_coin_by_channel(coin_registry, &coin_id, network)?;
-            if !coin.compatible_channels.iter().any(|ch| matches!(ch, crate::core::coins::Channel::Eth))
+            if !coin
+                .compatible_channels
+                .iter()
+                .any(|ch| matches!(ch, crate::core::coins::Channel::Eth))
             {
                 return Err(WalletError::UnsupportedChannel);
             }
@@ -305,7 +308,10 @@ pub async fn route_get_balances(
 
             let coin_id = eth::parse_coin_channel_id(channel_id, "eth")?;
             let coin = resolve_coin_by_channel(coin_registry, &coin_id, network)?;
-            if !coin.compatible_channels.iter().any(|ch| matches!(ch, crate::core::coins::Channel::Eth))
+            if !coin
+                .compatible_channels
+                .iter()
+                .any(|ch| matches!(ch, crate::core::coins::Channel::Eth))
             {
                 return Err(WalletError::UnsupportedChannel);
             }
@@ -328,7 +334,8 @@ pub async fn route_get_balances(
                 return Err(WalletError::UnsupportedChannel);
             }
 
-            eth::get_erc20_balance(eth_provider_pool.for_network(network)?, &eth_address, &coin).await
+            eth::get_erc20_balance(eth_provider_pool.for_network(network)?, &eth_address, &coin)
+                .await
         }
         _ => Err(WalletError::UnsupportedChannel),
     }
@@ -389,7 +396,10 @@ pub async fn route_get_transactions(
 
             let coin_id = eth::parse_coin_channel_id(channel_id, "eth")?;
             let coin = resolve_coin_by_channel(coin_registry, &coin_id, network)?;
-            if !coin.compatible_channels.iter().any(|ch| matches!(ch, crate::core::coins::Channel::Eth))
+            if !coin
+                .compatible_channels
+                .iter()
+                .any(|ch| matches!(ch, crate::core::coins::Channel::Eth))
             {
                 return Err(WalletError::UnsupportedChannel);
             }

@@ -13,6 +13,8 @@
   import PlusIcon from '@lucide/svelte/icons/plus';
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+  import EyeIcon from '@lucide/svelte/icons/eye';
+  import EyeOffIcon from '@lucide/svelte/icons/eye-off';
   import { balanceStore } from '$lib/stores/balances.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { ratesStore } from '$lib/stores/rates.js';
@@ -53,6 +55,7 @@
   let hasOverviewScroll = $state(false);
   let canScrollDown = $state(false);
   let hasSeenScrollHint = $state(false);
+  let hideHoldings = $state(false);
 
   function updateScrollAffordance(): void {
     if (!listScrollElement) {
@@ -130,17 +133,39 @@
         hasOverviewScroll ? 'shadow-[0_10px_22px_-18px_rgba(0,0,0,0.72)]' : ''
       }`}
     >
-      <div class="min-w-0">
-        <div class="flex -translate-y-2 items-start">
-          {#if overview.heroFiatSymbolDisplay}
-            <span class="text-muted-foreground mt-1 mr-1.5 text-xl font-semibold sm:text-2xl">
-              {overview.heroFiatSymbolDisplay}
-            </span>
-          {/if}
-          <p class="font-google-sans-17pt text-4xl leading-[1.02] font-semibold tracking-tight sm:text-5xl">
-            {overview.heroFiatValueDisplay}
-          </p>
+      <div class="flex items-start justify-between gap-4">
+        <div class="relative z-20 min-w-0">
+          <div class={`holdings-obscured-bleed flex items-start ${hideHoldings ? 'holdings-obscured' : ''}`}>
+            {#if overview.heroFiatSymbolDisplay}
+              <span
+                class="text-muted-foreground mt-1 mr-1.5 text-xl font-semibold sm:text-2xl"
+              >
+                {overview.heroFiatSymbolDisplay}
+              </span>
+            {/if}
+            <p class="font-google-sans-17pt text-4xl leading-[1.02] font-semibold tracking-tight sm:text-5xl">
+              {overview.heroFiatValueDisplay}
+            </p>
+          </div>
         </div>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          class="text-muted-foreground/85 mt-0.5 rounded-full hover:text-foreground"
+          aria-label={hideHoldings ? i18n.t('wallet.overview.showHoldings') : i18n.t('wallet.overview.hideHoldings')}
+          title={hideHoldings ? i18n.t('wallet.overview.showHoldings') : i18n.t('wallet.overview.hideHoldings')}
+          onclick={() => {
+            hideHoldings = !hideHoldings;
+          }}
+        >
+          {#if hideHoldings}
+            <EyeIcon class="h-4 w-4" />
+          {:else}
+            <EyeOffIcon class="h-4 w-4" />
+          {/if}
+        </Button>
+      </div>
+      <div class="min-w-0">
         {#if overview.heroHasPartialRates}
           <p class="text-muted-foreground mt-0.5 text-xs">
             {i18n.t('wallet.overview.partialRatesNotice')}
@@ -148,7 +173,7 @@
         {/if}
       </div>
 
-      <div class="mt-5 w-full md:max-w-[700px]">
+      <div class="mt-5 w-full">
         <div class="flex w-full gap-2">
           <div class="grid w-full flex-1 grid-cols-3 gap-2">
             <Button variant="secondary" size="lg" class="h-10 w-full gap-1.5 rounded-md px-3" onclick={onNavigateToReceive}>
@@ -223,8 +248,12 @@
                 </div>
 
                 <div class="text-right tabular-nums">
-                  <p class="text-foreground text-base font-semibold">{row.fiatValueDisplay}</p>
-                  <p class="text-muted-foreground mt-0.5 text-[13px]">{row.cryptoAmountDisplay}</p>
+                  <p class={`text-foreground text-base font-semibold ${hideHoldings ? 'holdings-obscured' : ''}`}>
+                    {row.fiatValueDisplay}
+                  </p>
+                  <p class={`text-muted-foreground mt-0.5 text-[13px] ${hideHoldings ? 'holdings-obscured' : ''}`}>
+                    {row.cryptoAmountDisplay}
+                  </p>
                 </div>
 
                 <ChevronRightIcon class="text-muted-foreground/70 h-[18px] w-[18px] justify-self-end" aria-hidden="true" />
@@ -257,6 +286,17 @@
 <style>
   .overview-list-scroll {
     scrollbar-gutter: stable;
+  }
+
+  .holdings-obscured {
+    filter: blur(12px);
+    user-select: none;
+    pointer-events: none;
+    transition: filter 120ms ease;
+  }
+
+  .holdings-obscured-bleed {
+    padding: 0.3rem 0.45rem;
   }
 
   .scroll-hint {

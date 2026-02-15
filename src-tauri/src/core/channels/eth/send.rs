@@ -83,8 +83,12 @@ pub async fn send(
             value,
             ..
         } => {
-            let parsed_from: Address = from_address.parse().map_err(|_| WalletError::InvalidAddress)?;
-            let parsed_to: Address = to_address.parse().map_err(|_| WalletError::InvalidAddress)?;
+            let parsed_from: Address = from_address
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
+            let parsed_to: Address = to_address
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
             let value_wei = parse_u256(&value_wei)?;
             let gas_limit = parse_u256(&gas_limit)?;
             let max_fee_per_gas = parse_u256(&max_fee_per_gas)?;
@@ -125,9 +129,15 @@ pub async fn send(
             value,
             ..
         } => {
-            let parsed_from: Address = from_address.parse().map_err(|_| WalletError::InvalidAddress)?;
-            let parsed_to: Address = to_address.parse().map_err(|_| WalletError::InvalidAddress)?;
-            let token_address: Address = token_address.parse().map_err(|_| WalletError::InvalidAddress)?;
+            let parsed_from: Address = from_address
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
+            let parsed_to: Address = to_address
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
+            let token_address: Address = token_address
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
             let amount_raw = parse_u256(&token_value_raw)?;
             let gas_limit = parse_u256(&gas_limit)?;
             let max_fee_per_gas = parse_u256(&max_fee_per_gas)?;
@@ -178,7 +188,11 @@ fn parse_u256(input: &str) -> Result<U256, WalletError> {
     U256::from_dec_str(input.trim()).map_err(|_| WalletError::OperationFailed)
 }
 
-fn fee_drift_exceeds_cap(gas_limit: U256, current_max_fee_per_gas: U256, max_fee_cap: U256) -> bool {
+fn fee_drift_exceeds_cap(
+    gas_limit: U256,
+    current_max_fee_per_gas: U256,
+    max_fee_cap: U256,
+) -> bool {
     gas_limit.saturating_mul(current_max_fee_per_gas) > max_fee_cap
 }
 

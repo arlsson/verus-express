@@ -21,10 +21,12 @@ impl EthChannelConfig {
         let infura_project_id = read_required_env("INFURA_PROJECT_ID")?;
         let etherscan_api_key = read_required_env("ETHERSCAN_API_KEY")?;
 
-        let mainnet_rpc_url = read_optional_env("ETH_MAINNET_RPC_URL")
-            .unwrap_or_else(|| DEFAULT_MAINNET_INFURA_URL.replace("{project_id}", &infura_project_id));
-        let testnet_rpc_url = read_optional_env("ETH_TESTNET_RPC_URL")
-            .unwrap_or_else(|| DEFAULT_TESTNET_INFURA_URL.replace("{project_id}", &infura_project_id));
+        let mainnet_rpc_url = read_optional_env("ETH_MAINNET_RPC_URL").unwrap_or_else(|| {
+            DEFAULT_MAINNET_INFURA_URL.replace("{project_id}", &infura_project_id)
+        });
+        let testnet_rpc_url = read_optional_env("ETH_TESTNET_RPC_URL").unwrap_or_else(|| {
+            DEFAULT_TESTNET_INFURA_URL.replace("{project_id}", &infura_project_id)
+        });
 
         let etherscan_mainnet_url = read_optional_env("ETHERSCAN_MAINNET_URL")
             .unwrap_or_else(|| DEFAULT_ETHERSCAN_MAINNET_URL.to_string());

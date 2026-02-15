@@ -26,6 +26,7 @@ const TTL_GETINFO: u64 = 1;
 const TTL_GETIDENTITY: u64 = 5;
 const TTL_CURRENCY: u64 = 60;
 const TTL_LISTCURRENCIES: u64 = 600;
+const TTL_CURRENCY_CONVERSION_PATHS: u64 = 15;
 const READ_RETRY_ATTEMPTS: u8 = 3;
 const READ_RETRY_BASE_DELAY_MS: u64 = 250;
 const STALE_CACHE_MAX_AGE_SECS: u64 = 120;
@@ -360,6 +361,45 @@ impl VrpcProvider {
             .ok_or(WalletError::OperationFailed)
     }
 
+    async fn call_without_cache_with_bridge_mapping(
+        &self,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, WalletError> {
+        let body = serde_json::json!({
+            "jsonrpc": "1.0",
+            "id": "verus-express",
+            "method": method,
+            "params": params
+        });
+
+        let res = self
+            .client
+            .post(&self.base_url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|_| WalletError::NetworkError)?;
+
+        if !res.status().is_success() {
+            return Err(WalletError::OperationFailed);
+        }
+
+        let json: Value = res.json().await.map_err(|_| WalletError::NetworkError)?;
+        if let Some(error_obj) = json.get("error").filter(|e| !e.is_null()) {
+            let code = error_obj.get("code").and_then(|c| c.as_i64());
+            if code == Some(-32601) {
+                return Err(WalletError::BridgeNotImplemented);
+            }
+            return Err(WalletError::OperationFailed);
+        }
+
+        json.get("result")
+            .filter(|v| !v.is_null())
+            .cloned()
+            .ok_or(WalletError::OperationFailed)
+    }
+
     async fn call(&self, method: &str, params: Value, ttl_secs: u64) -> Result<Value, WalletError> {
         let key = Self::cache_key(method, &params);
         if let Some(cached) = self.get_cached(&key) {
@@ -504,6 +544,43 @@ impl VrpcProvider {
     pub async fn listcurrencies(&self) -> Result<Value, WalletError> {
         self.call("listcurrencies", serde_json::json!([]), TTL_LISTCURRENCIES)
             .await
+    }
+
+    /// listcurrencies with a specific system type filter (`local`, `pbaas`, `imported`).
+    pub async fn listcurrencies_with_systemtype(
+        &self,
+        systemtype: &str,
+    ) -> Result<Value, WalletError> {
+        let normalized = systemtype.trim();
+        if normalized.is_empty() {
+            return self.listcurrencies().await;
+        }
+
+        let params = serde_json::json!([{ "systemtype": normalized }]);
+        self.call("listcurrencies", params, TTL_LISTCURRENCIES)
+            .await
+    }
+
+    /// getcurrencyconversionpaths: discover available conversion routes between currencies.
+    pub async fn getcurrencyconversionpaths(
+        &self,
+        source_definition: &Value,
+        destination_definition: Option<&Value>,
+    ) -> Result<Value, WalletError> {
+        let params = if let Some(destination_definition) = destination_definition {
+            serde_json::json!([source_definition, destination_definition])
+        } else {
+            serde_json::json!([source_definition])
+        };
+        let key = Self::cache_key("getcurrencyconversionpaths", &params);
+        if let Some(cached) = self.get_cached(&key) {
+            return Ok(cached);
+        }
+        let result = self
+            .call_without_cache_with_bridge_mapping("getcurrencyconversionpaths", params)
+            .await?;
+        self.set_cached(key, result.clone(), TTL_CURRENCY_CONVERSION_PATHS);
+        Ok(result)
     }
 
     /// sendcurrency: build and optionally return unsigned tx template.

@@ -13,7 +13,10 @@ use crate::types::WalletError;
 
 pub use provider::{EthNetworkProvider, EthProviderPool};
 
-pub fn parse_coin_channel_id(channel_id: &str, expected_prefix: &str) -> Result<String, WalletError> {
+pub fn parse_coin_channel_id(
+    channel_id: &str,
+    expected_prefix: &str,
+) -> Result<String, WalletError> {
     let mut parts = channel_id.split('.');
     let prefix = parts.next().unwrap_or_default();
     let coin_id = parts.next().unwrap_or_default();
@@ -72,7 +75,13 @@ pub async fn send(
     session_manager: &std::sync::Arc<tokio::sync::Mutex<crate::core::auth::SessionManager>>,
     provider_pool: &EthProviderPool,
 ) -> Result<crate::types::transaction::SendResult, WalletError> {
-    send::send(preflight_id, preflight_store, session_manager, provider_pool).await
+    send::send(
+        preflight_id,
+        preflight_store,
+        session_manager,
+        provider_pool,
+    )
+    .await
 }
 
 pub async fn get_eth_balance(

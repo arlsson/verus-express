@@ -7,8 +7,8 @@ mod events;
 mod params;
 
 pub use engine::{
-    UpdateEngine, UpdateEngineStartConfig, EVENT_BALANCES_UPDATED, EVENT_ERROR, EVENT_RATES_UPDATED,
-    EVENT_TRANSACTIONS_UPDATED,
+    UpdateEngine, UpdateEngineStartConfig, EVENT_BALANCES_UPDATED, EVENT_ERROR,
+    EVENT_RATES_UPDATED, EVENT_TRANSACTIONS_UPDATED,
 };
 pub use events::UpdateErrorPayload;
 pub use params::{jitter_duration, BALANCE_EXPIRE_SECS, BALANCE_REFRESH_SECS};
