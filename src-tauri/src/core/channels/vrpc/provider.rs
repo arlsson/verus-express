@@ -615,6 +615,38 @@ impl VrpcProvider {
         Ok(result)
     }
 
+    /// estimateconversion: estimate conversion output for a source/target pair and optional via.
+    pub async fn estimateconversion(
+        &self,
+        currency: &str,
+        convert_to: &str,
+        amount: f64,
+        via: Option<&str>,
+        preconvert: Option<bool>,
+    ) -> Result<Value, WalletError> {
+        if currency.trim().is_empty() || convert_to.trim().is_empty() || !amount.is_finite() || amount <= 0.0 {
+            return Err(WalletError::OperationFailed);
+        }
+
+        let mut request = serde_json::Map::new();
+        request.insert("currency".to_string(), Value::String(currency.trim().to_string()));
+        request.insert(
+            "convertto".to_string(),
+            Value::String(convert_to.trim().to_string()),
+        );
+        request.insert("amount".to_string(), serde_json::json!(amount));
+
+        if let Some(via_value) = via.map(str::trim).filter(|value| !value.is_empty()) {
+            request.insert("via".to_string(), Value::String(via_value.to_string()));
+        }
+        if let Some(preconvert_value) = preconvert {
+            request.insert("preconvert".to_string(), Value::Bool(preconvert_value));
+        }
+
+        self.call_without_cache("estimateconversion", Value::Array(vec![Value::Object(request)]))
+            .await
+    }
+
     /// sendcurrency: build and optionally return unsigned tx template.
     /// Params follow verusd RPC signature.
     pub async fn sendcurrency(

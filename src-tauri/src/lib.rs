@@ -7,7 +7,7 @@ mod commands;
 mod core;
 mod types;
 
-use commands::{bridge_transfer, coins, guard, identity, transaction, vrpc_transfer, wallet};
+use commands::{address_book, bridge_transfer, coins, guard, identity, transaction, vrpc_transfer, wallet};
 use core::channels::btc::BtcProviderPool;
 use core::channels::eth::EthProviderPool;
 use core::channels::vrpc::VrpcProviderPool;
@@ -161,6 +161,7 @@ pub fn run() {
             transaction::get_transaction_history,
             vrpc_transfer::preflight_vrpc_transfer,
             bridge_transfer::get_bridge_conversion_paths,
+            bridge_transfer::estimate_bridge_conversion,
             bridge_transfer::preflight_bridge_transfer,
             // Identity commands
             identity::preflight_identity_update,
@@ -170,6 +171,12 @@ pub fn run() {
             guard::lookup_guard_target_identity,
             guard::preflight_guard_identity_update,
             guard::send_guard_identity_update,
+            // Address book commands
+            address_book::list_address_book_contacts,
+            address_book::save_address_book_contact,
+            address_book::delete_address_book_contact,
+            address_book::mark_address_book_endpoint_used,
+            address_book::validate_destination_address,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

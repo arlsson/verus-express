@@ -99,6 +99,15 @@ pub enum WalletError {
     #[error("Guard session not found or expired")]
     GuardSessionNotFound,
 
+    #[error("Address book contains a duplicate destination")]
+    AddressBookDuplicate,
+
+    #[error("Address book contact was not found")]
+    AddressBookContactNotFound,
+
+    #[error("Address book input is invalid")]
+    AddressBookInvalidInput,
+
     // Internal errors are mapped to generic ones above
     #[serde(skip)]
     #[error("Internal error: {0}")]

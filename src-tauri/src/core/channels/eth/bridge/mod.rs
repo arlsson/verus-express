@@ -20,8 +20,8 @@ use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProvider;
 use crate::core::channels::PreflightStore;
 use crate::types::bridge::{
-    BridgeConversionPathRequest, BridgeConversionPathsResult, BridgeTransferPreflightParams,
-    BridgeTransferPreflightResult,
+    BridgeConversionEstimateRequest, BridgeConversionEstimateResult, BridgeConversionPathRequest,
+    BridgeConversionPathsResult, BridgeTransferPreflightParams, BridgeTransferPreflightResult,
 };
 use crate::types::transaction::SendResult;
 use crate::types::WalletError;
@@ -31,6 +31,13 @@ pub async fn get_conversion_paths(
     vrpc_provider: &VrpcProvider,
 ) -> Result<BridgeConversionPathsResult, WalletError> {
     paths::get_conversion_paths(request, vrpc_provider).await
+}
+
+pub async fn estimate_conversion(
+    request: &BridgeConversionEstimateRequest,
+    vrpc_provider: &VrpcProvider,
+) -> Result<BridgeConversionEstimateResult, WalletError> {
+    paths::estimate_conversion(request, vrpc_provider).await
 }
 
 pub async fn preflight(

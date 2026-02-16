@@ -23,8 +23,11 @@ pub struct BridgeConversionPathQuote {
     pub destination_display_name: Option<String>,
     pub destination_display_ticker: Option<String>,
     pub convert_to: Option<String>,
+    pub convert_to_display_name: Option<String>,
     pub export_to: Option<String>,
+    pub export_to_display_name: Option<String>,
     pub via: Option<String>,
+    pub via_display_name: Option<String>,
     pub map_to: Option<String>,
     pub price: Option<String>,
     pub via_price_in_root: Option<String>,
@@ -42,6 +45,25 @@ pub struct BridgeConversionPathQuote {
 pub struct BridgeConversionPathsResult {
     pub source_currency: String,
     pub paths: HashMap<String, Vec<BridgeConversionPathQuote>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeConversionEstimateRequest {
+    pub coin_id: String,
+    pub channel_id: String,
+    pub source_currency: String,
+    pub convert_to: String,
+    pub amount: String,
+    pub via: Option<String>,
+    pub preconvert: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeConversionEstimateResult {
+    pub estimated_currency_out: Option<String>,
+    pub price: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

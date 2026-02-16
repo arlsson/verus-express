@@ -10,6 +10,7 @@ use crate::types::wallet::{DerivedKeys, WalletNetwork, WalletSecretKind};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tauri::AppHandle;
+use zeroize::Zeroizing;
 
 pub struct SessionManager {
     is_unlocked: bool,
@@ -18,6 +19,7 @@ pub struct SessionManager {
     timeout_duration: Duration,
     derived_keys: HashMap<String, DerivedKeys>, // account_id -> keys
     active_network: Option<WalletNetwork>,
+    stronghold_password_hash: Option<Zeroizing<Vec<u8>>>,
     stronghold_store: StrongholdStore,
 }
 
@@ -32,6 +34,7 @@ impl SessionManager {
             timeout_duration: Duration::from_secs(0),
             derived_keys: HashMap::new(),
             active_network: None,
+            stronghold_password_hash: None,
             stronghold_store,
         }
     }
@@ -72,6 +75,8 @@ impl SessionManager {
         self.derived_keys.insert(account_id.clone(), keys);
         self.active_account_id = Some(account_id);
         self.active_network = Some(wallet_network);
+        self.stronghold_password_hash =
+            Some(Zeroizing::new(StrongholdStore::hash_password(&password)));
         self.is_unlocked = true;
         self.unlocked_at = Some(Instant::now());
 
@@ -89,6 +94,7 @@ impl SessionManager {
         self.derived_keys.clear();
         self.active_account_id = None;
         self.active_network = None;
+        self.stronghold_password_hash = None;
         self.is_unlocked = false;
         self.unlocked_at = None;
 
@@ -161,6 +167,20 @@ impl SessionManager {
     /// Get reference to StrongholdStore (for use in commands)
     pub fn stronghold_store(&self) -> &StrongholdStore {
         &self.stronghold_store
+    }
+
+    /// Returns a copy of the current unlocked Stronghold password hash bytes for storage commands.
+    /// Security: only available while unlocked; caller should zeroize after use.
+    pub fn stronghold_password_hash_for_storage(&self) -> Result<Zeroizing<Vec<u8>>, WalletError> {
+        if !self.is_unlocked || self.is_expired() {
+            return Err(WalletError::WalletLocked);
+        }
+
+        let hash = self
+            .stronghold_password_hash
+            .as_ref()
+            .ok_or(WalletError::WalletLocked)?;
+        Ok(Zeroizing::new(hash.to_vec()))
     }
 
     /// Returns the WIF for the active account for signing only (VRPC/BTC send flow).

@@ -3,7 +3,9 @@
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
   import CheckCircle2Icon from '@lucide/svelte/icons/check-circle-2';
+  import BookUserIcon from '@lucide/svelte/icons/book-user';
   import { Button } from '$lib/components/ui/button';
+  import { Checkbox } from '$lib/components/ui/checkbox';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
   import * as Card from '$lib/components/ui/card';
@@ -19,10 +21,21 @@
   import { walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { balanceStore, getBalance } from '$lib/stores/balances.js';
   import { transactionStore } from '$lib/stores/transactions.js';
+  import { addressBookStore, upsertAddressBookContact } from '$lib/stores/addressBook.js';
+  import * as addressBookService from '$lib/services/addressBookService.js';
+  import {
+    endpointKindForDestinationKind,
+    findMatchingSavedEndpoint,
+    sharesSuspiciousPrefixSuffix
+  } from '$lib/address-book/utils';
   import { channelIdForCoin } from '$lib/utils/channelId.js';
   import * as walletService from '$lib/services/walletService.js';
   import { preflightSend, sendTransaction } from '$lib/services/txService.js';
-  import { getBridgeConversionPaths, preflightBridgeTransfer } from '$lib/services/bridgeTransferService.js';
+  import {
+    estimateBridgeConversion,
+    getBridgeConversionPaths,
+    preflightBridgeTransfer
+  } from '$lib/services/bridgeTransferService.js';
   import {
     getRecipientInputCopy,
     getTransferStepCopy,
@@ -41,6 +54,7 @@
     PreflightResult,
     SendResult
   } from '$lib/types/wallet.js';
+  import type { AddressBookContact, AddressEndpointKind } from '$lib/types/addressBook';
   import type {
     DestinationAddressKind,
     TransferStepId,
@@ -49,6 +63,16 @@
   } from './transfer-wizard/types';
 
   type EntryIntent = 'send' | 'convert';
+
+  type AddressBookEndpointOption = {
+    contactId: string;
+    contactName: string;
+    endpointId: string;
+    endpointLabel: string;
+    endpointAddress: string;
+    normalizedAddress: string;
+    lastUsedAt: number | null;
+  };
 
   type SameAssetOption = {
     id: string;
@@ -79,6 +103,7 @@
   const coins = $derived($coinsStore);
   const walletChannels = $derived($walletChannelsStore);
   const balances = $derived($balanceStore);
+  const addressBookContacts = $derived($addressBookStore);
   const stepCopy = $derived(getTransferStepCopy(i18n.t));
   const stepLabels = $derived(getTransferStepLabels(i18n.t));
 
@@ -132,6 +157,7 @@
   let receiveSearchTerm = $state('');
   let pendingGroupedReceiveOption = $state<ReceiveAssetOption | null>(null);
   let pendingTargetOption = $state<ReceiveAssetOption | null>(null);
+  let routeEstimateOutputs = $state<Record<string, string>>({});
 
   let loadingTargets = $state(false);
   let preflighting = $state(false);
@@ -149,6 +175,12 @@
   let showViaSheet = $state(false);
   let showNetworkSheet = $state(false);
   let showExportSheet = $state(false);
+  let showAddressBookSheet = $state(false);
+  let addressBookSearchTerm = $state('');
+  let unsavedRecipientConfirmed = $state(false);
+  let saveRecipientName = $state('');
+  let saveRecipientError = $state('');
+  let savingRecipient = $state(false);
 
   const selectedCoin = $derived(selectedCoinOption?.coin ?? null);
 
@@ -229,7 +261,7 @@
   );
 
   const rankedViaOptions = $derived(
-    sortViaOptionsByScore(selectedReceiveAssetViaOptions, amount)
+    sortViaOptionsByScore(selectedReceiveAssetViaOptions, amount, routeEstimateOutputs)
   );
 
   const bestViaOption = $derived(rankedViaOptions[0] ?? null);
@@ -259,18 +291,74 @@
         : 'vrpc'
   );
 
+  const destinationEndpointKind = $derived<AddressEndpointKind>(
+    endpointKindForDestinationKind(destinationAddressKind)
+  );
+
+  const addressBookEndpointOptions = $derived<AddressBookEndpointOption[]>(
+    (() => {
+      const query = addressBookSearchTerm.trim().toLowerCase();
+      const options = addressBookContacts.flatMap((contact: AddressBookContact) =>
+        contact.endpoints
+          .filter((endpoint) => endpoint.kind === destinationEndpointKind)
+          .map((endpoint) => ({
+            contactId: contact.id,
+            contactName: contact.displayName,
+            endpointId: endpoint.id,
+            endpointLabel: endpoint.label,
+            endpointAddress: endpoint.address,
+            normalizedAddress: endpoint.normalizedAddress,
+            lastUsedAt: endpoint.lastUsedAt
+          }))
+      );
+
+      const filtered = query
+        ? options.filter(
+            (option) =>
+              option.contactName.toLowerCase().includes(query) ||
+              option.endpointLabel.toLowerCase().includes(query) ||
+              option.endpointAddress.toLowerCase().includes(query)
+          )
+        : options;
+
+      return filtered.sort((a, b) => {
+        if ((a.lastUsedAt ?? 0) !== (b.lastUsedAt ?? 0)) {
+          return (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0);
+        }
+        return a.contactName.localeCompare(b.contactName);
+      });
+    })()
+  );
+
+  const matchedSavedRecipient = $derived(
+    findMatchingSavedEndpoint(addressBookContacts, destinationEndpointKind, destinationAddress)
+  );
+  const isSavedRecipient = $derived(!!matchedSavedRecipient);
+  const hasRecipientSimilarityWarning = $derived(
+    !isSavedRecipient &&
+      sharesSuspiciousPrefixSuffix(addressBookContacts, destinationEndpointKind, destinationAddress)
+  );
+  const activePreflight = $derived(simplePreflightResult ?? bridgePreflightResult);
+  const requiresUnsavedRecipientAck = $derived(
+    !!destinationAddress.trim() && !!activePreflight && !isSavedRecipient
+  );
+
   const recipientInputCopy = $derived(getRecipientInputCopy(i18n.t, destinationAddressKind));
   const recipientValid = $derived(validateDestinationAddress(destinationAddress, destinationAddressKind));
   const amountValid = $derived(isPositiveAmount(amount));
-  const activePreflight = $derived(simplePreflightResult ?? bridgePreflightResult);
 
   const estimatedConversionValue = $derived(
     (() => {
-      if (!conversionEnabled || !amountValid || !activeConvertRoute?.price) return null;
-      const numericAmount = Number(amount);
-      const numericPrice = Number(activeConvertRoute.price);
-      if (!Number.isFinite(numericAmount) || !Number.isFinite(numericPrice)) return null;
-      return (numericAmount * numericPrice).toFixed(8);
+      if (!conversionEnabled || !amountValid || !activeConvertRoute) return null;
+
+      const estimatedOutput = parseEstimatedOutput(routeEstimateOutputs[activeConvertRoute.id]);
+      if (estimatedOutput !== null) {
+        return estimatedOutput.toFixed(8);
+      }
+
+      const numericPrice = parsePrice(activeConvertRoute.price);
+      if (numericPrice === null) return null;
+      return (Number(amount) * numericPrice).toFixed(8);
     })()
   );
 
@@ -336,7 +424,8 @@
           !activeTargetOption ||
           (conversionEnabled && !selectedReceiveAssetOption))) ||
       (currentStep === 'recipient' && !recipientValid) ||
-      (currentStep === 'review' && !activePreflight)
+      (currentStep === 'review' && !activePreflight) ||
+      (currentStep === 'review' && requiresUnsavedRecipientAck && !unsavedRecipientConfirmed)
   );
 
   const primaryLabel = $derived(
@@ -374,12 +463,19 @@
       if (!activeTargetOption) return '';
       if (!conversionEnabled) return sameAssetOption?.label ?? '';
 
+      const viaValue =
+        'viaLabel' in activeTargetOption
+          ? (activeTargetOption.viaLabel ?? activeTargetOption.via)
+          : activeTargetOption.via;
+      const exportToValue =
+        'exportToLabel' in activeTargetOption
+          ? (activeTargetOption.exportToLabel ?? activeTargetOption.exportTo)
+          : activeTargetOption.exportTo;
+
       const parts = [
         activeTargetOption.receiveLabel,
-        activeTargetOption.via ? i18n.t('wallet.transfer.pathVia', { value: activeTargetOption.via }) : '',
-        activeTargetOption.exportTo
-          ? i18n.t('wallet.transfer.pathExportTo', { value: activeTargetOption.exportTo })
-          : '',
+        viaValue ? i18n.t('wallet.transfer.pathVia', { value: viaValue }) : '',
+        exportToValue ? i18n.t('wallet.transfer.pathExportTo', { value: exportToValue }) : '',
         activeTargetOption.mapTo ? i18n.t('wallet.transfer.pathMapTo', { value: activeTargetOption.mapTo }) : ''
       ].filter((value) => !!value);
 
@@ -531,7 +627,11 @@
 
     if (manualViaLocked && selectedStillValid) return;
 
-    const best = sortViaOptionsByScore(selectedReceiveAssetViaOptions, amount)[0] ?? null;
+    const best = sortViaOptionsByScore(
+      selectedReceiveAssetViaOptions,
+      amount,
+      routeEstimateOutputs
+    )[0] ?? null;
     if (!best) {
       selectedViaOptionId = '';
       manualViaLocked = false;
@@ -568,6 +668,109 @@
     if (!Number.isFinite(numericAmount)) return;
     if (numericAmount <= selectedBalanceValue) return;
     amount = selectedBalance;
+  });
+
+  $effect(() => {
+    const coin = selectedCoin;
+    const channelId = selectedChannelId;
+    const sourceCurrency = coin?.currencyId || coin?.id || '';
+    const normalizedAmount = amount.trim();
+    const numericAmount = Number(normalizedAmount);
+    const viaOptions = selectedReceiveAssetViaOptions;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    if (
+      !conversionEnabled ||
+      !coin ||
+      !channelId ||
+      !sourceCurrency ||
+      !amountValid ||
+      !Number.isFinite(numericAmount) ||
+      numericAmount <= 0 ||
+      viaOptions.length === 0
+    ) {
+      routeEstimateOutputs = {};
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    routeEstimateOutputs = {};
+
+    const fallbackEstimateOutput = (option: ViaRouteOption): string | null => {
+      const price = parsePrice(option.price);
+      if (price === null) return null;
+      return (numericAmount * price).toString();
+    };
+
+    timer = setTimeout(() => {
+      void (async () => {
+        const estimateCache = new Map<string, Promise<string | null>>();
+        const nextOutputs: Record<string, string> = {};
+
+      await Promise.all(
+        viaOptions.map(async (option) => {
+          const convertTo = option.convertTo?.trim();
+          if (!convertTo) {
+            const fallback = fallbackEstimateOutput(option);
+            if (fallback) nextOutputs[option.id] = fallback;
+            return;
+          }
+
+          const via = option.via?.trim() || null;
+          const estimateKey = `${convertTo.toLowerCase()}|${(via ?? '').toLowerCase()}`;
+
+          let estimatePromise = estimateCache.get(estimateKey);
+          if (!estimatePromise) {
+            estimatePromise = (async () => {
+              try {
+                const response = await estimateBridgeConversion({
+                  coinId: coin.id,
+                  channelId,
+                  sourceCurrency,
+                  convertTo,
+                  amount: normalizedAmount,
+                  via,
+                  preconvert: false
+                });
+                const estimatedOut = parseEstimatedOutput(response.estimatedCurrencyOut ?? null);
+                if (estimatedOut !== null) return estimatedOut.toString();
+
+                const estimatedPrice = parsePrice(response.price ?? null);
+                if (estimatedPrice !== null) return (numericAmount * estimatedPrice).toString();
+              } catch {
+                // Fall through to price-based fallback below.
+              }
+              return null;
+            })();
+            estimateCache.set(estimateKey, estimatePromise);
+          }
+
+          const estimateOutput = await estimatePromise;
+          if (estimateOutput) {
+            nextOutputs[option.id] = estimateOutput;
+            return;
+          }
+
+          const fallback = fallbackEstimateOutput(option);
+          if (fallback) {
+            nextOutputs[option.id] = fallback;
+          }
+        })
+      );
+
+        if (cancelled) return;
+        routeEstimateOutputs = nextOutputs;
+      })();
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
   });
 
   $effect(() => {
@@ -624,10 +827,82 @@
     })();
   });
 
+  $effect(() => {
+    destinationAddress;
+    unsavedRecipientConfirmed = false;
+    saveRecipientError = '';
+  });
+
   function clearPreflightState() {
     simplePreflightResult = null;
     bridgePreflightResult = null;
     transferError = '';
+  }
+
+  function shortRecipientAddress(value: string): string {
+    const trimmed = value.trim();
+    if (trimmed.length <= 24) return trimmed;
+    return `${trimmed.slice(0, 10)}...${trimmed.slice(-10)}`;
+  }
+
+  function selectAddressBookRecipient(option: AddressBookEndpointOption) {
+    destinationAddress = option.endpointAddress;
+    showAddressBookSheet = false;
+    addressBookSearchTerm = '';
+    transferError = '';
+    saveRecipientName = option.contactName;
+  }
+
+  function mapAddressBookError(error: unknown): string {
+    const errorType = extractWalletErrorType(error);
+    if (errorType === 'AddressBookDuplicate') return i18n.t('wallet.transfer.saveRecipient.error.duplicate');
+    if (errorType === 'AddressBookInvalidInput' || errorType === 'InvalidAddress') {
+      return i18n.t('wallet.transfer.saveRecipient.error.invalid');
+    }
+    if (errorType === 'WalletLocked') return i18n.t('wallet.transfer.saveRecipient.error.walletLocked');
+    if (error instanceof Error && error.message.trim()) return error.message;
+    return i18n.t('wallet.transfer.saveRecipient.error.generic');
+  }
+
+  async function saveRecipientFromSuccess() {
+    if (!sendResult || savingRecipient) return;
+
+    const displayName = saveRecipientName.trim();
+    if (!displayName) {
+      saveRecipientError = i18n.t('wallet.transfer.saveRecipient.error.nameRequired');
+      return;
+    }
+
+    savingRecipient = true;
+    saveRecipientError = '';
+
+    try {
+      const validation = await addressBookService.validateDestinationAddress({
+        kind: destinationEndpointKind,
+        address: sendResult.toAddress
+      });
+      if (!validation.valid) {
+        saveRecipientError = i18n.t('wallet.transfer.saveRecipient.error.invalid');
+        return;
+      }
+
+      const saved = await addressBookService.saveAddressBookContact({
+        displayName,
+        note: null,
+        endpoints: [
+          {
+            kind: destinationEndpointKind,
+            label: i18n.t('wallet.transfer.saveRecipient.defaultEndpointLabel'),
+            address: sendResult.toAddress
+          }
+        ]
+      });
+      upsertAddressBookContact(saved);
+    } catch (error) {
+      saveRecipientError = mapAddressBookError(error);
+    } finally {
+      savingRecipient = false;
+    }
   }
 
   function filterViaOptionsByExport(
@@ -645,15 +920,21 @@
   function getRouteSubtitle(option: ViaRouteOption): string {
     const subtitleParts: string[] = [];
     if (option.exportTo) {
-      subtitleParts.push(i18n.t('wallet.transfer.pathExportTo', { value: option.exportTo }));
+      subtitleParts.push(
+        i18n.t('wallet.transfer.pathExportTo', { value: option.exportToLabel ?? option.exportTo })
+      );
     }
     if (option.via) {
-      subtitleParts.push(i18n.t('wallet.transfer.pathVia', { value: option.via }));
+      subtitleParts.push(i18n.t('wallet.transfer.pathVia', { value: option.viaLabel ?? option.via }));
     }
     if (option.mapTo) {
       subtitleParts.push(i18n.t('wallet.transfer.pathMapTo', { value: option.mapTo }));
     }
     return subtitleParts.join(' • ');
+  }
+
+  function getViaOptionLabel(option: ViaRouteOption): string {
+    return option.viaLabel ?? option.via ?? i18n.t('wallet.transfer.viaBest');
   }
 
   function isReceiveOptionSelected(option: ReceiveAssetOption): boolean {
@@ -675,7 +956,7 @@
     manualViaLocked = false;
 
     const viaCandidates = filterViaOptionsByExport(option.viaOptions, exportSystemId);
-    const best = sortViaOptionsByScore(viaCandidates, amount)[0] ?? null;
+    const best = sortViaOptionsByScore(viaCandidates, amount, routeEstimateOutputs)[0] ?? null;
     selectedViaOptionId = best?.id ?? '';
 
     pendingGroupedReceiveOption = null;
@@ -747,13 +1028,29 @@
     return parsed;
   }
 
+  function parseEstimatedOutput(value?: string | null): number | null {
+    if (!value) return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+  }
+
   function formatRouteRateValue(value?: string | null): string | null {
     const numeric = parsePrice(value);
     if (numeric === null) return null;
     return numeric.toFixed(8).replace(/\.?0+$/, '');
   }
 
-  function routeScore(option: ViaRouteOption, amountInput: string): number | null {
+  function routeScore(
+    option: ViaRouteOption,
+    amountInput: string,
+    estimatedOutputs: Record<string, string> = {}
+  ): number | null {
+    const estimatedOutput = parseEstimatedOutput(estimatedOutputs[option.id]);
+    if (estimatedOutput !== null) {
+      return estimatedOutput;
+    }
+
     const price = parsePrice(option.price);
     if (price === null) return null;
 
@@ -765,10 +1062,14 @@
     return price;
   }
 
-  function sortViaOptionsByScore(options: ViaRouteOption[], amountInput: string): ViaRouteOption[] {
+  function sortViaOptionsByScore(
+    options: ViaRouteOption[],
+    amountInput: string,
+    estimatedOutputs: Record<string, string> = {}
+  ): ViaRouteOption[] {
     return [...options].sort((a, b) => {
-      const scoreA = routeScore(a, amountInput);
-      const scoreB = routeScore(b, amountInput);
+      const scoreA = routeScore(a, amountInput, estimatedOutputs);
+      const scoreB = routeScore(b, amountInput, estimatedOutputs);
 
       if (scoreA !== null && scoreB !== null && scoreA !== scoreB) {
         return scoreB - scoreA;
@@ -781,10 +1082,14 @@
     });
   }
 
-  function formatEstimatedReceive(option: ViaRouteOption): string {
-    if (!amountValid) return i18n.t('wallet.transfer.summary.notSet');
+  function formatEstimatedReceive(option: ViaRouteOption): string | null {
+    if (!amountValid) return null;
+    const estimatedOutput = parseEstimatedOutput(routeEstimateOutputs[option.id]);
+    if (estimatedOutput !== null) {
+      return `${estimatedOutput.toFixed(8)} ${option.receiveLabel}`;
+    }
     const price = parsePrice(option.price);
-    if (price === null) return i18n.t('wallet.transfer.summary.notSet');
+    if (price === null) return null;
     return `${(Number(amount) * price).toFixed(8)} ${option.receiveLabel}`;
   }
 
@@ -902,6 +1207,9 @@
 
     try {
       sendResult = await sendTransaction({ preflightId: activePreflight.preflightId });
+      if (matchedSavedRecipient) {
+        void addressBookService.markAddressBookEndpointUsed(matchedSavedRecipient.endpoint.id);
+      }
       await refreshTxHistory();
       currentStep = 'success';
     } catch (error) {
@@ -1228,7 +1536,7 @@
                       >
                         <span class="text-muted-foreground text-xs">{i18n.t('wallet.transfer.conversionRoute')}</span>
                         <span class="flex items-center gap-1 text-xs font-semibold">
-                          {activeConvertRoute?.via || i18n.t('wallet.transfer.viaBest')}
+                          {activeConvertRoute ? getViaOptionLabel(activeConvertRoute) : i18n.t('wallet.transfer.viaBest')}
                           <ChevronRightIcon class="text-foreground/45 size-3.5 shrink-0" />
                         </span>
                       </button>
@@ -1292,6 +1600,26 @@
             {#if destinationAddress.trim() && !recipientValid}
               <p class="text-destructive mt-1 text-xs">{i18n.t('wallet.transfer.recipientInvalid')}</p>
             {/if}
+
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" class="h-8 gap-1.5" onclick={() => (showAddressBookSheet = true)}>
+                <BookUserIcon class="size-3.5" />
+                {i18n.t('wallet.transfer.addressBook.open')}
+              </Button>
+
+              {#if matchedSavedRecipient}
+                <p class="text-emerald-700 dark:text-emerald-300 text-xs">
+                  {i18n.t('wallet.transfer.addressBook.savedMatch', {
+                    contact: matchedSavedRecipient.contact.displayName,
+                    endpoint: matchedSavedRecipient.endpoint.label
+                  })}
+                </p>
+              {:else if hasRecipientSimilarityWarning}
+                <p class="text-amber-700 dark:text-amber-300 text-xs">
+                  {i18n.t('wallet.transfer.addressBook.similarWarning')}
+                </p>
+              {/if}
+            </div>
           </div>
         </Card.Content>
       </Card.Root>
@@ -1327,7 +1655,32 @@
                 </Button>
               </div>
               <p class="break-all text-sm">{activePreflight.toAddress}</p>
+              {#if matchedSavedRecipient}
+                <p class="text-emerald-700 dark:text-emerald-300 text-xs">
+                  {i18n.t('wallet.transfer.review.savedRecipient', {
+                    contact: matchedSavedRecipient.contact.displayName,
+                    endpoint: matchedSavedRecipient.endpoint.label
+                  })}
+                </p>
+              {:else}
+                <p class="text-amber-700 dark:text-amber-300 text-xs">
+                  {i18n.t('wallet.transfer.review.unsavedRecipient')}
+                </p>
+              {/if}
             </div>
+
+            {#if requiresUnsavedRecipientAck}
+              <div class="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/7 p-3">
+                <p class="text-sm font-medium">{i18n.t('wallet.transfer.review.unsavedWarningTitle')}</p>
+                <p class="text-muted-foreground text-xs">{i18n.t('wallet.transfer.review.unsavedWarningBody')}</p>
+                <div class="flex items-start gap-2">
+                  <Checkbox id="review-unsaved-recipient" bind:checked={unsavedRecipientConfirmed} class="mt-0.5" />
+                  <Label for="review-unsaved-recipient" class="text-xs leading-5">
+                    {i18n.t('wallet.transfer.review.unsavedConfirm')}
+                  </Label>
+                </div>
+              </div>
+            {/if}
 
             <div class="space-y-1 rounded-md border border-border/70 p-3">
               <p class="text-sm font-medium">{i18n.t('wallet.transfer.summary.networkFee')}</p>
@@ -1335,13 +1688,25 @@
               {#if bridgePreflightResult}
                 <div class="text-muted-foreground mt-2 space-y-1 text-xs">
                   {#if bridgePreflightResult.route.convertTo}
-                    <p>{i18n.t('wallet.transfer.pathConvertTo', { value: bridgePreflightResult.route.convertTo })}</p>
+                    <p>
+                      {i18n.t('wallet.transfer.pathConvertTo', {
+                        value: activeConvertRoute?.convertToLabel ?? bridgePreflightResult.route.convertTo
+                      })}
+                    </p>
                   {/if}
                   {#if bridgePreflightResult.route.exportTo}
-                    <p>{i18n.t('wallet.transfer.pathExportTo', { value: bridgePreflightResult.route.exportTo })}</p>
+                    <p>
+                      {i18n.t('wallet.transfer.pathExportTo', {
+                        value: activeConvertRoute?.exportToLabel ?? bridgePreflightResult.route.exportTo
+                      })}
+                    </p>
                   {/if}
                   {#if bridgePreflightResult.route.via}
-                    <p>{i18n.t('wallet.transfer.pathVia', { value: bridgePreflightResult.route.via })}</p>
+                    <p>
+                      {i18n.t('wallet.transfer.pathVia', {
+                        value: activeConvertRoute?.viaLabel ?? bridgePreflightResult.route.via
+                      })}
+                    </p>
                   {/if}
                   {#if bridgePreflightResult.route.mapTo}
                     <p>{i18n.t('wallet.transfer.pathMapTo', { value: bridgePreflightResult.route.mapTo })}</p>
@@ -1381,6 +1746,26 @@
             <p class="text-muted-foreground mt-2 text-sm">
               {i18n.t('wallet.send.sentSummary', { value: sendResult.value, address: sendResult.toAddress })}
             </p>
+
+            {#if !isSavedRecipient}
+              <div class="mt-4 rounded-md border border-border/70 p-3 text-left">
+                <p class="text-sm font-medium">{i18n.t('wallet.transfer.saveRecipient.title')}</p>
+                <p class="text-muted-foreground mt-1 text-xs">{i18n.t('wallet.transfer.saveRecipient.description')}</p>
+                <Input
+                  class="mt-3"
+                  bind:value={saveRecipientName}
+                  placeholder={i18n.t('wallet.transfer.saveRecipient.namePlaceholder')}
+                />
+                {#if saveRecipientError}
+                  <p class="text-destructive mt-2 text-xs">{saveRecipientError}</p>
+                {/if}
+                <Button class="mt-3 h-8" onclick={saveRecipientFromSuccess} disabled={savingRecipient}>
+                  {savingRecipient
+                    ? i18n.t('wallet.transfer.saveRecipient.saving')
+                    : i18n.t('wallet.transfer.saveRecipient.save')}
+                </Button>
+              </div>
+            {/if}
           {/if}
         </Card.Content>
       </Card.Root>
@@ -1426,6 +1811,47 @@
   </div>
 </StandardRightSheet>
 
+<StandardRightSheet bind:isOpen={showAddressBookSheet} title={i18n.t('wallet.transfer.addressBook.sheetTitle')}>
+  <div class="flex h-full min-h-0 flex-col gap-3">
+    <Input
+      bind:value={addressBookSearchTerm}
+      placeholder={i18n.t('wallet.transfer.addressBook.searchPlaceholder')}
+      class="h-10"
+    />
+
+    {#if addressBookEndpointOptions.length === 0}
+      <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.addressBook.empty')}</p>
+    {:else}
+      <ScrollArea.Root class="min-h-0 flex-1">
+        <ScrollArea.Viewport class="h-full pr-1">
+          <div class="space-y-2 pb-1">
+            {#each addressBookEndpointOptions as option}
+              <button
+                type="button"
+                class="flex w-full items-start justify-between rounded-md border border-border/60 px-3 py-2 text-left transition-colors hover:bg-muted/30"
+                onclick={() => selectAddressBookRecipient(option)}
+              >
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium">{option.contactName}</p>
+                  <p class="text-muted-foreground truncate text-xs">
+                    {option.endpointLabel} • {shortRecipientAddress(option.endpointAddress)}
+                  </p>
+                </div>
+                {#if option.lastUsedAt}
+                  <p class="text-muted-foreground ml-3 text-[11px]">
+                    {i18n.t('wallet.transfer.addressBook.recent')}
+                  </p>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        </ScrollArea.Viewport>
+        <ScrollArea.Scrollbar orientation="vertical" />
+      </ScrollArea.Root>
+    {/if}
+  </div>
+</StandardRightSheet>
+
 <StandardRightSheet bind:isOpen={showReceiveAssetSheet} title={i18n.t('wallet.transfer.receiveSheetTitle')}>
   <div class="flex h-full min-h-0 flex-col gap-3">
     <Input
@@ -1456,7 +1882,8 @@
                   {i18n.t('wallet.transfer.routeGroupPopular')}
                 </p>
                 {#each popularReceiveAssetOptions as option}
-                  {@const bestRoute = sortViaOptionsByScore(option.viaOptions, amount)[0] ?? null}
+                  {@const bestRoute = sortViaOptionsByScore(option.viaOptions, amount, routeEstimateOutputs)[0] ?? null}
+                  {@const estimatedValue = bestRoute ? formatEstimatedReceive(bestRoute) : null}
                   <button
                     type="button"
                     class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
@@ -1479,8 +1906,8 @@
                         {/if}
                       </div>
                     </div>
-                    {#if bestRoute}
-                      <p class="text-muted-foreground ml-3 text-xs">{formatEstimatedReceive(bestRoute)}</p>
+                    {#if estimatedValue}
+                      <p class="text-muted-foreground ml-3 text-xs">{estimatedValue}</p>
                     {/if}
                   </button>
                 {/each}
@@ -1495,7 +1922,8 @@
                     : i18n.t('wallet.transfer.routeGroupConversions')}
                 </p>
                 {#each otherReceiveAssetOptions as option}
-                  {@const bestRoute = sortViaOptionsByScore(option.viaOptions, amount)[0] ?? null}
+                  {@const bestRoute = sortViaOptionsByScore(option.viaOptions, amount, routeEstimateOutputs)[0] ?? null}
+                  {@const estimatedValue = bestRoute ? formatEstimatedReceive(bestRoute) : null}
                   <button
                     type="button"
                     class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
@@ -1518,8 +1946,8 @@
                         {/if}
                       </div>
                     </div>
-                    {#if bestRoute}
-                      <p class="text-muted-foreground ml-3 text-xs">{formatEstimatedReceive(bestRoute)}</p>
+                    {#if estimatedValue}
+                      <p class="text-muted-foreground ml-3 text-xs">{estimatedValue}</p>
                     {/if}
                   </button>
                 {/each}
@@ -1683,6 +2111,7 @@
       {:else}
         <div class="space-y-2">
           {#each rankedViaOptions as option}
+            {@const estimatedValue = formatEstimatedReceive(option)}
             <button
               type="button"
               class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
@@ -1693,7 +2122,7 @@
             >
               <div class="min-w-0">
                 <div class="flex items-center gap-2">
-                  <p class="truncate text-sm font-medium">{option.via || i18n.t('wallet.transfer.viaBest')}</p>
+                  <p class="truncate text-sm font-medium">{getViaOptionLabel(option)}</p>
                   {#if bestViaOption?.id === option.id}
                     <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
                       {i18n.t('wallet.transfer.viaBest')}
@@ -1707,9 +2136,11 @@
                   <p class="text-muted-foreground text-xs">{i18n.t('wallet.transfer.rate', { value: option.price })}</p>
                 {/if}
               </div>
-              <p class="text-muted-foreground ml-3 text-xs">
-                {i18n.t('wallet.transfer.estimatedForAmount', { value: formatEstimatedReceive(option) })}
-              </p>
+              {#if estimatedValue}
+                <p class="text-muted-foreground ml-3 text-xs">
+                  {i18n.t('wallet.transfer.estimatedForAmount', { value: estimatedValue })}
+                </p>
+              {/if}
             </button>
           {/each}
         </div>

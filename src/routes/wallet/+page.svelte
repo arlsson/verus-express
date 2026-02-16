@@ -11,6 +11,7 @@
   import WalletLayout from '$lib/components/wallet/WalletLayout.svelte';
   import * as walletService from '$lib/services/walletService.js';
   import * as coinsService from '$lib/services/coinsService.js';
+  import * as addressBookService from '$lib/services/addressBookService.js';
   import { setupWalletEventBridge } from '$lib/services/eventBridge.js';
   import { balanceStore } from '$lib/stores/balances.js';
   import { ratesStore } from '$lib/stores/rates.js';
@@ -19,6 +20,7 @@
   import { buildWalletChannels, resetWalletChannels, walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { filterVisibleAssets } from '$lib/stores/assetVisibility.js';
   import { clearWalletErrors, pushWalletError } from '$lib/stores/walletErrors.js';
+  import { setAddressBookContacts } from '$lib/stores/addressBook.js';
   import { isWalletSupportedAsset } from '$lib/coins/supportedAssets.js';
   import { i18nStore } from '$lib/i18n';
   import type { WalletNetwork } from '$lib/types/wallet.js';
@@ -63,6 +65,8 @@
 
       const channels = buildWalletChannels(coins, addresses?.vrsc_address ?? null);
       walletChannelsStore.set(channels);
+      const contacts = await addressBookService.listAddressBookContacts().catch(() => []);
+      setAddressBookContacts(contacts);
       teardownEventBridge = await setupWalletEventBridge();
       await walletService.startUpdateEngine({
         includeTransactions: false,
@@ -84,6 +88,7 @@
     ratesStore.set({});
     transactionStore.set({});
     resetWalletChannels();
+    setAddressBookContacts([]);
   });
 </script>
 

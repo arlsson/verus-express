@@ -5,6 +5,8 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  BridgeConversionEstimateRequest,
+  BridgeConversionEstimateResult,
   BridgeConversionPathRequest,
   BridgeConversionPathsResult,
   BridgeTransferPreflightParams,
@@ -20,6 +22,22 @@ export async function getBridgeConversionPaths(
       channelId: request.channelId,
       sourceCurrency: request.sourceCurrency,
       destinationCurrency: request.destinationCurrency ?? null
+    }
+  });
+}
+
+export async function estimateBridgeConversion(
+  request: BridgeConversionEstimateRequest
+): Promise<BridgeConversionEstimateResult> {
+  return invoke<BridgeConversionEstimateResult>('estimate_bridge_conversion', {
+    request: {
+      coinId: request.coinId,
+      channelId: request.channelId,
+      sourceCurrency: request.sourceCurrency,
+      convertTo: request.convertTo,
+      amount: request.amount,
+      via: request.via ?? null,
+      preconvert: request.preconvert ?? null
     }
   });
 }

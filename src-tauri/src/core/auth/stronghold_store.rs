@@ -11,7 +11,9 @@ use crate::types::errors::WalletError;
 use iota_stronghold::{KeyProvider, SnapshotPath, Stronghold};
 
 const SEED_RECORD_KEY: &[u8] = b"seed";
+const ADDRESS_BOOK_RECORD_KEY: &[u8] = b"address_book_v1";
 
+#[derive(Clone)]
 pub struct StrongholdStore {
     /// Base directory for Stronghold (app data dir / stronghold); accounts go under accounts/<id>/
     base_path: PathBuf,
@@ -38,12 +40,47 @@ impl StrongholdStore {
         account_dir.join("snapshot.stronghold")
     }
 
+    fn address_book_snapshot_path(&self, account_id: &str) -> PathBuf {
+        let account_dir = self.base_path.join("accounts").join(account_id);
+        let _ = std::fs::create_dir_all(&account_dir);
+        account_dir.join("address_book.snapshot.stronghold")
+    }
+
     /// Password hash for Stronghold key (must match plugin / KDF used at unlock).
-    fn hash_password(password: &str) -> Vec<u8> {
+    pub(crate) fn hash_password(password: &str) -> Vec<u8> {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(password.as_bytes());
         hasher.finalize().to_vec()
+    }
+
+    fn keyprovider_from_hash(password_hash: &[u8]) -> Result<KeyProvider, WalletError> {
+        KeyProvider::try_from(Zeroizing::new(password_hash.to_vec())).map_err(|e| {
+            println!("[AUTH] KeyProvider failed: {}", e);
+            WalletError::OperationFailed
+        })
+    }
+
+    fn get_or_create_client(
+        stronghold: &Stronghold,
+        snapshot_path: &SnapshotPath,
+        account_id: &str,
+        keyprovider: &KeyProvider,
+        snapshot_exists: bool,
+    ) -> Result<iota_stronghold::Client, WalletError> {
+        if snapshot_exists {
+            stronghold
+                .load_client_from_snapshot(account_id.as_bytes(), keyprovider, snapshot_path)
+                .map_err(|e| {
+                    println!("[AUTH] Load client from snapshot failed: {}", e);
+                    WalletError::InvalidPassword
+                })
+        } else {
+            stronghold.create_client(account_id.as_bytes()).map_err(|e| {
+                println!("[AUTH] Create client failed: {}", e);
+                WalletError::OperationFailed
+            })
+        }
     }
 
     /// Store seed in a Stronghold vault for this account (encrypted with password).
@@ -58,31 +95,17 @@ impl StrongholdStore {
 
         let path = self.account_snapshot_path(account_id);
         let password_hash = Self::hash_password(password);
-        let keyprovider = KeyProvider::try_from(Zeroizing::new(password_hash)).map_err(|e| {
-            println!("[AUTH] KeyProvider failed: {}", e);
-            WalletError::OperationFailed
-        })?;
+        let keyprovider = Self::keyprovider_from_hash(&password_hash)?;
         let snapshot_path = SnapshotPath::from_path(&path);
 
         let stronghold = Stronghold::default();
-        let client = if path.exists() {
-            // Existing vault: load the account client from snapshot state.
-            // `get_client` only reads in-memory clients for the current runtime.
-            stronghold
-                .load_client_from_snapshot(account_id.as_bytes(), &keyprovider, &snapshot_path)
-                .map_err(|e| {
-                    println!("[AUTH] Load client from snapshot failed: {}", e);
-                    WalletError::InvalidPassword
-                })?
-        } else {
-            // New vault: create the client that will hold the seed record.
-            stronghold
-                .create_client(account_id.as_bytes())
-                .map_err(|e| {
-                    println!("[AUTH] Create client failed: {}", e);
-                    WalletError::OperationFailed
-                })?
-        };
+        let client = Self::get_or_create_client(
+            &stronghold,
+            &snapshot_path,
+            account_id,
+            &keyprovider,
+            path.exists(),
+        )?;
         client
             .store()
             .insert(SEED_RECORD_KEY.to_vec(), seed.as_bytes().to_vec(), None)
@@ -120,10 +143,7 @@ impl StrongholdStore {
         }
 
         let password_hash = Self::hash_password(password);
-        let keyprovider = KeyProvider::try_from(Zeroizing::new(password_hash)).map_err(|e| {
-            println!("[AUTH] KeyProvider failed during load: {}", e);
-            WalletError::OperationFailed
-        })?;
+        let keyprovider = Self::keyprovider_from_hash(&password_hash)?;
         let snapshot_path = SnapshotPath::from_path(&path);
 
         let stronghold = Stronghold::default();
@@ -154,5 +174,70 @@ impl StrongholdStore {
 
         println!("[AUTH] Seed loaded successfully");
         Ok(seed)
+    }
+
+    /// Store address book snapshot for an account in an isolated Stronghold snapshot.
+    pub async fn store_address_book(
+        &self,
+        account_id: &str,
+        password_hash: &[u8],
+        data: &[u8],
+    ) -> Result<(), WalletError> {
+        let path = self.address_book_snapshot_path(account_id);
+        let snapshot_path = SnapshotPath::from_path(&path);
+        let keyprovider = Self::keyprovider_from_hash(password_hash)?;
+
+        let stronghold = Stronghold::default();
+        let client = Self::get_or_create_client(
+            &stronghold,
+            &snapshot_path,
+            account_id,
+            &keyprovider,
+            path.exists(),
+        )?;
+
+        client
+            .store()
+            .insert(ADDRESS_BOOK_RECORD_KEY.to_vec(), data.to_vec(), None)
+            .map_err(|e| {
+                println!("[AUTH] Store address book failed: {}", e);
+                WalletError::OperationFailed
+            })?;
+
+        stronghold
+            .commit_with_keyprovider(&snapshot_path, &keyprovider)
+            .map_err(|e| {
+                println!("[AUTH] Commit address book snapshot failed: {}", e);
+                WalletError::OperationFailed
+            })?;
+
+        Ok(())
+    }
+
+    /// Load address book snapshot bytes for an account from isolated Stronghold snapshot.
+    pub async fn load_address_book(
+        &self,
+        account_id: &str,
+        password_hash: &[u8],
+    ) -> Result<Option<Vec<u8>>, WalletError> {
+        let path = self.address_book_snapshot_path(account_id);
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let snapshot_path = SnapshotPath::from_path(&path);
+        let keyprovider = Self::keyprovider_from_hash(password_hash)?;
+        let stronghold = Stronghold::default();
+        let client = stronghold
+            .load_client_from_snapshot(account_id.as_bytes(), &keyprovider, &snapshot_path)
+            .map_err(|e| {
+                println!("[AUTH] Load address book snapshot failed: {}", e);
+                WalletError::OperationFailed
+            })?;
+
+        client.store().get(ADDRESS_BOOK_RECORD_KEY).map_err(|e| {
+            println!("[AUTH] Read address book record failed: {}", e);
+            WalletError::OperationFailed
+        })
     }
 }

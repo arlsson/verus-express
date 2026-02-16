@@ -14,9 +14,9 @@ use crate::core::channels::PreflightStore;
 use crate::core::coins::{Channel, CoinRegistry};
 use crate::types::wallet::WalletNetwork;
 use crate::types::{
-    BridgeConversionPathRequest, BridgeConversionPathsResult, BridgeExecutionHint,
-    BridgeTransferPreflightParams, BridgeTransferPreflightResult, BridgeTransferRoute,
-    VrpcTransferPreflightParams, WalletError,
+    BridgeConversionEstimateRequest, BridgeConversionEstimateResult, BridgeConversionPathRequest,
+    BridgeConversionPathsResult, BridgeExecutionHint, BridgeTransferPreflightParams,
+    BridgeTransferPreflightResult, BridgeTransferRoute, VrpcTransferPreflightParams, WalletError,
 };
 
 #[tauri::command(rename_all = "snake_case")]
@@ -39,6 +39,39 @@ pub async fn get_bridge_conversion_paths(
     match prefix {
         "vrpc" => {
             get_bridge_conversion_paths_vrpc(
+                request,
+                &session_vrpc_address,
+                network,
+                coin_registry.as_ref(),
+                vrpc_provider_pool.inner().as_ref(),
+            )
+            .await
+        }
+        "eth" | "erc20" => Err(WalletError::BridgeNotImplemented),
+        _ => Err(WalletError::UnsupportedChannel),
+    }
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn estimate_bridge_conversion(
+    request: BridgeConversionEstimateRequest,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+    coin_registry: State<'_, Arc<CoinRegistry>>,
+    vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
+    _eth_provider_pool: State<'_, Arc<EthProviderPool>>,
+) -> Result<BridgeConversionEstimateResult, WalletError> {
+    let session = session_manager.lock().await;
+    if !session.is_unlocked() {
+        return Err(WalletError::WalletLocked);
+    }
+    let (session_vrpc_address, _, _) = session.get_addresses()?;
+    let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+    drop(session);
+
+    let prefix = request.channel_id.split('.').next().unwrap_or_default();
+    match prefix {
+        "vrpc" => {
+            estimate_bridge_conversion_vrpc(
                 request,
                 &session_vrpc_address,
                 network,
@@ -80,6 +113,40 @@ async fn get_bridge_conversion_paths_vrpc(
     }
 
     crate::core::channels::eth::bridge::get_conversion_paths(
+        &request,
+        vrpc_provider_pool.for_network(network),
+    )
+    .await
+}
+
+async fn estimate_bridge_conversion_vrpc(
+    request: BridgeConversionEstimateRequest,
+    session_vrpc_address: &str,
+    network: WalletNetwork,
+    coin_registry: &CoinRegistry,
+    vrpc_provider_pool: &VrpcProviderPool,
+) -> Result<BridgeConversionEstimateResult, WalletError> {
+    let resolved = vrpc::parse_vrpc_channel_id(&request.channel_id, Some(session_vrpc_address))?;
+    if resolved.address != session_vrpc_address {
+        return Err(WalletError::InvalidAddress);
+    }
+
+    let is_testnet = matches!(network, WalletNetwork::Testnet);
+    let source_coin = coin_registry
+        .find_by_id(&request.coin_id, is_testnet)
+        .ok_or(WalletError::UnsupportedChannel)?;
+    if !source_coin
+        .compatible_channels
+        .iter()
+        .any(|channel| matches!(channel, Channel::Vrpc))
+    {
+        return Err(WalletError::UnsupportedChannel);
+    }
+    if source_coin.system_id != resolved.system_id {
+        return Err(WalletError::UnsupportedChannel);
+    }
+
+    crate::core::channels::eth::bridge::estimate_conversion(
         &request,
         vrpc_provider_pool.for_network(network),
     )

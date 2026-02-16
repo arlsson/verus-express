@@ -199,8 +199,11 @@ export interface BridgeConversionPathQuote {
   destinationDisplayName?: string | null;
   destinationDisplayTicker?: string | null;
   convertTo?: string | null;
+  convertToDisplayName?: string | null;
   exportTo?: string | null;
+  exportToDisplayName?: string | null;
   via?: string | null;
+  viaDisplayName?: string | null;
   mapTo?: string | null;
   price?: string | null;
   viaPriceInRoot?: string | null;
@@ -215,6 +218,21 @@ export interface BridgeConversionPathQuote {
 export interface BridgeConversionPathsResult {
   sourceCurrency: string;
   paths: Record<string, BridgeConversionPathQuote[]>;
+}
+
+export interface BridgeConversionEstimateRequest {
+  coinId: string;
+  channelId: string;
+  sourceCurrency: string;
+  convertTo: string;
+  amount: string;
+  via?: string | null;
+  preconvert?: boolean | null;
+}
+
+export interface BridgeConversionEstimateResult {
+  estimatedCurrencyOut?: string | null;
+  price?: string | null;
 }
 
 export interface BridgeTransferPreflightParams {

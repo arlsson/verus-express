@@ -356,6 +356,15 @@ export const nl: Record<string, string> = {
   'wallet.transfer.recipientHintEth': 'Gebruik een geldig Ethereum-adres voor deze transfer.',
   'wallet.transfer.recipientHintBtc': 'Gebruik een geldig Bitcoin-adres voor deze transfer.',
   'wallet.transfer.recipientInvalid': 'Het bestemmingsadres is ongeldig voor deze route.',
+  'wallet.transfer.addressBook.open': 'Adresboek openen',
+  'wallet.transfer.addressBook.sheetTitle': 'Adresboek',
+  'wallet.transfer.addressBook.searchPlaceholder': 'Zoek op contact of adres',
+  'wallet.transfer.addressBook.empty':
+    'Geen opgeslagen ontvangers gevonden voor dit adrestype.',
+  'wallet.transfer.addressBook.recent': 'Recent',
+  'wallet.transfer.addressBook.savedMatch': 'Opgeslagen ontvanger: {contact} ({endpoint})',
+  'wallet.transfer.addressBook.similarWarning':
+    'Dit lijkt op een opgeslagen adres, maar is geen exacte match.',
   'wallet.transfer.preflighting': 'Review voorbereiden…',
   'wallet.transfer.prepareReview': 'Review voorbereiden',
   'wallet.transfer.sendNow': 'Nu verzenden',
@@ -367,9 +376,33 @@ export const nl: Record<string, string> = {
   'wallet.transfer.review.changeAmount': 'Bedrag wijzigen',
   'wallet.transfer.review.changeDetails': 'Details wijzigen',
   'wallet.transfer.review.changeRecipient': 'Ontvanger wijzigen',
+  'wallet.transfer.review.savedRecipient': 'Opgeslagen ontvanger: {contact} ({endpoint})',
+  'wallet.transfer.review.unsavedRecipient':
+    'Deze ontvanger staat niet in je adresboek.',
+  'wallet.transfer.review.unsavedWarningTitle': 'Niet-opgeslagen ontvanger',
+  'wallet.transfer.review.unsavedWarningBody':
+    'Controleer dit adres zorgvuldig. Overweeg om het na verzending op te slaan in je adresboek.',
+  'wallet.transfer.review.unsavedConfirm':
+    'Ik heb dit ontvangersadres gecontroleerd en wil doorgaan.',
   'wallet.transfer.review.refresh': 'Controle vernieuwen',
   'wallet.transfer.reviewUnavailable':
     'Reviewgegevens zijn niet beschikbaar. Voer preflight opnieuw uit.',
+  'wallet.transfer.saveRecipient.title': 'Ontvanger opslaan',
+  'wallet.transfer.saveRecipient.description':
+    'Sla dit adres op in je adresboek zodat je het later opnieuw kunt gebruiken.',
+  'wallet.transfer.saveRecipient.namePlaceholder': 'Naam van ontvanger',
+  'wallet.transfer.saveRecipient.save': 'Ontvanger opslaan',
+  'wallet.transfer.saveRecipient.saving': 'Ontvanger opslaan…',
+  'wallet.transfer.saveRecipient.defaultEndpointLabel': 'Standaard',
+  'wallet.transfer.saveRecipient.error.nameRequired': 'Voer een naam voor de ontvanger in.',
+  'wallet.transfer.saveRecipient.error.invalid':
+    'Dit adres is ongeldig voor het geselecteerde netwerk.',
+  'wallet.transfer.saveRecipient.error.duplicate':
+    'Dit adres is al opgeslagen voor het geselecteerde netwerk.',
+  'wallet.transfer.saveRecipient.error.walletLocked':
+    'Wallet is vergrendeld. Ontgrendel en probeer opnieuw.',
+  'wallet.transfer.saveRecipient.error.generic':
+    'Kon de ontvanger nu niet opslaan.',
   'wallet.transfer.pathConvertTo': 'Omzetten naar: {value}',
   'wallet.transfer.pathExportTo': 'Exporteren naar: {value}',
   'wallet.transfer.pathVia': 'Via: {value}',
@@ -402,6 +435,46 @@ export const nl: Record<string, string> = {
   'wallet.conversions.title': 'Omwisselen',
   'wallet.identity.title': 'Identiteit',
   'wallet.addressBook.title': 'Adresboek',
+  'wallet.addressBook.description':
+    'Sla vertrouwde ontvangers op en gebruik ze veilig opnieuw.',
+  'wallet.addressBook.addContact': 'Contact toevoegen',
+  'wallet.addressBook.searchPlaceholder': 'Zoek contacten',
+  'wallet.addressBook.empty': 'Nog geen contacten.',
+  'wallet.addressBook.endpointsCount': 'adressen',
+  'wallet.addressBook.editContact': 'Contact bewerken',
+  'wallet.addressBook.deleteContact': 'Contact verwijderen',
+  'wallet.addressBook.deleteConfirmTitle': 'Contact verwijderen?',
+  'wallet.addressBook.deleteConfirmDescription':
+    'Hiermee verwijder je alle opgeslagen adressen van dit contact.',
+  'wallet.addressBook.noSelectionTitle': 'Selecteer een contact',
+  'wallet.addressBook.noSelectionDescription':
+    'Kies een contact uit de lijst of voeg een nieuw contact toe om te beginnen.',
+  'wallet.addressBook.kindVrpc': 'Verus / PBaaS',
+  'wallet.addressBook.kindBtc': 'Bitcoin',
+  'wallet.addressBook.kindEth': 'Ethereum',
+  'wallet.addressBook.endpointDefaultLabel': 'Standaard',
+  'wallet.addressBook.form.nameLabel': 'Contactnaam',
+  'wallet.addressBook.form.namePlaceholder': 'Voer een contactnaam in',
+  'wallet.addressBook.form.noteLabel': 'Notitie',
+  'wallet.addressBook.form.notePlaceholder': 'Optionele notitie',
+  'wallet.addressBook.form.endpointsTitle': 'Adressen',
+  'wallet.addressBook.form.addEndpoint': 'Adres toevoegen',
+  'wallet.addressBook.form.kindLabel': 'Netwerktype',
+  'wallet.addressBook.form.endpointLabel': 'Label',
+  'wallet.addressBook.form.endpointLabelPlaceholder': 'Thuis, Exchange, Spaar…',
+  'wallet.addressBook.form.addressLabel': 'Adres',
+  'wallet.addressBook.form.addressPlaceholder': 'Plak adres',
+  'wallet.addressBook.form.save': 'Contact opslaan',
+  'wallet.addressBook.error.nameRequired': 'Voer een contactnaam in.',
+  'wallet.addressBook.error.endpointRequired': 'Voeg minimaal één adres toe.',
+  'wallet.addressBook.error.endpointFieldsRequired':
+    'Elk adres heeft een label en adres nodig.',
+  'wallet.addressBook.error.invalidEndpoint': 'Een of meer adressen zijn ongeldig.',
+  'wallet.addressBook.error.invalidInput': 'Ongeldige adresboek-invoer.',
+  'wallet.addressBook.error.duplicate':
+    'Er bestaat al een overeenkomstig adres voor dit netwerk.',
+  'wallet.addressBook.error.walletLocked': 'Wallet is vergrendeld. Ontgrendel en probeer opnieuw.',
+  'wallet.addressBook.error.saveFailed': 'Kon adresboekwijzigingen nu niet opslaan.',
 
   'walletImport.step1.title': 'Personaliseer je wallet',
   'walletImport.step2.seedTitle': 'Voer herstelzin in',

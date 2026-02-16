@@ -8,7 +8,8 @@ use serde_json::Value;
 
 use crate::core::channels::vrpc::VrpcProvider;
 use crate::types::bridge::{
-    BridgeConversionPathQuote, BridgeConversionPathRequest, BridgeConversionPathsResult,
+    BridgeConversionEstimateRequest, BridgeConversionEstimateResult, BridgeConversionPathQuote,
+    BridgeConversionPathRequest, BridgeConversionPathsResult,
 };
 use crate::types::WalletError;
 
@@ -147,6 +148,21 @@ pub async fn get_conversion_paths(
         Err(err) => return Err(err),
     };
 
+    match vrpc_provider.listcurrencies().await {
+        Ok(list_payload) => {
+            let currency_display_lookup = collect_currency_display_lookup(&list_payload);
+            if !currency_display_lookup.is_empty() {
+                enrich_quote_display_names(&mut normalized_paths, &currency_display_lookup);
+            }
+        }
+        Err(err) => {
+            println!(
+                "[BRIDGE] listcurrencies lookup unavailable while enriching conversion display labels: {:?}",
+                err
+            );
+        }
+    }
+
     match vrpc_provider
         .listcurrencies_with_launchstate("prelaunch")
         .await
@@ -168,6 +184,46 @@ pub async fn get_conversion_paths(
     Ok(BridgeConversionPathsResult {
         source_currency: request.source_currency.clone(),
         paths: normalized_paths,
+    })
+}
+
+pub async fn estimate_conversion(
+    request: &BridgeConversionEstimateRequest,
+    vrpc_provider: &VrpcProvider,
+) -> Result<BridgeConversionEstimateResult, WalletError> {
+    let source_currency = request.source_currency.trim();
+    let convert_to = request.convert_to.trim();
+    if source_currency.is_empty() || convert_to.is_empty() {
+        return Err(WalletError::OperationFailed);
+    }
+
+    let amount = request
+        .amount
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| WalletError::OperationFailed)?;
+    if !amount.is_finite() || amount <= 0.0 {
+        return Err(WalletError::OperationFailed);
+    }
+
+    let raw_estimate = vrpc_provider
+        .estimateconversion(
+            source_currency,
+            convert_to,
+            amount,
+            request.via.as_deref(),
+            request.preconvert,
+        )
+        .await?;
+
+    let estimated_currency_out = raw_estimate
+        .get("estimatedcurrencyout")
+        .and_then(extract_stringish);
+    let price = raw_estimate.get("price").and_then(extract_stringish);
+
+    Ok(BridgeConversionEstimateResult {
+        estimated_currency_out,
+        price,
     })
 }
 
@@ -888,15 +944,30 @@ fn routes_to_quotes(
         let mut quotes = Vec::new();
         for candidate in candidates {
             let export_to = candidate.export_to_id.clone();
+            let export_to_display_name = candidate.export_to_id.as_ref().map(|currency_id| {
+                currencies
+                    .get(currency_id)
+                    .map(currency_display_ref)
+                    .unwrap_or_else(|| currency_id.clone())
+            });
             let via = candidate.via_id.clone();
+            let via_display_name = candidate.via_id.as_ref().map(|currency_id| {
+                currencies
+                    .get(currency_id)
+                    .map(currency_display_ref)
+                    .unwrap_or_else(|| currency_id.clone())
+            });
 
             quotes.push(BridgeConversionPathQuote {
                 destination_id: destination.currency_id.clone(),
                 destination_display_name: destination.display_name(),
                 destination_display_ticker: destination.display_ticker(),
                 convert_to: Some(destination.currency_id.clone()),
+                convert_to_display_name: Some(currency_display_ref(destination)),
                 export_to,
+                export_to_display_name,
                 via,
+                via_display_name,
                 map_to: None,
                 price: candidate.price.map(format_decimal),
                 via_price_in_root: candidate.via_price_in_root.map(format_decimal),
@@ -915,6 +986,14 @@ fn routes_to_quotes(
     }
 
     normalized
+}
+
+fn currency_display_ref(currency: &CurrencyNode) -> String {
+    currency
+        .fully_qualified_name
+        .clone()
+        .or_else(|| currency.name.clone())
+        .unwrap_or_else(|| currency.currency_id.clone())
 }
 
 fn merge_currency_nodes_from_list_payload(
@@ -1086,10 +1165,25 @@ fn parse_conversion_paths(
                     .get("convertto")
                     .and_then(extract_currency_ref)
                     .or(Some(destination_id)),
+                convert_to_display_name: raw_quote_object
+                    .get("convertto")
+                    .and_then(extract_currency_display_name)
+                    .or_else(|| extract_destination_display_name(destination))
+                    .or_else(|| {
+                        raw_quote_object
+                            .get("destination")
+                            .and_then(extract_currency_ref)
+                    }),
                 export_to: raw_quote_object
                     .get("exportto")
                     .and_then(extract_currency_ref),
+                export_to_display_name: raw_quote_object
+                    .get("exportto")
+                    .and_then(extract_currency_display_name),
                 via: raw_quote_object.get("via").and_then(extract_currency_ref),
+                via_display_name: raw_quote_object
+                    .get("via")
+                    .and_then(extract_currency_display_name),
                 map_to: raw_quote_object
                     .get("mapto")
                     .and_then(extract_currency_ref)
@@ -1178,6 +1272,96 @@ fn collect_currency_refs_from_entry(entry: &Value, refs: &mut HashSet<String>) {
 
 fn normalize_currency_ref(value: &str) -> String {
     value.trim().to_ascii_lowercase()
+}
+
+fn collect_currency_display_lookup(list_payload: &Value) -> HashMap<String, String> {
+    let mut lookup = HashMap::new();
+    let Some(entries) = list_payload.as_array() else {
+        return lookup;
+    };
+
+    for entry in entries {
+        let definition = entry.get("currencydefinition").unwrap_or(entry);
+        insert_currency_display_lookup_entry(&mut lookup, definition);
+    }
+
+    lookup
+}
+
+fn insert_currency_display_lookup_entry(lookup: &mut HashMap<String, String>, definition: &Value) {
+    let Some(display_label) = extract_currency_display_name(definition) else {
+        return;
+    };
+
+    for key in ["currencyid", "address", "fullyqualifiedname", "name", "symbol"] {
+        let Some(value) = definition.get(key).and_then(extract_stringish) else {
+            continue;
+        };
+
+        let normalized = normalize_currency_ref(&value);
+        if normalized.is_empty() || lookup.contains_key(&normalized) {
+            continue;
+        }
+        lookup.insert(normalized, display_label.clone());
+    }
+}
+
+fn enrich_quote_display_names(
+    paths: &mut HashMap<String, Vec<BridgeConversionPathQuote>>,
+    lookup: &HashMap<String, String>,
+) {
+    if lookup.is_empty() {
+        return;
+    }
+
+    for quotes in paths.values_mut() {
+        for quote in quotes {
+            maybe_enrich_display_name(
+                &mut quote.destination_display_name,
+                Some(&quote.destination_id),
+                lookup,
+            );
+            maybe_enrich_display_name(
+                &mut quote.convert_to_display_name,
+                quote.convert_to.as_deref(),
+                lookup,
+            );
+            maybe_enrich_display_name(
+                &mut quote.export_to_display_name,
+                quote.export_to.as_deref(),
+                lookup,
+            );
+            maybe_enrich_display_name(&mut quote.via_display_name, quote.via.as_deref(), lookup);
+        }
+    }
+}
+
+fn maybe_enrich_display_name(
+    display_name: &mut Option<String>,
+    identity: Option<&str>,
+    lookup: &HashMap<String, String>,
+) {
+    let Some(identity_value) = identity else {
+        return;
+    };
+
+    let identity_normalized = normalize_currency_ref(identity_value);
+    if identity_normalized.is_empty() {
+        return;
+    }
+
+    let should_enrich = match display_name.as_deref() {
+        None => true,
+        Some(current) => current.trim().is_empty() || equals_ignore_case(current, identity_value),
+    };
+    if !should_enrich {
+        return;
+    }
+
+    let Some(enriched_value) = lookup.get(&identity_normalized) else {
+        return;
+    };
+    *display_name = Some(enriched_value.clone());
 }
 
 fn mark_prelaunch_quotes(
@@ -1289,6 +1473,21 @@ fn extract_currency_ref(value: &Value) -> Option<String> {
         .or_else(|| object.get("name").and_then(extract_stringish))
 }
 
+fn extract_currency_display_name(value: &Value) -> Option<String> {
+    if let Some(raw) = value.as_str() {
+        return Some(raw.to_string());
+    }
+
+    let object = value.as_object()?;
+    object
+        .get("fullyqualifiedname")
+        .and_then(extract_stringish)
+        .or_else(|| object.get("name").and_then(extract_stringish))
+        .or_else(|| object.get("symbol").and_then(extract_stringish))
+        .or_else(|| object.get("currencyid").and_then(extract_stringish))
+        .or_else(|| object.get("address").and_then(extract_stringish))
+}
+
 fn extract_destination_id(destination: Option<&Value>, fallback: &str) -> String {
     destination
         .and_then(extract_currency_ref)
@@ -1317,7 +1516,10 @@ fn extract_bool(value: Option<&Value>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{derive_paths_from_list_payloads, parse_conversion_paths};
+    use super::{
+        collect_currency_display_lookup, derive_paths_from_list_payloads, enrich_quote_display_names,
+        parse_conversion_paths,
+    };
     use serde_json::json;
 
     #[test]
@@ -1401,6 +1603,62 @@ mod tests {
         let quotes = parsed.get("iDest").expect("destination key");
         assert_eq!(quotes.len(), 1);
         assert!(quotes[0].prelaunch);
+    }
+
+    #[test]
+    fn parse_conversion_paths_enriches_display_labels_from_currency_lookup() {
+        let input = json!({
+            "iDest": [
+                {
+                    "destination": {
+                        "currencyid": "iDest",
+                        "fullyqualifiedname": "vUSDC.vETH",
+                        "symbol": "vUSDC"
+                    },
+                    "convertto": "iDest",
+                    "exportto": "iExport",
+                    "via": "iVia",
+                    "price": 1.25
+                }
+            ]
+        });
+        let list_payload = json!([
+            {
+                "currencydefinition": {
+                    "currencyid": "iDest",
+                    "fullyqualifiedname": "vUSDC.vETH",
+                    "name": "vUSDC",
+                    "symbol": "vUSDC"
+                }
+            },
+            {
+                "currencydefinition": {
+                    "currencyid": "iVia",
+                    "fullyqualifiedname": "Bridge.vETH",
+                    "name": "Bridge",
+                    "symbol": "BRIDGE"
+                }
+            },
+            {
+                "currencydefinition": {
+                    "currencyid": "iExport",
+                    "fullyqualifiedname": "Ethereum",
+                    "name": "Ethereum",
+                    "symbol": "ETH"
+                }
+            }
+        ]);
+
+        let mut parsed = parse_conversion_paths(input).expect("parse paths");
+        let lookup = collect_currency_display_lookup(&list_payload);
+        enrich_quote_display_names(&mut parsed, &lookup);
+
+        let quotes = parsed.get("iDest").expect("destination key");
+        assert_eq!(quotes.len(), 1);
+        let quote = &quotes[0];
+        assert_eq!(quote.convert_to_display_name.as_deref(), Some("vUSDC.vETH"));
+        assert_eq!(quote.export_to_display_name.as_deref(), Some("Ethereum"));
+        assert_eq!(quote.via_display_name.as_deref(), Some("Bridge.vETH"));
     }
 
     #[test]

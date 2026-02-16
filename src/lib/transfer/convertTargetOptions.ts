@@ -64,8 +64,11 @@ export type ViaRouteOption = {
   receiveSubtitle?: string;
   destinationId: string;
   convertTo?: string | null;
+  convertToLabel?: string | null;
   exportTo?: string | null;
+  exportToLabel?: string | null;
   via?: string | null;
+  viaLabel?: string | null;
   mapTo?: string | null;
   price?: string | null;
   gateway?: boolean;
@@ -189,8 +192,11 @@ export function buildReceiveAssetSections(input: TargetBuildInput): ReceiveAsset
           receiveSubtitle: entry.label !== entry.ticker ? entry.label : undefined,
           destinationId,
           convertTo,
+          convertToLabel: quote.convertToDisplayName ?? quote.destinationDisplayName ?? convertTo,
           exportTo,
+          exportToLabel: quote.exportToDisplayName ?? exportTo,
           via: viaId,
+          viaLabel: quote.viaDisplayName ?? viaId,
           mapTo: quote.mapTo ?? null,
           price: quote.price ?? null,
           gateway: quote.gateway,
@@ -207,7 +213,7 @@ export function buildReceiveAssetSections(input: TargetBuildInput): ReceiveAsset
       ) {
         entry.exportOptions.push({
           exportTo,
-          exportToName: exportTo,
+          exportToName: quote.exportToDisplayName ?? exportTo,
           gateway: quote.gateway,
           via: quote.via ?? null,
           price: quote.price ?? null,

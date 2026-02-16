@@ -10,6 +10,9 @@ This file applies to frontend work under `src/`.
 - Default to desktop UX decisions for this app.
 - Keep visual patterns consistent with
   `src/lib/components/wallet/UnlockScreen.svelte`.
+- For scrollable lists/panels in app UI, use shadcn-svelte `ScrollArea`
+  (`$lib/components/ui/scroll-area`) instead of ad-hoc `overflow-y-auto`,
+  unless native browser scrolling is explicitly required.
 - Treat repeated user-facing content (for example, Need help Q&A blocks) as shared
   sources instead of duplicated inline arrays in multiple screens.
 - Prefer shared utilities under `src/lib` (for example, `src/lib/utils/*`) that

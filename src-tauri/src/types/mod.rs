@@ -3,6 +3,7 @@
 // Last Updated: Added transaction module and Module 8 preflight/send types
 
 pub mod bridge;
+pub mod address_book;
 pub mod errors;
 pub mod guard;
 pub mod identity;
@@ -10,7 +11,13 @@ pub mod transaction;
 pub mod vrpc_transfer;
 pub mod wallet;
 
+pub use address_book::{
+    AddressBookContact, AddressBookEndpoint, AddressBookSnapshot, AddressEndpointKind,
+    SaveAddressBookContactRequest, SaveAddressBookEndpointInput, ValidateDestinationAddressRequest,
+    ValidateDestinationAddressResult,
+};
 pub use bridge::{
+    BridgeConversionEstimateRequest, BridgeConversionEstimateResult,
     BridgeConversionPathQuote, BridgeConversionPathRequest, BridgeConversionPathsResult,
     BridgeExecutionHint, BridgeTransferPreflightParams, BridgeTransferPreflightResult,
     BridgeTransferRoute,
