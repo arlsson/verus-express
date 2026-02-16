@@ -16,6 +16,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
+  import InlineTextActionButton from '$lib/components/common/InlineTextActionButton.svelte';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import { i18nStore, networkLocaleKey } from '$lib/i18n';
   import HelpDrawerLink from '$lib/components/common/HelpDrawerLink.svelte';
@@ -241,7 +242,7 @@
             <div class="flex items-center justify-between">
               <div class="min-w-0 flex items-center gap-3">
                 <div
-                  class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg text-white"
+                  class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl leading-none text-white"
                   style={`background-color: ${walletColorHex(selectedWallet.color)};`}
                 >
                   {walletEmoji(selectedWallet.emoji)}
@@ -252,15 +253,13 @@
               </div>
 
               {#if wallets.length > 1}
-                <button
-                  type="button"
-                  class="text-muted-foreground text-xs underline-offset-4 hover:text-foreground hover:underline"
+                <InlineTextActionButton
                   onclick={() => {
                     showWalletSwitcherDrawer = true;
                   }}
                 >
                   {i18n.t('unlock.switch')}
-                </button>
+                </InlineTextActionButton>
               {/if}
             </div>
 

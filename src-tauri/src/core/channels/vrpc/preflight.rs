@@ -9,6 +9,8 @@ use std::io::Cursor;
 use uuid::Uuid;
 
 use crate::core::channels::store::{PreflightRecord, PreflightStore};
+use crate::core::channels::vrpc::identity::verus_tx::codec::decode_hex as decode_verus_tx;
+use crate::core::channels::vrpc::identity::verus_tx::model::txid_le_bytes_to_hex;
 use crate::core::channels::vrpc::provider::VrpcProvider;
 use crate::types::transaction::{PreflightParams, PreflightResult};
 use crate::types::WalletError;
@@ -149,18 +151,11 @@ fn collect_payload_inputs_from_funded_tx(
     funded_hex: &str,
     candidates: &[(String, u32, i64, Option<String>)],
 ) -> Result<Vec<VrpcInputRef>, WalletError> {
-    let raw = hex::decode(funded_hex.trim_start_matches("0x"))
-        .or_else(|_| hex::decode(funded_hex))
-        .map_err(|_| WalletError::OperationFailed)?;
-    let mut cursor = Cursor::new(&raw[..]);
-    let funded_tx: bitcoin::Transaction = bitcoin::Transaction::consensus_decode(&mut cursor)
-        .map_err(|_| WalletError::OperationFailed)?;
+    let funded_inputs = parse_funded_input_refs(funded_hex)?;
 
     let mut seen = HashSet::<(String, u32)>::new();
-    let mut out = Vec::with_capacity(funded_tx.input.len());
-    for input in funded_tx.input {
-        let txid = input.previous_output.txid.to_string();
-        let vout = input.previous_output.vout;
+    let mut out = Vec::with_capacity(funded_inputs.len());
+    for (txid, vout) in funded_inputs {
         if !seen.insert((txid.clone(), vout)) {
             return Err(WalletError::OperationFailed);
         }
@@ -168,6 +163,12 @@ fn collect_payload_inputs_from_funded_tx(
             .iter()
             .find(|(c_txid, c_vout, _, _)| c_txid == &txid && *c_vout == vout)
         else {
+            println!(
+                "[VRPC][preflight] funded input missing from candidate utxos: txid={} vout={} candidate_count={}",
+                txid,
+                vout,
+                candidates.len()
+            );
             return Err(WalletError::OperationFailed);
         };
 
@@ -183,6 +184,53 @@ fn collect_payload_inputs_from_funded_tx(
         return Err(WalletError::OperationFailed);
     }
     Ok(out)
+}
+
+fn parse_funded_input_refs(funded_hex: &str) -> Result<Vec<(String, u32)>, WalletError> {
+    if let Ok(verus_tx) = decode_verus_tx(funded_hex) {
+        let refs = verus_tx
+            .inputs
+            .iter()
+            .map(|input| {
+                (
+                    txid_le_bytes_to_hex(&input.prevout_txid_le),
+                    input.prevout_vout,
+                )
+            })
+            .collect::<Vec<_>>();
+        if !refs.is_empty() {
+            return Ok(refs);
+        }
+    }
+
+    let raw = hex::decode(funded_hex.trim_start_matches("0x"))
+        .or_else(|_| hex::decode(funded_hex))
+        .map_err(|err| {
+            println!(
+                "[VRPC][preflight] failed to decode funded hex bytes for input extraction: {}",
+                err
+            );
+            WalletError::OperationFailed
+        })?;
+    let mut cursor = Cursor::new(&raw[..]);
+    let funded_tx: bitcoin::Transaction = bitcoin::Transaction::consensus_decode(&mut cursor)
+        .map_err(|err| {
+            println!(
+                "[VRPC][preflight] failed to decode funded transaction with bitcoin parser for input extraction: {}",
+                err
+            );
+            WalletError::OperationFailed
+        })?;
+    Ok(funded_tx
+        .input
+        .into_iter()
+        .map(|input| {
+            (
+                input.previous_output.txid.to_string(),
+                input.previous_output.vout,
+            )
+        })
+        .collect())
 }
 
 /// Run VRPC preflight: validate, build/fund tx, store record, return UI result.

@@ -22,8 +22,10 @@
   import { coinsStore } from '$lib/stores/coins.js';
   import { walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { balanceStore, getBalance } from '$lib/stores/balances.js';
+  import { ratesStore } from '$lib/stores/rates.js';
   import { transactionStore } from '$lib/stores/transactions.js';
   import { addressBookStore, upsertAddressBookContact } from '$lib/stores/addressBook.js';
+  import { formatUsdAmount } from '$lib/utils/walletOverview.js';
   import * as addressBookService from '$lib/services/addressBookService.js';
   import {
     endpointKindForDestinationKind,
@@ -117,6 +119,7 @@
   const coins = $derived($coinsStore);
   const walletChannels = $derived($walletChannelsStore);
   const balances = $derived($balanceStore);
+  const rates = $derived($ratesStore);
   const addressBookContacts = $derived($addressBookStore);
   const stepCopy = $derived(getTransferStepCopy(i18n.t));
   const stepLabels = $derived(getTransferStepLabels(i18n.t));
@@ -412,6 +415,29 @@
       if (numericPrice === null) return null;
       return (Number(amount) * numericPrice).toFixed(8);
     })()
+  );
+
+  const selectedReceiveAssetPresentation = $derived(
+    selectedReceiveAssetOption
+      ? resolveCoinPresentationById(selectedReceiveAssetOption.destinationId)
+      : null
+  );
+
+  const sourceUsdRate = $derived(
+    getUsdRateForCoinIds([selectedCoin?.id, selectedCoin?.currencyId, selectedCoin?.mappedTo])
+  );
+
+  const receiveUsdRate = $derived(
+    getUsdRateForCoinIds([
+      selectedReceiveAssetOption?.destinationId,
+      selectedReceiveAssetPresentation?.currencyId,
+      selectedReceiveAssetPresentation?.mappedTo
+    ])
+  );
+
+  const sourceAmountFiatDisplay = $derived(formatFiatEstimate(amount, sourceUsdRate));
+  const receiveAmountFiatDisplay = $derived(
+    formatFiatEstimate(estimatedConversionValue ?? '0', receiveUsdRate)
   );
 
   const activeConvertRouteRate = $derived(formatRouteRateValue(activeConvertRoute?.price));
@@ -1140,6 +1166,19 @@
     return subtitleParts.join(' • ');
   }
 
+  function getViaSheetSubtitle(option: ViaRouteOption): string {
+    const subtitleParts: string[] = [];
+    if (option.exportTo) {
+      subtitleParts.push(
+        i18n.t('wallet.transfer.pathExportTo', { value: option.exportToLabel ?? option.exportTo })
+      );
+    }
+    if (option.mapTo) {
+      subtitleParts.push(i18n.t('wallet.transfer.pathMapTo', { value: option.mapTo }));
+    }
+    return subtitleParts.join(' • ');
+  }
+
   function getViaOptionLabel(option: ViaRouteOption): string {
     return option.viaLabel ?? option.via ?? i18n.t('wallet.transfer.viaBest');
   }
@@ -1258,6 +1297,46 @@
     return `${option.via ?? ''}|${option.exportTo ?? ''}|${option.mapTo ?? ''}`.toLowerCase();
   }
 
+  function parseNonNegativeAmount(value?: string | null): number | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return 0;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    return parsed;
+  }
+
+  function getUsdRate(rateMap?: Record<string, number>): number | null {
+    if (!rateMap) return null;
+    const candidate = rateMap.USD ?? rateMap.usd;
+    if (typeof candidate !== 'number' || !Number.isFinite(candidate) || candidate <= 0) {
+      return null;
+    }
+    return candidate;
+  }
+
+  function getUsdRateForCoinIds(coinIds: Array<string | null | undefined>): number | null {
+    const seen = new Set<string>();
+
+    for (const rawCoinId of coinIds) {
+      if (typeof rawCoinId !== 'string') continue;
+      const coinId = rawCoinId.trim();
+      if (!coinId || seen.has(coinId)) continue;
+      seen.add(coinId);
+
+      const usdRate = getUsdRate(rates[coinId]?.rates);
+      if (usdRate !== null) return usdRate;
+    }
+
+    return null;
+  }
+
+  function formatFiatEstimate(amountValue: string | null | undefined, usdRate: number | null): string {
+    const numericAmount = parseNonNegativeAmount(amountValue);
+    if (numericAmount === null || usdRate === null) return '≈ —';
+    return `≈ ${formatUsdAmount(numericAmount * usdRate, i18n.intlLocale)}`;
+  }
+
   function parsePrice(value?: string | null): number | null {
     if (!value) return null;
     const parsed = Number(value);
@@ -1323,11 +1402,11 @@
     if (!amountValid) return null;
     const estimatedOutput = parseEstimatedOutput(routeEstimateOutputs[option.id]);
     if (estimatedOutput !== null) {
-      return `${estimatedOutput.toFixed(8)} ${option.receiveLabel}`;
+      return estimatedOutput.toFixed(8);
     }
     const price = parsePrice(option.price);
     if (price === null) return null;
-    return `${(Number(amount) * price).toFixed(8)} ${option.receiveLabel}`;
+    return (Number(amount) * price).toFixed(8);
   }
 
   function extractWalletErrorType(error: unknown): string | null {
@@ -1602,11 +1681,6 @@
     transferError = '';
   }
 
-  function resetViaToBest() {
-    if (!amountValid || !bestViaOption) return;
-    selectedViaOptionId = bestViaOption.id;
-    manualViaLocked = false;
-  }
 </script>
 
 <WalletTransferStepperShell
@@ -1715,8 +1789,9 @@
                       inputmode="decimal"
                       placeholder={i18n.t('wallet.transfer.amountPlaceholder')}
                       bind:value={amount}
-                      class="h-auto min-h-0 border-0 !bg-transparent dark:!bg-transparent px-0 py-0 text-[2.5rem] md:text-[2.5rem] font-semibold leading-none tracking-tight focus-visible:ring-0"
+                      class="h-auto min-h-0 border-0 !bg-transparent dark:!bg-transparent px-0 py-0 text-foreground placeholder:text-foreground dark:placeholder:text-foreground text-[2.5rem] md:text-[2.5rem] font-semibold leading-none tracking-tight focus-visible:ring-0"
                     />
+                    <p class="text-muted-foreground mt-1 px-0.5 text-xs tabular-nums">{sourceAmountFiatDisplay}</p>
                   </div>
 
                   <div class="flex h-12 max-w-[72%] shrink-0 flex-col items-end">
@@ -1782,9 +1857,10 @@
                 <section class="rounded-[20px] bg-transparent p-4">
                   <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0 flex-1">
-                      <p class="text-[2.5rem] md:text-[2.5rem] font-semibold leading-none tracking-tight">
+                      <p class="text-muted-foreground text-[2.5rem] md:text-[2.5rem] font-semibold leading-none tracking-tight">
                         {estimatedConversionValue || '0'}
                       </p>
+                      <p class="text-muted-foreground mt-1 px-0.5 text-xs tabular-nums">{receiveAmountFiatDisplay}</p>
                     </div>
                     <Button
                       variant={selectedReceiveAssetOption ? 'ghost' : 'default'}
@@ -1838,14 +1914,6 @@
                       </button>
 
                       <p class="text-muted-foreground px-1 text-xs">{activeConvertRouteRateText}</p>
-
-                      {#if manualViaLocked}
-                        <div class="px-1">
-                          <Button variant="ghost" size="sm" class="h-7 px-2.5 text-xs" onclick={resetViaToBest}>
-                            {i18n.t('wallet.transfer.viaResetBest')}
-                          </Button>
-                        </div>
-                      {/if}
                     </div>
                   {/if}
 
@@ -2406,47 +2474,53 @@
 <StandardRightSheet bind:isOpen={showViaSheet} title={i18n.t('wallet.transfer.viaSheetTitle')}>
   <div class="space-y-3">
     {#if selectedReceiveAssetOption}
-      <div class="flex items-center justify-between gap-2">
-        <p class="text-sm font-medium">{selectedReceiveAssetOption.label}</p>
-        <Button variant="ghost" size="sm" onclick={resetViaToBest}>
-          {i18n.t('wallet.transfer.viaResetBest')}
-        </Button>
-      </div>
-
       {#if rankedViaOptions.length === 0}
         <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.viaNoOptions')}</p>
       {:else}
         <div class="space-y-2">
           {#each rankedViaOptions as option}
             {@const estimatedValue = formatEstimatedReceive(option)}
+            {@const routeSubtitle = getViaSheetSubtitle(option)}
             <button
               type="button"
-              class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
+              class="group flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
                 {selectedViaOptionId === option.id
-                  ? 'border-primary/70 bg-primary/5'
-                  : 'border-border/60 hover:bg-muted/30'}"
+                  ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
+                  : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'}"
               onclick={() => selectViaOption(option.id)}
             >
-              <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                  <p class="truncate text-sm font-medium">{getViaOptionLabel(option)}</p>
-                  {#if bestViaOption?.id === option.id}
-                    <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                      {i18n.t('wallet.transfer.viaBest')}
-                    </span>
+              <div class="flex min-w-0 items-start gap-2.5">
+                <CoinIcon
+                  coinId={option.via ?? option.id}
+                  coinName={getViaOptionLabel(option)}
+                  size={18}
+                  decorative={true}
+                />
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <p class="truncate text-sm font-semibold">{getViaOptionLabel(option)}</p>
+                    {#if bestViaOption?.id === option.id}
+                      <span
+                        class="rounded-full bg-emerald-500/12 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300"
+                      >
+                        {i18n.t('wallet.transfer.viaBest')}
+                      </span>
+                    {/if}
+                  </div>
+                  {#if routeSubtitle}
+                    <p class="text-muted-foreground truncate text-xs">{routeSubtitle}</p>
                   {/if}
                 </div>
-                {#if getRouteSubtitle(option)}
-                  <p class="text-muted-foreground truncate text-xs">{getRouteSubtitle(option)}</p>
-                {/if}
-                {#if option.price}
-                  <p class="text-muted-foreground text-xs">{i18n.t('wallet.transfer.rate', { value: option.price })}</p>
-                {/if}
               </div>
               {#if estimatedValue}
-                <p class="text-muted-foreground ml-3 text-xs">
-                  {i18n.t('wallet.transfer.estimatedForAmount', { value: estimatedValue })}
-                </p>
+                <div class="ml-3 min-w-0 text-right">
+                  <p class="text-muted-foreground inline-flex items-center gap-1 text-[11px] font-medium">
+                    <ArrowDownIcon class="size-3" />
+                    <span>{i18n.t('wallet.transfer.estimatedLabel')}</span>
+                  </p>
+                  <p class="text-foreground text-lg font-semibold leading-none tabular-nums">{estimatedValue}</p>
+                </div>
               {/if}
             </button>
           {/each}

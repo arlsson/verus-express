@@ -294,6 +294,7 @@ export const nl: Record<string, string> = {
   'wallet.transfer.viaNoOptions': 'Geen omwisselopties beschikbaar voor deze selectie.',
   'wallet.transfer.rate': 'Koers: {value}',
   'wallet.transfer.ratePair': '1 {from} = {rate} {to}',
+  'wallet.transfer.estimatedLabel': 'Geschat',
   'wallet.transfer.estimatedForAmount': 'Geschat: {value}',
   'wallet.transfer.sourceAsset': 'Bron-asset',
   'wallet.transfer.sourceBalance': 'Saldo: {value}',

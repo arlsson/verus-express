@@ -6,6 +6,7 @@
   import PencilIcon from '@lucide/svelte/icons/pencil';
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
   import SearchInput from '$lib/components/common/SearchInput.svelte';
+  import InlineTextActionButton from '$lib/components/common/InlineTextActionButton.svelte';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as ScrollArea from '$lib/components/ui/scroll-area';
   import { Button } from '$lib/components/ui/button';
@@ -409,14 +410,14 @@
           <div class="space-y-3">
             <div class="flex items-center justify-between">
               <p class="text-sm font-medium">{i18n.t('wallet.addressBook.form.endpointsTitle')}</p>
-              <Button variant="ghost" size="sm" class="gap-1.5" onclick={addEndpointDraft}>
+              <InlineTextActionButton onclick={addEndpointDraft}>
                 <CirclePlusIcon class="size-3.5" />
                 {i18n.t('wallet.addressBook.form.addEndpoint')}
-              </Button>
+              </InlineTextActionButton>
             </div>
 
             {#each formEndpoints as endpoint, index}
-              <div class="bg-muted/35 rounded-md p-3">
+              <div class="rounded-md p-3">
                 <div class="flex items-start gap-2">
                   <div class="min-w-0 flex-1 space-y-1">
                     <Label for={`endpoint-address-${index}`}>{i18n.t('wallet.addressBook.form.addressLabel')}</Label>

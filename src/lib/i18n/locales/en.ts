@@ -291,6 +291,7 @@ export const en: Record<string, string> = {
   'wallet.transfer.viaNoOptions': 'No conversion options available for this selection.',
   'wallet.transfer.rate': 'Rate: {value}',
   'wallet.transfer.ratePair': '1 {from} = {rate} {to}',
+  'wallet.transfer.estimatedLabel': 'Estimated',
   'wallet.transfer.estimatedForAmount': 'Estimated: {value}',
   'wallet.transfer.sourceAsset': 'Source asset',
   'wallet.transfer.sourceBalance': 'Balance: {value}',
