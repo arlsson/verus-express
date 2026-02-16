@@ -13,6 +13,7 @@
     onClose?: () => void;
     closeDisabled?: boolean;
     dirty?: boolean;
+    showAside?: boolean;
     mobileAsideLabel?: string;
     mobileAsideTitle?: string;
     children?: Snippet;
@@ -31,6 +32,7 @@
     onClose = defaultCloseHandler,
     closeDisabled = false,
     dirty = false,
+    showAside = true,
     mobileAsideLabel = '',
     mobileAsideTitle = '',
     children,
@@ -71,6 +73,7 @@
   {steps}
   onClose={requestClose}
   {closeDisabled}
+  {showAside}
   {mobileAsideLabel}
   {mobileAsideTitle}
 >

@@ -10,12 +10,12 @@
   import { invoke } from '@tauri-apps/api/core';
   import * as Sidebar from '$lib/components/ui/sidebar';
   import WalletIcon from '@lucide/svelte/icons/wallet';
-  import UserIcon from '@lucide/svelte/icons/user';
   import AppWindowIcon from '@lucide/svelte/icons/app-window';
   import ActivityIcon from '@lucide/svelte/icons/activity';
   import BookUserIcon from '@lucide/svelte/icons/book-user';
   import SettingsIcon from '@lucide/svelte/icons/settings';
   import LockIcon from '@lucide/svelte/icons/lock';
+  import VerusIdAtIcon from '$lib/components/icons/VerusIdAtIcon.svelte';
   import { i18nStore } from '$lib/i18n';
   import { getWalletColorHex } from '$lib/constants/walletColors';
 
@@ -55,7 +55,7 @@
 
   const menuItems = $derived<MenuItem[]>([
     { id: 'overview', title: i18n.t('wallet.sidebar.wallet'), icon: WalletIcon },
-    { id: 'identity', title: i18n.t('wallet.sidebar.identities'), icon: UserIcon },
+    { id: 'identity', title: i18n.t('wallet.sidebar.identities'), icon: VerusIdAtIcon },
     { id: 'apps', title: i18n.t('wallet.sidebar.apps'), icon: AppWindowIcon },
     { id: 'activity', title: i18n.t('wallet.sidebar.activity'), icon: ActivityIcon },
     { id: 'address-book', title: i18n.t('wallet.sidebar.addressBook'), icon: BookUserIcon }

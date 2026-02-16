@@ -14,6 +14,7 @@
     steps?: { id: string; label: string; status: StepStatus }[];
     onClose?: () => void;
     closeDisabled?: boolean;
+    showAside?: boolean;
     mobileAsideLabel?: string;
     mobileAsideTitle?: string;
     children?: Snippet;
@@ -31,6 +32,7 @@
     steps = [],
     onClose = defaultCloseHandler,
     closeDisabled = false,
+    showAside = true,
     mobileAsideLabel = '',
     mobileAsideTitle = '',
     children,
@@ -63,6 +65,12 @@
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   });
+
+  $effect(() => {
+    if (!showAside) {
+      showMobileAside = false;
+    }
+  });
 </script>
 
 <section class="relative h-full min-h-0 w-full overflow-hidden">
@@ -78,7 +86,10 @@
     </button>
   </div>
 
-  <div class="h-full min-h-0 md:grid md:grid-cols-[minmax(0,1fr)_220px] md:grid-rows-[minmax(0,1fr)_auto]">
+  <div
+    class={`h-full min-h-0 md:grid md:grid-rows-[minmax(0,1fr)_auto]
+      ${showAside && aside ? 'md:grid-cols-[minmax(0,1fr)_220px]' : 'md:grid-cols-[minmax(0,1fr)]'}`}
+  >
     <div class="relative flex min-h-0 flex-col overflow-hidden">
       <div class="absolute top-0 right-0 left-0 z-30 h-11" data-tauri-drag-region aria-hidden="true"></div>
 
@@ -127,16 +138,20 @@
       </div>
     </div>
 
-    {#if aside}
+    {#if showAside && aside}
       <aside class="hidden min-h-0 overflow-y-auto border-l border-border/70 bg-[#EDEDED] px-3 py-4 dark:bg-[#28282B] md:block">
         {@render aside?.()}
       </aside>
     {/if}
 
-    <footer class="border-black/10 bg-muted/10 dark:border-white/20 relative z-10 shrink-0 border-t md:col-span-2">
-      <div class={aside ? 'md:grid md:grid-cols-[minmax(0,1fr)_220px]' : ''}>
+    <footer
+      class={`border-black/10 bg-muted/10 dark:border-white/20 relative z-10 shrink-0 border-t ${
+        showAside && aside ? 'md:col-span-2' : ''
+      }`}
+    >
+      <div class={showAside && aside ? 'md:grid md:grid-cols-[minmax(0,1fr)_220px]' : ''}>
         <div class="space-y-2 px-4 py-3 sm:px-6">
-          {#if aside && mobileAsideLabel}
+          {#if showAside && aside && mobileAsideLabel}
             <div class="flex justify-end md:hidden">
               <Button variant="ghost" size="sm" class="px-2" onclick={() => (showMobileAside = true)}>
                 {mobileAsideLabel}
@@ -146,7 +161,7 @@
           {@render footer?.()}
         </div>
 
-        {#if aside}
+        {#if showAside && aside}
           <div
             class="hidden border-l border-border/70 bg-[#EDEDED] px-3 py-3 dark:bg-[#28282B] md:flex md:items-center"
           >
@@ -158,7 +173,7 @@
   </div>
 </section>
 
-{#if aside}
+{#if showAside && aside}
   <StandardRightSheet
     bind:isOpen={showMobileAside}
     title={mobileAsideTitle || i18n.t('wallet.transfer.summary.title')}
