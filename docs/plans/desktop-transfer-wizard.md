@@ -17,6 +17,10 @@
   - Added conversion toggle flow for Send entry (`Do conversion`).
   - Added route normalization and deduped receive assets.
   - Added best-via auto selection + manual via lock and reset.
+  - Added SendWizard parity shaping for receive assets (prelaunch filtering,
+    canonical grouping, popular/more sections, and search).
+  - Added network + destination-network picker sheets for grouped/cross-chain
+    receive selection.
 - `transfer-wizard/types.ts`
   - Updated `TransferStepId` to new step model.
 - `transferWizardCopy.ts`
@@ -28,8 +32,16 @@
 ## Route model behavior
 
 - Bridge paths are normalized into via options.
-- Receive-asset sheet dedupes by receive key (`convertTo ?? destinationId`).
+- Receive-asset sheet uses mobile parity shaping from
+  `valu-mobile` branch `newsend2`:
+  - prelaunch destinations hidden
+  - options grouped by canonical asset keys
+  - fixed popular ordering (`VRSC`, `USDC`, `ETH`, `TBTC`, `DAI`)
+  - searchable popular + more sections
 - Selecting a receive asset picks best via for current amount.
+- Grouped receive assets open a network picker before final target selection.
+- Cross-chain targets open a destination-network picker; same-network can be
+  hidden when no on-chain route exists.
 - Via sheet shows all variants for selected receive asset with estimated
   receive.
 - Manual via selection is sticky until reset or invalidated by upstream changes.

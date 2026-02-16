@@ -532,7 +532,8 @@ impl VrpcProvider {
                 }
             }
         }
-        self.call("fundrawtransaction", Value::Array(params), 0).await
+        self.call("fundrawtransaction", Value::Array(params), 0)
+            .await
     }
 
     /// sendrawtransaction: signed hex
@@ -573,6 +574,21 @@ impl VrpcProvider {
         }
 
         let params = serde_json::json!([{ "systemtype": normalized }]);
+        self.call("listcurrencies", params, TTL_LISTCURRENCIES)
+            .await
+    }
+
+    /// listcurrencies with a specific launch state filter (for example `prelaunch`).
+    pub async fn listcurrencies_with_launchstate(
+        &self,
+        launchstate: &str,
+    ) -> Result<Value, WalletError> {
+        let normalized = launchstate.trim();
+        if normalized.is_empty() {
+            return self.listcurrencies().await;
+        }
+
+        let params = serde_json::json!([{ "launchstate": normalized }]);
         self.call("listcurrencies", params, TTL_LISTCURRENCIES)
             .await
     }

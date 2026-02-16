@@ -26,8 +26,17 @@ struct CurrencyNode {
     system_id: Option<String>,
     parent: Option<String>,
     launch_system_id: Option<String>,
+    start_block: u64,
+    max_preconversion_sum: Option<f64>,
     currencies: Vec<String>,
     best_prices: HashMap<String, f64>,
+    reserve_states: HashMap<String, ReserveState>,
+}
+
+#[derive(Debug, Clone)]
+struct ReserveState {
+    weight: f64,
+    reserves: f64,
 }
 
 impl CurrencyNode {
@@ -42,13 +51,6 @@ impl CurrencyNode {
             .clone()
             .or_else(|| self.name.clone())
             .or_else(|| self.display_name())
-    }
-
-    fn reference(&self) -> String {
-        self.fully_qualified_name
-            .clone()
-            .or_else(|| self.name.clone())
-            .unwrap_or_else(|| self.currency_id.clone())
     }
 
     fn matches_filter(&self, filter: &str) -> bool {
@@ -69,6 +71,13 @@ impl CurrencyNode {
                 .map(|value| equals_ignore_case(value, filter))
                 .unwrap_or(false)
     }
+
+    fn reserve_state(&self, currency_id: &str) -> Option<&ReserveState> {
+        self.reserve_states
+            .iter()
+            .find(|(key, _)| equals_ignore_case(key, currency_id))
+            .map(|(_, state)| state)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -80,6 +89,14 @@ struct RouteCandidate {
     via_price_in_root: Option<f64>,
     dest_price_in_via: Option<f64>,
     gateway: bool,
+}
+
+#[derive(Debug, Default)]
+struct RouteBuildDebugStats {
+    raw_candidate_count: usize,
+    post_converter_gating_count: usize,
+    post_via_recursion_count: usize,
+    post_visibility_filter_count: usize,
 }
 
 pub async fn get_conversion_paths(
@@ -110,7 +127,7 @@ pub async fn get_conversion_paths(
         .rsplit_once('.')
         .map(|(_, system_id)| system_id.to_string());
 
-    let normalized_paths = match vrpc_provider
+    let mut normalized_paths = match vrpc_provider
         .getcurrencyconversionpaths(&source_definition, destination_definition.as_ref())
         .await
     {
@@ -129,6 +146,24 @@ pub async fn get_conversion_paths(
         }
         Err(err) => return Err(err),
     };
+
+    match vrpc_provider
+        .listcurrencies_with_launchstate("prelaunch")
+        .await
+    {
+        Ok(prelaunch_payload) => {
+            let prelaunch_currency_refs = collect_prelaunch_currency_refs(&prelaunch_payload, true);
+            if !prelaunch_currency_refs.is_empty() {
+                mark_prelaunch_quotes(&mut normalized_paths, &prelaunch_currency_refs);
+            }
+        }
+        Err(err) => {
+            println!(
+                "[BRIDGE] prelaunch listcurrencies lookup unavailable while enriching conversion paths: {:?}",
+                err
+            );
+        }
+    }
 
     Ok(BridgeConversionPathsResult {
         source_currency: request.source_currency.clone(),
@@ -182,6 +217,25 @@ async fn derive_paths_from_listcurrencies(
         None
     };
 
+    let chain_info = match vrpc_provider.getinfo().await {
+        Ok(info) => Some(info),
+        Err(err) => {
+            println!(
+                "[BRIDGE] getinfo unavailable in conversion-path fallback; using conservative defaults: {:?}",
+                err
+            );
+            None
+        }
+    };
+    let longest_chain = chain_info
+        .as_ref()
+        .and_then(extract_longest_chain)
+        .unwrap_or(0);
+    let chain_info_chain_id = chain_info
+        .as_ref()
+        .and_then(extract_chain_id)
+        .or_else(|| chain_currency_id.map(ToString::to_string));
+
     let payload_refs = list_payloads.iter().collect::<Vec<_>>();
     derive_paths_from_list_payloads(
         &payload_refs,
@@ -189,6 +243,8 @@ async fn derive_paths_from_listcurrencies(
         destination_currency_filter,
         chain_currency_id,
         chain_definition.as_ref(),
+        longest_chain,
+        chain_info_chain_id.as_deref(),
     )
 }
 
@@ -198,10 +254,14 @@ fn derive_paths_from_list_payloads(
     destination_currency_filter: Option<&str>,
     chain_currency_id: Option<&str>,
     chain_definition: Option<&Value>,
+    longest_chain: u64,
+    chain_info_chain_id: Option<&str>,
 ) -> Result<HashMap<String, Vec<BridgeConversionPathQuote>>, WalletError> {
     let mut currencies: HashMap<String, CurrencyNode> = HashMap::new();
+    let mut prelaunch_currency_refs = HashSet::new();
     for payload in list_payloads {
         merge_currency_nodes_from_list_payload(payload, &mut currencies)?;
+        prelaunch_currency_refs.extend(collect_prelaunch_currency_refs(payload, false));
     }
 
     let source_currency = currency_node_from_definition(
@@ -237,16 +297,26 @@ fn derive_paths_from_list_payloads(
         .get(&effective_chain_currency_id)
         .cloned()
         .or(chain_currency);
+    let root_currency_id = chain_currency_context
+        .as_ref()
+        .map(|currency| currency.currency_id.as_str())
+        .unwrap_or(effective_chain_currency_id.as_str());
+    let chain_context_id = chain_info_chain_id.unwrap_or(effective_chain_currency_id.as_str());
+    let mut debug_stats = RouteBuildDebugStats::default();
 
     let mut routes = collect_routes_for_source(
         &currencies,
         &source_currency,
         &effective_chain_currency_id,
         chain_currency_context.as_ref(),
+        root_currency_id,
+        chain_context_id,
+        longest_chain,
         true,
         &HashSet::new(),
         None,
         None,
+        Some(&mut debug_stats),
     );
 
     if let Some(filter) = destination_currency_filter {
@@ -258,7 +328,21 @@ fn derive_paths_from_list_payloads(
         });
     }
 
-    Ok(routes_to_quotes(&routes, &currencies))
+    let mut quotes = routes_to_quotes(&routes, &currencies);
+    if !prelaunch_currency_refs.is_empty() {
+        mark_prelaunch_quotes(&mut quotes, &prelaunch_currency_refs);
+    }
+    if parity_debug_enabled() {
+        println!(
+            "[BRIDGE][PARITY] raw={} post_converter={} post_via={} post_visibility={} post_prelaunch={}",
+            debug_stats.raw_candidate_count,
+            debug_stats.post_converter_gating_count,
+            debug_stats.post_via_recursion_count,
+            debug_stats.post_visibility_filter_count,
+            count_quote_rows(&quotes),
+        );
+    }
+    Ok(quotes)
 }
 
 fn collect_routes_for_source(
@@ -266,15 +350,31 @@ fn collect_routes_for_source(
     source: &CurrencyNode,
     chain_currency_id: &str,
     chain_currency: Option<&CurrencyNode>,
+    root_currency_id: &str,
+    chain_info_chain_id: &str,
+    longest_chain: u64,
     include_via: bool,
     ignore_currencies: &HashSet<String>,
     via: Option<&CurrencyNode>,
     root: Option<&CurrencyNode>,
+    mut debug_stats: Option<&mut RouteBuildDebugStats>,
 ) -> HashMap<String, Vec<RouteCandidate>> {
     let mut routes: HashMap<String, Vec<RouteCandidate>> = HashMap::new();
+    let mut raw_candidate_count = 0usize;
 
     for destination in currencies.values() {
         if !contains_currency(destination, &source.currency_id) {
+            continue;
+        }
+        raw_candidate_count += 1;
+
+        if !passes_converter_gating(
+            destination,
+            &source.currency_id,
+            root_currency_id,
+            chain_currency_id,
+            longest_chain,
+        ) {
             continue;
         }
 
@@ -392,6 +492,48 @@ fn collect_routes_for_source(
         }
     }
 
+    if let Some(stats) = debug_stats.as_deref_mut() {
+        stats.raw_candidate_count += raw_candidate_count;
+        stats.post_converter_gating_count += count_route_candidates(&routes);
+    }
+
+    if include_via {
+        let candidate_destinations = routes.keys().cloned().collect::<Vec<_>>();
+        for destination_id in candidate_destinations {
+            let Some(destination_currency) = currencies.get(&destination_id) else {
+                continue;
+            };
+
+            if !is_fractional(destination_currency)
+                || !contains_currency(destination_currency, &source.currency_id)
+                || contains_ignore(ignore_currencies, &destination_currency.currency_id)
+                || !destination_is_started(destination_currency, longest_chain, chain_info_chain_id)
+            {
+                continue;
+            }
+
+            let via_routes = collect_routes_for_source(
+                currencies,
+                destination_currency,
+                chain_currency_id,
+                chain_currency,
+                root_currency_id,
+                chain_info_chain_id,
+                longest_chain,
+                false,
+                ignore_currencies,
+                Some(destination_currency),
+                Some(source),
+                None,
+            );
+            merge_route_maps(&mut routes, via_routes);
+        }
+    }
+
+    if let Some(stats) = debug_stats.as_deref_mut() {
+        stats.post_via_recursion_count += count_route_candidates(&routes);
+    }
+
     apply_visibility_filters(
         &mut routes,
         currencies,
@@ -404,35 +546,8 @@ fn collect_routes_for_source(
         !equals_ignore_case(destination_id, &source.currency_id) && !candidates.is_empty()
     });
 
-    if include_via {
-        let candidate_destinations = routes.keys().cloned().collect::<Vec<_>>();
-        for destination_id in candidate_destinations {
-            let Some(destination_currency) = currencies.get(&destination_id) else {
-                continue;
-            };
-
-            if !is_fractional(destination_currency)
-                || !contains_currency(destination_currency, &source.currency_id)
-                || contains_ignore(ignore_currencies, &destination_currency.currency_id)
-            {
-                continue;
-            }
-
-            let mut next_ignore = ignore_currencies.clone();
-            next_ignore.insert(source.currency_id.clone());
-
-            let via_routes = collect_routes_for_source(
-                currencies,
-                destination_currency,
-                chain_currency_id,
-                chain_currency,
-                false,
-                &next_ignore,
-                Some(destination_currency),
-                Some(source),
-            );
-            merge_route_maps(&mut routes, via_routes);
-        }
+    if let Some(stats) = debug_stats.as_deref_mut() {
+        stats.post_visibility_filter_count += count_route_candidates(&routes);
     }
 
     routes
@@ -518,9 +633,8 @@ fn apply_visibility_filters(
             };
 
             let Some(fractional_converter) = fractional_converter else {
-                // If we cannot infer a fractional converter context, keep the route.
-                // This mirrors a permissive fallback so we do not hide valid direct routes.
-                return true;
+                // Keep parity with mobile path derivation: ambiguous fractional context is invalid.
+                return false;
             };
 
             if let Some(fractional_system_id) = fractional_converter.system_id.as_deref() {
@@ -697,6 +811,69 @@ fn contains_ignore(ignore_currencies: &HashSet<String>, currency_id: &str) -> bo
         .any(|ignored| equals_ignore_case(ignored, currency_id))
 }
 
+fn passes_converter_gating(
+    destination: &CurrencyNode,
+    source_currency_id: &str,
+    root_currency_id: &str,
+    chain_currency_id: &str,
+    longest_chain: u64,
+) -> bool {
+    if !contains_currency(destination, source_currency_id) {
+        return false;
+    }
+
+    if destination.start_block > longest_chain {
+        return !destination
+            .max_preconversion_sum
+            .is_some_and(is_effectively_zero);
+    }
+
+    if !is_fractional(destination) {
+        return false;
+    }
+
+    let target_reserve = destination.reserve_state(root_currency_id);
+    let system_reserve = destination.reserve_state(chain_currency_id);
+    match (target_reserve, system_reserve) {
+        (Some(target), Some(system)) => target.weight > 0.1 && system.reserves > 1000.0,
+        _ => false,
+    }
+}
+
+fn destination_is_started(
+    destination: &CurrencyNode,
+    longest_chain: u64,
+    chain_info_chain_id: &str,
+) -> bool {
+    destination.start_block <= longest_chain
+        || destination
+            .launch_system_id
+            .as_deref()
+            .map(|launch_id| !equals_ignore_case(launch_id, chain_info_chain_id))
+            .unwrap_or(true)
+}
+
+fn is_effectively_zero(value: f64) -> bool {
+    value.abs() <= 1e-12
+}
+
+fn count_route_candidates(routes: &HashMap<String, Vec<RouteCandidate>>) -> usize {
+    routes.values().map(Vec::len).sum()
+}
+
+fn count_quote_rows(paths: &HashMap<String, Vec<BridgeConversionPathQuote>>) -> usize {
+    paths.values().map(Vec::len).sum()
+}
+
+fn parity_debug_enabled() -> bool {
+    std::env::var("BRIDGE_PATH_PARITY_DEBUG")
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            normalized == "1" || normalized == "true" || normalized == "yes"
+        })
+        .unwrap_or(false)
+}
+
 fn routes_to_quotes(
     routes: &HashMap<String, Vec<RouteCandidate>>,
     currencies: &HashMap<String, CurrencyNode>,
@@ -710,24 +887,14 @@ fn routes_to_quotes(
 
         let mut quotes = Vec::new();
         for candidate in candidates {
-            let export_to = candidate.export_to_id.as_ref().map(|currency_id| {
-                currencies
-                    .get(currency_id)
-                    .map(CurrencyNode::reference)
-                    .unwrap_or_else(|| currency_id.clone())
-            });
-            let via = candidate.via_id.as_ref().map(|currency_id| {
-                currencies
-                    .get(currency_id)
-                    .map(CurrencyNode::reference)
-                    .unwrap_or_else(|| currency_id.clone())
-            });
+            let export_to = candidate.export_to_id.clone();
+            let via = candidate.via_id.clone();
 
             quotes.push(BridgeConversionPathQuote {
                 destination_id: destination.currency_id.clone(),
                 destination_display_name: destination.display_name(),
                 destination_display_ticker: destination.display_ticker(),
-                convert_to: Some(destination.reference()),
+                convert_to: Some(destination.currency_id.clone()),
                 export_to,
                 via,
                 map_to: None,
@@ -738,6 +905,7 @@ fn routes_to_quotes(
                 mapping: false,
                 bounceback: false,
                 eth_destination: false,
+                prelaunch: false,
             });
         }
 
@@ -799,8 +967,14 @@ fn currency_node_from_definition(
         system_id: definition.get("systemid").and_then(extract_stringish),
         parent: definition.get("parent").and_then(extract_stringish),
         launch_system_id: definition.get("launchsystemid").and_then(extract_stringish),
+        start_block: definition
+            .get("startblock")
+            .and_then(extract_u64)
+            .unwrap_or(0),
+        max_preconversion_sum: extract_max_preconversion_sum(definition),
         currencies: reserve_currencies,
         best_prices: extract_best_prices(best_currency_state),
+        reserve_states: extract_reserve_states(best_currency_state),
     })
 }
 
@@ -824,6 +998,45 @@ fn extract_best_prices(best_currency_state: Option<&Value>) -> HashMap<String, f
     }
 
     prices
+}
+
+fn extract_max_preconversion_sum(definition: &Value) -> Option<f64> {
+    let values = definition.get("maxpreconversion")?.as_array()?;
+    let mut sum = 0.0;
+    for value in values {
+        sum += extract_f64(value).unwrap_or(0.0);
+    }
+    Some(sum)
+}
+
+fn extract_reserve_states(best_currency_state: Option<&Value>) -> HashMap<String, ReserveState> {
+    let mut reserve_states = HashMap::new();
+    let Some(reserves) = best_currency_state
+        .and_then(|state| state.get("reservecurrencies"))
+        .and_then(Value::as_array)
+    else {
+        return reserve_states;
+    };
+
+    for reserve in reserves {
+        let Some(object) = reserve.as_object() else {
+            continue;
+        };
+        let Some(currency_id) = object.get("currencyid").and_then(extract_stringish) else {
+            continue;
+        };
+        let weight = object.get("weight").and_then(extract_f64).unwrap_or(0.0);
+        let reserves_value = object.get("reserves").and_then(extract_f64).unwrap_or(0.0);
+        reserve_states.insert(
+            currency_id,
+            ReserveState {
+                weight,
+                reserves: reserves_value,
+            },
+        );
+    }
+
+    reserve_states
 }
 
 fn format_decimal(value: f64) -> String {
@@ -896,6 +1109,7 @@ fn parse_conversion_paths(
                 mapping: extract_bool(raw_quote_object.get("mapping")),
                 bounceback: extract_bool(raw_quote_object.get("bounceback")),
                 eth_destination: extract_bool(raw_quote_object.get("ethdest")),
+                prelaunch: extract_bool(raw_quote_object.get("prelaunch")),
             };
 
             quotes.push(quote);
@@ -905,6 +1119,104 @@ fn parse_conversion_paths(
     }
 
     Ok(normalized)
+}
+
+fn collect_prelaunch_currency_refs(
+    list_payload: &Value,
+    assume_all_entries_prelaunch: bool,
+) -> HashSet<String> {
+    let mut refs = HashSet::new();
+    let Some(entries) = list_payload.as_array() else {
+        return refs;
+    };
+
+    for entry in entries {
+        if !entry_is_prelaunch(entry, assume_all_entries_prelaunch) {
+            continue;
+        }
+        collect_currency_refs_from_entry(entry, &mut refs);
+    }
+
+    refs
+}
+
+fn entry_is_prelaunch(entry: &Value, assume_all_entries_prelaunch: bool) -> bool {
+    if assume_all_entries_prelaunch {
+        return true;
+    }
+
+    extract_launchstate(entry).is_some_and(|value| equals_ignore_case(value, "prelaunch"))
+}
+
+fn extract_launchstate(entry: &Value) -> Option<&str> {
+    entry
+        .get("launchstate")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            entry
+                .get("currencydefinition")
+                .and_then(Value::as_object)
+                .and_then(|definition| definition.get("launchstate"))
+                .and_then(Value::as_str)
+        })
+}
+
+fn collect_currency_refs_from_entry(entry: &Value, refs: &mut HashSet<String>) {
+    let Some(definition) = entry.get("currencydefinition") else {
+        return;
+    };
+
+    for key in ["currencyid", "fullyqualifiedname", "name"] {
+        if let Some(value) = definition.get(key).and_then(extract_stringish) {
+            let normalized = normalize_currency_ref(&value);
+            if !normalized.is_empty() {
+                refs.insert(normalized);
+            }
+        }
+    }
+}
+
+fn normalize_currency_ref(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn mark_prelaunch_quotes(
+    paths: &mut HashMap<String, Vec<BridgeConversionPathQuote>>,
+    prelaunch_refs: &HashSet<String>,
+) {
+    if prelaunch_refs.is_empty() {
+        return;
+    }
+
+    for (destination_key, quotes) in paths {
+        let destination_key_normalized = normalize_currency_ref(destination_key);
+        for quote in quotes {
+            quote.prelaunch = quote.prelaunch
+                || quote_matches_prelaunch(quote, &destination_key_normalized, prelaunch_refs);
+        }
+    }
+}
+
+fn quote_matches_prelaunch(
+    quote: &BridgeConversionPathQuote,
+    destination_key_normalized: &str,
+    prelaunch_refs: &HashSet<String>,
+) -> bool {
+    if prelaunch_refs.contains(destination_key_normalized) {
+        return true;
+    }
+
+    if prelaunch_refs.contains(&normalize_currency_ref(&quote.destination_id)) {
+        return true;
+    }
+
+    if let Some(convert_to) = quote.convert_to.as_deref() {
+        if prelaunch_refs.contains(&normalize_currency_ref(convert_to)) {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn extract_stringish(value: &Value) -> Option<String> {
@@ -943,6 +1255,14 @@ fn extract_u64(value: &Value) -> Option<u64> {
     value.as_str().and_then(|raw| raw.parse::<u64>().ok())
 }
 
+fn extract_longest_chain(info: &Value) -> Option<u64> {
+    info.get("longestchain").and_then(extract_u64)
+}
+
+fn extract_chain_id(info: &Value) -> Option<String> {
+    info.get("chainid").and_then(extract_stringish)
+}
+
 fn extract_currency_id(definition: &Value) -> Option<String> {
     definition
         .get("currencyid")
@@ -962,10 +1282,10 @@ fn extract_currency_ref(value: &Value) -> Option<String> {
 
     let object = value.as_object()?;
     object
-        .get("fullyqualifiedname")
+        .get("currencyid")
         .and_then(extract_stringish)
-        .or_else(|| object.get("currencyid").and_then(extract_stringish))
         .or_else(|| object.get("address").and_then(extract_stringish))
+        .or_else(|| object.get("fullyqualifiedname").and_then(extract_stringish))
         .or_else(|| object.get("name").and_then(extract_stringish))
 }
 
@@ -1010,7 +1330,10 @@ mod tests {
                         "fullyqualifiedname": "Bridge.DEST",
                         "symbol": "DEST"
                     },
-                    "convertto": "Bridge.DEST",
+                    "convertto": {
+                        "currencyid": "iDest",
+                        "fullyqualifiedname": "Bridge.DEST"
+                    },
                     "exportto": {
                         "currencyid": "iExport",
                         "fullyqualifiedname": "DEST"
@@ -1035,26 +1358,49 @@ mod tests {
         assert_eq!(quotes.len(), 1);
 
         let quote = &quotes[0];
-        assert_eq!(quote.destination_id, "Bridge.DEST");
+        assert_eq!(quote.destination_id, "iDest");
         assert_eq!(
             quote.destination_display_name.as_deref(),
             Some("Bridge.DEST")
         );
         assert_eq!(quote.destination_display_ticker.as_deref(), Some("DEST"));
-        assert_eq!(quote.convert_to.as_deref(), Some("Bridge.DEST"));
-        assert_eq!(quote.export_to.as_deref(), Some("DEST"));
-        assert_eq!(quote.via.as_deref(), Some("Bridge.vETH"));
+        assert_eq!(quote.convert_to.as_deref(), Some("iDest"));
+        assert_eq!(quote.export_to.as_deref(), Some("iExport"));
+        assert_eq!(quote.via.as_deref(), Some("iVia"));
         assert_eq!(quote.price.as_deref(), Some("1.25"));
         assert_eq!(quote.via_price_in_root.as_deref(), Some("1.5"));
         assert_eq!(quote.dest_price_in_via.as_deref(), Some("0.83"));
         assert!(quote.gateway);
         assert!(!quote.mapping);
+        assert!(!quote.prelaunch);
     }
 
     #[test]
     fn parse_conversion_paths_rejects_non_object_payload() {
         let parsed = parse_conversion_paths(json!([]));
         assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn parse_conversion_paths_reads_prelaunch_flag() {
+        let input = json!({
+            "iDest": [
+                {
+                    "destination": {
+                        "currencyid": "iDest",
+                        "fullyqualifiedname": "Bridge.DEST",
+                        "symbol": "DEST"
+                    },
+                    "price": 1.25,
+                    "prelaunch": true
+                }
+            ]
+        });
+
+        let parsed = parse_conversion_paths(input).expect("parse paths");
+        let quotes = parsed.get("iDest").expect("destination key");
+        assert_eq!(quotes.len(), 1);
+        assert!(quotes[0].prelaunch);
     }
 
     #[test]
@@ -1089,6 +1435,8 @@ mod tests {
             None,
             Some("iChain"),
             None,
+            100,
+            Some("iChain"),
         )
         .expect("paths");
 
@@ -1098,11 +1446,12 @@ mod tests {
 
         let bridge_route = quotes
             .iter()
-            .find(|quote| quote.export_to.as_deref() == Some("Bridge.DEST"))
+            .find(|quote| quote.export_to.as_deref() == Some("iDest"))
             .expect("bridge route");
-        assert_eq!(bridge_route.convert_to.as_deref(), Some("Bridge.DEST"));
+        assert_eq!(bridge_route.convert_to.as_deref(), Some("iDest"));
         assert_eq!(bridge_route.price.as_deref(), Some("0.5"));
         assert!(bridge_route.gateway);
+        assert!(!bridge_route.prelaunch);
     }
 
     #[test]
@@ -1191,18 +1540,293 @@ mod tests {
             None,
             Some("iChain"),
             Some(&chain_definition),
+            100,
+            Some("iChain"),
         )
         .expect("paths");
 
         let quotes = paths.get("iDest").expect("destination");
         let via_quote = quotes
             .iter()
-            .find(|quote| quote.via.as_deref() == Some("Bridge.vETH"))
+            .find(|quote| quote.via.as_deref() == Some("iVia"))
             .expect("via route");
 
-        assert_eq!(via_quote.convert_to.as_deref(), Some("vUSDC.vETH"));
+        assert_eq!(via_quote.convert_to.as_deref(), Some("iDest"));
         assert_eq!(via_quote.price.as_deref(), Some("2"));
         assert_eq!(via_quote.via_price_in_root.as_deref(), Some("0.5"));
         assert_eq!(via_quote.dest_price_in_via.as_deref(), Some("4"));
+        assert!(!via_quote.prelaunch);
+    }
+
+    #[test]
+    fn fallback_marks_prelaunch_routes_from_launchstate() {
+        let source_definition = json!({
+            "currencyid": "iSource",
+            "name": "SRC",
+            "systemid": "iChain"
+        });
+
+        let list_payload = json!([
+            {
+                "launchstate": "prelaunch",
+                "currencydefinition": {
+                    "currencyid": "iPrelaunchDest",
+                    "fullyqualifiedname": "Bridge.PRE",
+                    "name": "PRE",
+                    "options": 128,
+                    "currencies": ["iSource"]
+                },
+                "bestcurrencystate": {
+                    "currencies": {
+                        "iSource": {
+                            "lastconversionprice": 2.0
+                        }
+                    }
+                }
+            }
+        ]);
+
+        let paths = derive_paths_from_list_payloads(
+            &[&list_payload],
+            &source_definition,
+            None,
+            Some("iChain"),
+            None,
+            100,
+            Some("iChain"),
+        )
+        .expect("paths");
+
+        let quotes = paths.get("iPrelaunchDest").expect("prelaunch destination");
+        assert!(!quotes.is_empty());
+        assert!(quotes.iter().all(|quote| quote.prelaunch));
+    }
+
+    #[test]
+    fn fallback_excludes_non_fractional_launched_candidates() {
+        let source_definition = json!({
+            "currencyid": "iSource",
+            "name": "SRC",
+            "systemid": "iChain",
+            "options": 0
+        });
+
+        let list_payload = json!([
+            {
+                "currencydefinition": {
+                    "currencyid": "iNonFractionalDest",
+                    "name": "NFD",
+                    "options": 0,
+                    "currencies": ["iSource"]
+                },
+                "bestcurrencystate": {
+                    "currencies": {
+                        "iSource": {
+                            "lastconversionprice": 2.0
+                        }
+                    }
+                }
+            }
+        ]);
+
+        let paths = derive_paths_from_list_payloads(
+            &[&list_payload],
+            &source_definition,
+            None,
+            Some("iChain"),
+            None,
+            100,
+            Some("iChain"),
+        )
+        .expect("paths");
+
+        assert!(!paths.contains_key("iNonFractionalDest"));
+    }
+
+    #[test]
+    fn fallback_excludes_low_liquidity_fractional_candidates() {
+        let source_definition = json!({
+            "currencyid": "iSource",
+            "name": "SRC",
+            "systemid": "iChain",
+            "options": 0
+        });
+
+        let list_payload = json!([
+            {
+                "currencydefinition": {
+                    "currencyid": "iLowLiquidity",
+                    "name": "LOW",
+                    "options": 1,
+                    "currencies": ["iSource"]
+                },
+                "bestcurrencystate": {
+                    "currencies": {
+                        "iSource": {
+                            "lastconversionprice": 2.0
+                        }
+                    },
+                    "reservecurrencies": [
+                        {
+                            "currencyid": "iChain",
+                            "weight": 0.05,
+                            "reserves": 500
+                        }
+                    ]
+                }
+            }
+        ]);
+
+        let paths = derive_paths_from_list_payloads(
+            &[&list_payload],
+            &source_definition,
+            None,
+            Some("iChain"),
+            None,
+            100,
+            Some("iChain"),
+        )
+        .expect("paths");
+
+        assert!(!paths.contains_key("iLowLiquidity"));
+    }
+
+    #[test]
+    fn fallback_via_recursion_requires_started_destination() {
+        let source_definition = json!({
+            "currencyid": "iSource",
+            "name": "SRC",
+            "systemid": "iChain",
+            "options": 0
+        });
+
+        let local_payload = json!([
+            {
+                "currencydefinition": {
+                    "currencyid": "iSource",
+                    "name": "SRC",
+                    "systemid": "iChain",
+                    "options": 0
+                },
+                "bestcurrencystate": {
+                    "currencies": {}
+                }
+            }
+        ]);
+
+        let fractional_via_payload = json!([
+            {
+                "currencydefinition": {
+                    "currencyid": "iViaFractional",
+                    "name": "VIA",
+                    "options": 1,
+                    "systemid": "iChain",
+                    "launchsystemid": "iChain",
+                    "startblock": 500,
+                    "maxpreconversion": [1],
+                    "currencies": ["iSource", "iDestViaOnly", "iChain"]
+                },
+                "bestcurrencystate": {
+                    "currencies": {
+                        "iSource": {
+                            "lastconversionprice": 2.0
+                        },
+                        "iDestViaOnly": {
+                            "lastconversionprice": 4.0
+                        },
+                        "iChain": {
+                            "lastconversionprice": 1.0
+                        }
+                    },
+                    "reservecurrencies": [
+                        {
+                            "currencyid": "iChain",
+                            "weight": 0.2,
+                            "reserves": 2000
+                        }
+                    ]
+                }
+            },
+            {
+                "currencydefinition": {
+                    "currencyid": "iDestViaOnly",
+                    "name": "DEST",
+                    "options": 1,
+                    "systemid": "iChain",
+                    "currencies": ["iViaFractional"]
+                },
+                "bestcurrencystate": {
+                    "currencies": {
+                        "iViaFractional": {
+                            "lastconversionprice": 0.25
+                        }
+                    },
+                    "reservecurrencies": [
+                        {
+                            "currencyid": "iChain",
+                            "weight": 0.2,
+                            "reserves": 2000
+                        }
+                    ]
+                }
+            }
+        ]);
+
+        let paths = derive_paths_from_list_payloads(
+            &[&local_payload, &fractional_via_payload],
+            &source_definition,
+            None,
+            Some("iChain"),
+            None,
+            100,
+            Some("iChain"),
+        )
+        .expect("paths");
+
+        assert!(paths.contains_key("iViaFractional"));
+        assert!(!paths.contains_key("iDestViaOnly"));
+    }
+
+    #[test]
+    fn fallback_drops_routes_with_ambiguous_fractional_context() {
+        let source_definition = json!({
+            "currencyid": "iSource",
+            "name": "SRC",
+            "systemid": "iChain",
+            "options": 0
+        });
+
+        let list_payload = json!([
+            {
+                "currencydefinition": {
+                    "currencyid": "iAmbiguousDest",
+                    "name": "AMB",
+                    "options": 0,
+                    "startblock": 500,
+                    "maxpreconversion": [1],
+                    "currencies": ["iSource"]
+                },
+                "bestcurrencystate": {
+                    "currencies": {
+                        "iSource": {
+                            "lastconversionprice": 2.0
+                        }
+                    }
+                }
+            }
+        ]);
+
+        let paths = derive_paths_from_list_payloads(
+            &[&list_payload],
+            &source_definition,
+            None,
+            Some("iChain"),
+            None,
+            100,
+            Some("iChain"),
+        )
+        .expect("paths");
+
+        assert!(!paths.contains_key("iAmbiguousDest"));
     }
 }

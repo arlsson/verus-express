@@ -33,6 +33,8 @@ pub struct BridgeConversionPathQuote {
     pub mapping: bool,
     pub bounceback: bool,
     pub eth_destination: bool,
+    #[serde(default)]
+    pub prelaunch: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

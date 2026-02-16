@@ -7,6 +7,7 @@
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
   import * as Card from '$lib/components/ui/card';
+  import * as ScrollArea from '$lib/components/ui/scroll-area';
   import * as Tabs from '$lib/components/ui/tabs';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import WalletTransferStepperShell from '$lib/components/shared/WalletTransferStepperShell.svelte';
@@ -27,6 +28,13 @@
     getTransferStepCopy,
     getTransferStepLabels
   } from '$lib/transfer/transferWizardCopy';
+  import {
+    buildReceiveAssetSections,
+    filterReceiveAssetSectionsByQuery,
+    type ReceiveAssetOption,
+    type ReceiveAssetSections,
+    type ViaRouteOption
+  } from '$lib/transfer/convertTargetOptions';
   import type {
     BridgeConversionPathQuote,
     BridgeTransferPreflightResult,
@@ -42,33 +50,18 @@
 
   type EntryIntent = 'send' | 'convert';
 
-  interface ViaRouteOption {
+  type SameAssetOption = {
     id: string;
-    kind: 'same' | 'path';
-    receiveKey: string;
-    receiveLabel: string;
-    receiveSubtitle?: string;
     label: string;
-    subtitle?: string;
     destinationId: string;
+    receiveLabel: string;
+    ethDestination?: boolean;
     convertTo?: string | null;
     exportTo?: string | null;
     via?: string | null;
     mapTo?: string | null;
     price?: string | null;
-    gateway?: boolean;
-    mapping?: boolean;
-    bounceback?: boolean;
-    ethDestination?: boolean;
-  }
-
-  interface ReceiveAssetOption {
-    key: string;
-    label: string;
-    subtitle?: string;
-    destinationId: string;
-    viaOptions: ViaRouteOption[];
-  }
+  };
 
   type TransferWizardProps = {
     entryIntent: EntryIntent;
@@ -130,11 +123,15 @@
   let destinationAddress = $state('');
   let conversionEnabled = $state(false);
   let conversionInitialized = $state(false);
-  let selectedReceiveAssetKey = $state('');
+  let selectedReceiveAssetId = $state('');
+  let selectedExportSystemId = $state<string | null>(null);
   let selectedViaOptionId = $state('');
   let manualViaLocked = $state(false);
   let sourceCoinManuallyChosen = $state(false);
-  let discoveredPathOptions = $state<ViaRouteOption[]>([]);
+  let discoveredPathQuotes = $state<Record<string, BridgeConversionPathQuote[]>>({});
+  let receiveSearchTerm = $state('');
+  let pendingGroupedReceiveOption = $state<ReceiveAssetOption | null>(null);
+  let pendingTargetOption = $state<ReceiveAssetOption | null>(null);
 
   let loadingTargets = $state(false);
   let preflighting = $state(false);
@@ -150,6 +147,8 @@
   let showSourceAssetSheet = $state(false);
   let showReceiveAssetSheet = $state(false);
   let showViaSheet = $state(false);
+  let showNetworkSheet = $state(false);
+  let showExportSheet = $state(false);
 
   const selectedCoin = $derived(selectedCoinOption?.coin ?? null);
 
@@ -181,74 +180,66 @@
 
   const receiveAssetSelectionEnabled = $derived(sourceCoinManuallyChosen && !!selectedCoin);
 
-  const sameAssetOption = $derived<ViaRouteOption | null>(
+  const sameAssetOption = $derived<SameAssetOption | null>(
     selectedCoin && selectedCoinPresentation
       ? {
           id: `same-${selectedCoin.id}`,
-          kind: 'same',
-          receiveKey: (selectedCoin.currencyId || selectedCoin.id).toLowerCase(),
-          receiveLabel: selectedCoinPresentation.displayTicker,
-          receiveSubtitle:
-            selectedCoinPresentation.displayName !== selectedCoinPresentation.displayTicker
-              ? selectedCoinPresentation.displayName
-              : undefined,
           label: i18n.t('wallet.transfer.sameAssetOption', {
             ticker: selectedCoinPresentation.displayTicker
           }),
-          destinationId: selectedCoin.id
+          destinationId: selectedCoin.id,
+          receiveLabel: selectedCoinPresentation.displayTicker,
+          ethDestination: false
         }
       : null
   );
 
-  const receiveAssetOptions = $derived<ReceiveAssetOption[]>(
-    (() => {
-      const grouped = new Map<string, ReceiveAssetOption>();
+  const rawReceiveAssetSections = $derived<ReceiveAssetSections>(
+    buildReceiveAssetSections({
+      paths: discoveredPathQuotes,
+      sourceCurrencyId: selectedCoin?.currencyId || selectedCoin?.id || '',
+      sourceCurrencyAliases: [selectedCoin?.currencyId, selectedCoin?.id].filter(
+        (value): value is string => typeof value === 'string' && value.trim().length > 0
+      )
+    })
+  );
 
-      for (const option of discoveredPathOptions) {
-        const existing = grouped.get(option.receiveKey);
-        if (existing) {
-          existing.viaOptions.push(option);
-          continue;
-        }
+  const receiveAssetSections = $derived<ReceiveAssetSections>(
+    filterReceiveAssetSectionsByQuery(rawReceiveAssetSections, receiveSearchTerm)
+  );
 
-        grouped.set(option.receiveKey, {
-          key: option.receiveKey,
-          label: option.receiveLabel,
-          subtitle: option.receiveSubtitle,
-          destinationId: option.destinationId,
-          viaOptions: [option]
-        });
-      }
+  const receiveAssetOptions = $derived(receiveAssetSections.allOptions);
+  const popularReceiveAssetOptions = $derived(receiveAssetSections.popularOptions);
+  const otherReceiveAssetOptions = $derived(receiveAssetSections.otherOptions);
 
-      const groups = Array.from(grouped.values());
-      for (const group of groups) {
-        group.viaOptions.sort((a, b) => viaLexicalKey(a).localeCompare(viaLexicalKey(b)));
-      }
-
-      return groups.sort((a, b) => a.label.localeCompare(b.label));
-    })()
+  const selectableReceiveAssetOptions = $derived<ReceiveAssetOption[]>(
+    rawReceiveAssetSections.allOptions.flatMap((option) =>
+      option.isGrouped && option.networkOptions?.length ? option.networkOptions : [option]
+    )
   );
 
   const selectedReceiveAssetOption = $derived(
-    receiveAssetOptions.find((option) => option.key === selectedReceiveAssetKey) ?? null
+    selectableReceiveAssetOptions.find((option) => option.id === selectedReceiveAssetId) ?? null
+  );
+
+  const selectedReceiveAssetViaOptions = $derived(
+    selectedReceiveAssetOption
+      ? filterViaOptionsByExport(selectedReceiveAssetOption.viaOptions, selectedExportSystemId)
+      : []
   );
 
   const rankedViaOptions = $derived(
-    selectedReceiveAssetOption
-      ? sortViaOptionsByScore(selectedReceiveAssetOption.viaOptions, amount)
-      : []
+    sortViaOptionsByScore(selectedReceiveAssetViaOptions, amount)
   );
 
   const bestViaOption = $derived(rankedViaOptions[0] ?? null);
 
   const selectedViaOption = $derived(
-    selectedReceiveAssetOption?.viaOptions.find((option) => option.id === selectedViaOptionId) ?? null
+    selectedReceiveAssetViaOptions.find((option) => option.id === selectedViaOptionId) ?? null
   );
 
   const activeConvertRoute = $derived(selectedViaOption ?? bestViaOption);
-  const activeTargetOption = $derived(
-    conversionEnabled ? activeConvertRoute : sameAssetOption
-  );
+  const activeTargetOption = $derived(conversionEnabled ? activeConvertRoute : sameAssetOption);
 
   const convertUnavailableForSource = $derived(
     selectedChannelPrefix === 'eth' || selectedChannelPrefix === 'erc20'
@@ -381,14 +372,15 @@
   const routeSummaryValue = $derived(
     (() => {
       if (!activeTargetOption) return '';
-      if (activeTargetOption.kind === 'same') return activeTargetOption.label;
+      if (!conversionEnabled) return sameAssetOption?.label ?? '';
 
       const parts = [
         activeTargetOption.receiveLabel,
         activeTargetOption.via ? i18n.t('wallet.transfer.pathVia', { value: activeTargetOption.via }) : '',
         activeTargetOption.exportTo
           ? i18n.t('wallet.transfer.pathExportTo', { value: activeTargetOption.exportTo })
-          : ''
+          : '',
+        activeTargetOption.mapTo ? i18n.t('wallet.transfer.pathMapTo', { value: activeTargetOption.mapTo }) : ''
       ].filter((value) => !!value);
 
       return parts.join(' • ');
@@ -424,7 +416,8 @@
       selectedCoinId,
       selectedChannelId ?? '',
       conversionEnabled ? '1' : '0',
-      selectedReceiveAssetKey,
+      selectedReceiveAssetId,
+      selectedExportSystemId ?? '',
       activeTargetOption?.id ?? '',
       amount.trim(),
       destinationAddress.trim()
@@ -458,12 +451,19 @@
 
   $effect(() => {
     if (!sourceSupportsConversion) {
-      discoveredPathOptions = [];
+      discoveredPathQuotes = {};
       loadingTargets = false;
       targetsError = '';
-      selectedReceiveAssetKey = '';
+      selectedReceiveAssetId = '';
+      selectedExportSystemId = null;
       selectedViaOptionId = '';
       manualViaLocked = false;
+      receiveSearchTerm = '';
+      pendingGroupedReceiveOption = null;
+      pendingTargetOption = null;
+      showReceiveAssetSheet = false;
+      showNetworkSheet = false;
+      showExportSheet = false;
     }
   });
 
@@ -476,31 +476,62 @@
   });
 
   $effect(() => {
-    if (receiveAssetOptions.length === 0) {
-      selectedReceiveAssetKey = '';
+    if (showNetworkSheet) return;
+    pendingGroupedReceiveOption = null;
+  });
+
+  $effect(() => {
+    if (showExportSheet) return;
+    pendingTargetOption = null;
+  });
+
+  $effect(() => {
+    if (rawReceiveAssetSections.allOptions.length === 0) {
+      selectedReceiveAssetId = '';
+      selectedExportSystemId = null;
       selectedViaOptionId = '';
       manualViaLocked = false;
+      pendingGroupedReceiveOption = null;
+      pendingTargetOption = null;
+      showReceiveAssetSheet = false;
+      showNetworkSheet = false;
+      showExportSheet = false;
       return;
     }
 
-    if (!receiveAssetOptions.some((option) => option.key === selectedReceiveAssetKey)) {
-      selectedReceiveAssetKey = '';
+    if (!selectableReceiveAssetOptions.some((option) => option.id === selectedReceiveAssetId)) {
+      selectedReceiveAssetId = '';
+      selectedExportSystemId = null;
       selectedViaOptionId = '';
       manualViaLocked = false;
     }
   });
 
   $effect(() => {
+    if (!selectedReceiveAssetOption) return;
+    if (selectedExportSystemId === null) return;
+
+    const exportStillValid = selectedReceiveAssetOption.exportOptions.some(
+      (option) => option.exportTo === selectedExportSystemId
+    );
+    if (exportStillValid) return;
+
+    selectedExportSystemId = selectedReceiveAssetOption.hasOnChainPath
+      ? null
+      : selectedReceiveAssetOption.exportOptions[0]?.exportTo ?? null;
+    selectedViaOptionId = '';
+    manualViaLocked = false;
+  });
+
+  $effect(() => {
     if (!conversionEnabled) return;
     if (!selectedReceiveAssetOption) return;
 
-    const selectedStillValid = selectedReceiveAssetOption.viaOptions.some(
-      (option) => option.id === selectedViaOptionId
-    );
+    const selectedStillValid = selectedReceiveAssetViaOptions.some((option) => option.id === selectedViaOptionId);
 
     if (manualViaLocked && selectedStillValid) return;
 
-    const best = sortViaOptionsByScore(selectedReceiveAssetOption.viaOptions, amount)[0] ?? null;
+    const best = sortViaOptionsByScore(selectedReceiveAssetViaOptions, amount)[0] ?? null;
     if (!best) {
       selectedViaOptionId = '';
       manualViaLocked = false;
@@ -568,10 +599,10 @@
           sourceCurrency
         });
         if (cancelled) return;
-        discoveredPathOptions = buildPathOptions(response.paths);
+        discoveredPathQuotes = response.paths;
       } catch (error) {
         if (cancelled) return;
-        discoveredPathOptions = [];
+        discoveredPathQuotes = {};
         targetsError = mapWalletError(error);
       } finally {
         if (!cancelled) loadingTargets = false;
@@ -599,61 +630,71 @@
     transferError = '';
   }
 
-  function buildPathOptions(paths: Record<string, BridgeConversionPathQuote[]>): ViaRouteOption[] {
-    const dedupe = new Map<string, ViaRouteOption>();
-    const sourceCurrencyId = (selectedCoin?.currencyId || selectedCoin?.id || '').toLowerCase();
-
-    for (const quotes of Object.values(paths)) {
-      for (const quote of quotes) {
-        const convertTo = quote.convertTo ?? quote.destinationId;
-        if (sourceCurrencyId && convertTo.toLowerCase() === sourceCurrencyId) continue;
-
-        const receiveKey = (convertTo ?? quote.destinationId).toLowerCase();
-        const dedupeKey = `${receiveKey}|${quote.exportTo ?? ''}|${quote.via ?? ''}|${quote.mapTo ?? ''}|${quote.ethDestination ? 'eth' : 'default'}`;
-        if (dedupe.has(dedupeKey)) continue;
-
-        const receiveLabel =
-          quote.destinationDisplayTicker ?? quote.destinationDisplayName ?? quote.destinationId;
-
-        const receiveSubtitle =
-          quote.destinationDisplayName && quote.destinationDisplayName !== receiveLabel
-            ? quote.destinationDisplayName
-            : undefined;
-
-        const subtitleParts: string[] = [];
-        if (quote.exportTo) {
-          subtitleParts.push(i18n.t('wallet.transfer.pathExportTo', { value: quote.exportTo }));
-        }
-        if (quote.via) {
-          subtitleParts.push(i18n.t('wallet.transfer.pathVia', { value: quote.via }));
-        }
-        if (quote.mapTo) {
-          subtitleParts.push(i18n.t('wallet.transfer.pathMapTo', { value: quote.mapTo }));
-        }
-
-        dedupe.set(dedupeKey, {
-          id: `path-${dedupe.size + 1}`,
-          kind: 'path',
-          receiveKey,
-          receiveLabel,
-          receiveSubtitle,
-          label: receiveLabel,
-          subtitle: subtitleParts.join(' • '),
-          destinationId: quote.destinationId,
-          convertTo,
-          exportTo: quote.exportTo,
-          via: quote.via,
-          mapTo: quote.mapTo,
-          price: quote.price,
-          gateway: quote.gateway,
-          mapping: quote.mapping,
-          bounceback: quote.bounceback,
-          ethDestination: quote.ethDestination
-        });
+  function filterViaOptionsByExport(
+    options: ViaRouteOption[],
+    exportSystemId: string | null
+  ): ViaRouteOption[] {
+    return options.filter((option) => {
+      if (exportSystemId === null) {
+        return option.exportTo === null || option.exportTo === undefined;
       }
+      return option.exportTo === exportSystemId;
+    });
+  }
+
+  function getRouteSubtitle(option: ViaRouteOption): string {
+    const subtitleParts: string[] = [];
+    if (option.exportTo) {
+      subtitleParts.push(i18n.t('wallet.transfer.pathExportTo', { value: option.exportTo }));
+    }
+    if (option.via) {
+      subtitleParts.push(i18n.t('wallet.transfer.pathVia', { value: option.via }));
+    }
+    if (option.mapTo) {
+      subtitleParts.push(i18n.t('wallet.transfer.pathMapTo', { value: option.mapTo }));
+    }
+    return subtitleParts.join(' • ');
+  }
+
+  function isReceiveOptionSelected(option: ReceiveAssetOption): boolean {
+    if (option.isGrouped && option.networkOptions?.length) {
+      return option.networkOptions.some((networkOption) => networkOption.id === selectedReceiveAssetId);
+    }
+    return option.id === selectedReceiveAssetId;
+  }
+
+  function closeAssetSelectionSheets() {
+    showReceiveAssetSheet = false;
+    showNetworkSheet = false;
+    showExportSheet = false;
+  }
+
+  function finalizeReceiveSelection(option: ReceiveAssetOption, exportSystemId: string | null) {
+    selectedReceiveAssetId = option.id;
+    selectedExportSystemId = exportSystemId;
+    manualViaLocked = false;
+
+    const viaCandidates = filterViaOptionsByExport(option.viaOptions, exportSystemId);
+    const best = sortViaOptionsByScore(viaCandidates, amount)[0] ?? null;
+    selectedViaOptionId = best?.id ?? '';
+
+    pendingGroupedReceiveOption = null;
+    pendingTargetOption = null;
+    closeAssetSelectionSheets();
+    transferError = '';
+  }
+
+  function beginReceiveSelection(option: ReceiveAssetOption) {
+    pendingTargetOption = option;
+    showReceiveAssetSheet = false;
+    showNetworkSheet = false;
+
+    if (option.isCrossChain && option.exportOptions.length > 0) {
+      showExportSheet = true;
+      return;
     }
 
-    return Array.from(dedupe.values());
+    finalizeReceiveSelection(option, null);
   }
 
   function isPositiveAmount(input: string): boolean {
@@ -821,17 +862,17 @@
     transferError = '';
 
     try {
-      if (activeTargetOption.kind === 'path') {
+      if (conversionEnabled && activeConvertRoute) {
         bridgePreflightResult = await preflightBridgeTransfer({
           coinId: selectedCoin.id,
           channelId: selectedChannelId,
           sourceAddress: selectedSourceAddress || null,
           destination: destinationAddress.trim(),
           amount: amount.trim(),
-          convertTo: activeTargetOption.convertTo ?? null,
-          exportTo: activeTargetOption.exportTo ?? null,
-          via: activeTargetOption.via ?? null,
-          mapTo: activeTargetOption.mapTo ?? null,
+          convertTo: activeConvertRoute.convertTo ?? null,
+          exportTo: activeConvertRoute.exportTo ?? null,
+          via: activeConvertRoute.via ?? null,
+          mapTo: activeConvertRoute.mapTo ?? null,
           preconvert: null
         });
         simplePreflightResult = null;
@@ -914,16 +955,38 @@
     transferError = '';
   }
 
-  function selectReceiveAsset(key: string) {
-    selectedReceiveAssetKey = key;
-    manualViaLocked = false;
+  function selectReceiveAsset(optionId: string) {
+    const selected = receiveAssetOptions.find((option) => option.id === optionId);
+    if (!selected) return;
 
-    const selected = receiveAssetOptions.find((option) => option.key === key);
-    const best = selected ? sortViaOptionsByScore(selected.viaOptions, amount)[0] ?? null : null;
-    selectedViaOptionId = best?.id ?? '';
+    if (selected.isGrouped && selected.networkOptions?.length) {
+      pendingGroupedReceiveOption = selected;
+      pendingTargetOption = null;
+      showReceiveAssetSheet = false;
+      showExportSheet = false;
+      showNetworkSheet = true;
+      transferError = '';
+      return;
+    }
 
-    showReceiveAssetSheet = false;
-    transferError = '';
+    pendingGroupedReceiveOption = null;
+    beginReceiveSelection(selected);
+  }
+
+  function selectReceiveNetworkOption(optionId: string) {
+    const selected = pendingGroupedReceiveOption?.networkOptions?.find((option) => option.id === optionId);
+    if (!selected) return;
+    beginReceiveSelection(selected);
+  }
+
+  function selectExportOption(exportSystemId: string) {
+    if (!pendingTargetOption) return;
+    finalizeReceiveSelection(pendingTargetOption, exportSystemId);
+  }
+
+  function selectSameNetworkOption() {
+    if (!pendingTargetOption) return;
+    finalizeReceiveSelection(pendingTargetOption, null);
   }
 
   function selectViaOption(viaOptionId: string) {
@@ -1037,7 +1100,7 @@
             </Tabs.Root>
           </div>
 
-          <div class="mx-auto w-full max-w-[560px] space-y-3.5">
+          <div class="relative mx-auto w-full max-w-[560px] space-y-3.5">
             <div class="space-y-1.5">
               <p class="text-muted-foreground px-1 text-[10px] font-semibold tracking-[0.06em] uppercase">
                 {i18n.t('wallet.transfer.youSend')}
@@ -1108,10 +1171,8 @@
             </div>
 
             {#if conversionEnabled}
-              <div class="-my-1 flex justify-center">
-                <div class="text-muted-foreground bg-background flex h-8 w-8 items-center justify-center rounded-full border border-border/70">
-                  <ArrowDownIcon class="size-3.5" />
-                </div>
+              <div class="-my-1 flex justify-center text-muted-foreground">
+                <ArrowDownIcon class="size-4" />
               </div>
 
               <div class="space-y-1.5">
@@ -1134,6 +1195,10 @@
                       disabled={!receiveAssetSelectionEnabled}
                       onclick={() => {
                         if (!receiveAssetSelectionEnabled) return;
+                        showNetworkSheet = false;
+                        showExportSheet = false;
+                        pendingGroupedReceiveOption = null;
+                        pendingTargetOption = null;
                         showReceiveAssetSheet = true;
                       }}
                     >
@@ -1198,7 +1263,7 @@
             <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.loadingTargets')}</p>
           {/if}
 
-          {#if !loadingTargets && conversionEnabled && receiveAssetOptions.length === 0 && sourceSupportsConversion}
+          {#if !loadingTargets && conversionEnabled && rawReceiveAssetSections.allOptions.length === 0 && sourceSupportsConversion}
             <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.noRoutes')}</p>
           {/if}
 
@@ -1362,7 +1427,13 @@
 </StandardRightSheet>
 
 <StandardRightSheet bind:isOpen={showReceiveAssetSheet} title={i18n.t('wallet.transfer.receiveSheetTitle')}>
-  <div class="space-y-3">
+  <div class="flex h-full min-h-0 flex-col gap-3">
+    <Input
+      bind:value={receiveSearchTerm}
+      placeholder={i18n.t('wallet.transfer.receiveSearchPlaceholder')}
+      class="h-10"
+    />
+
     {#if loadingTargets}
       <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.loadingTargets')}</p>
     {/if}
@@ -1371,40 +1442,228 @@
       <p class="text-destructive text-sm">{targetsError}</p>
     {/if}
 
-    {#if !loadingTargets && receiveAssetOptions.length === 0}
+    {#if !loadingTargets && rawReceiveAssetSections.allOptions.length === 0}
       <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.viaNoOptions')}</p>
+    {:else if !loadingTargets && receiveAssetOptions.length === 0}
+      <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.routeNoMatches')}</p>
     {:else}
-      <div class="space-y-2">
-        {#each receiveAssetOptions as option}
-          {@const bestRoute = sortViaOptionsByScore(option.viaOptions, amount)[0] ?? null}
-          <button
-            type="button"
-            class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
-              {selectedReceiveAssetKey === option.key
-                ? 'border-primary/70 bg-primary/5'
-                : 'border-border/60 hover:bg-muted/30'}"
-            onclick={() => selectReceiveAsset(option.key)}
-          >
-            <div class="flex min-w-0 items-start gap-2">
-              <CoinIcon
-                coinId={option.destinationId}
-                coinName={option.label}
-                size={18}
-                decorative={true}
-              />
-              <div class="min-w-0">
-                <p class="truncate text-sm font-medium">{option.label}</p>
-                {#if option.subtitle}
-                  <p class="text-muted-foreground truncate text-xs">{option.subtitle}</p>
-                {/if}
-              </div>
-            </div>
-            {#if bestRoute}
-              <p class="text-muted-foreground ml-3 text-xs">{formatEstimatedReceive(bestRoute)}</p>
+      <ScrollArea.Root class="min-h-0 flex-1">
+        <ScrollArea.Viewport class="h-full pr-1">
+          <div class="space-y-4 pb-1">
+            {#if popularReceiveAssetOptions.length > 0}
+              <section class="space-y-2">
+                <p class="text-muted-foreground px-1 text-xs font-semibold">
+                  {i18n.t('wallet.transfer.routeGroupPopular')}
+                </p>
+                {#each popularReceiveAssetOptions as option}
+                  {@const bestRoute = sortViaOptionsByScore(option.viaOptions, amount)[0] ?? null}
+                  <button
+                    type="button"
+                    class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
+                      {isReceiveOptionSelected(option)
+                        ? 'border-primary/70 bg-primary/5'
+                        : 'border-border/60 hover:bg-muted/30'}"
+                    onclick={() => selectReceiveAsset(option.id)}
+                  >
+                    <div class="flex min-w-0 items-start gap-2">
+                      <CoinIcon
+                        coinId={option.destinationId}
+                        coinName={option.label}
+                        size={18}
+                        decorative={true}
+                      />
+                      <div class="min-w-0">
+                        <p class="truncate text-sm font-medium">{option.label}</p>
+                        {#if option.subtitle}
+                          <p class="text-muted-foreground truncate text-xs">{option.subtitle}</p>
+                        {/if}
+                      </div>
+                    </div>
+                    {#if bestRoute}
+                      <p class="text-muted-foreground ml-3 text-xs">{formatEstimatedReceive(bestRoute)}</p>
+                    {/if}
+                  </button>
+                {/each}
+              </section>
             {/if}
-          </button>
-        {/each}
-      </div>
+
+            {#if otherReceiveAssetOptions.length > 0}
+              <section class="space-y-2">
+                <p class="text-muted-foreground px-1 text-xs font-semibold">
+                  {popularReceiveAssetOptions.length > 0
+                    ? i18n.t('wallet.transfer.routeGroupMore')
+                    : i18n.t('wallet.transfer.routeGroupConversions')}
+                </p>
+                {#each otherReceiveAssetOptions as option}
+                  {@const bestRoute = sortViaOptionsByScore(option.viaOptions, amount)[0] ?? null}
+                  <button
+                    type="button"
+                    class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
+                      {isReceiveOptionSelected(option)
+                        ? 'border-primary/70 bg-primary/5'
+                        : 'border-border/60 hover:bg-muted/30'}"
+                    onclick={() => selectReceiveAsset(option.id)}
+                  >
+                    <div class="flex min-w-0 items-start gap-2">
+                      <CoinIcon
+                        coinId={option.destinationId}
+                        coinName={option.label}
+                        size={18}
+                        decorative={true}
+                      />
+                      <div class="min-w-0">
+                        <p class="truncate text-sm font-medium">{option.label}</p>
+                        {#if option.subtitle}
+                          <p class="text-muted-foreground truncate text-xs">{option.subtitle}</p>
+                        {/if}
+                      </div>
+                    </div>
+                    {#if bestRoute}
+                      <p class="text-muted-foreground ml-3 text-xs">{formatEstimatedReceive(bestRoute)}</p>
+                    {/if}
+                  </button>
+                {/each}
+              </section>
+            {/if}
+          </div>
+        </ScrollArea.Viewport>
+        <ScrollArea.Scrollbar orientation="vertical" />
+      </ScrollArea.Root>
+    {/if}
+  </div>
+</StandardRightSheet>
+
+<StandardRightSheet bind:isOpen={showNetworkSheet} title={i18n.t('wallet.transfer.networkSheetTitle')}>
+  <div class="flex h-full min-h-0 flex-col gap-3">
+    {#if pendingGroupedReceiveOption}
+      <p class="text-muted-foreground text-sm">
+        {i18n.t('wallet.transfer.networkSheetDescription', { value: pendingGroupedReceiveOption.label })}
+      </p>
+      <ScrollArea.Root class="min-h-0 flex-1">
+        <ScrollArea.Viewport class="h-full pr-1">
+          <div class="space-y-2 pb-1">
+            {#each pendingGroupedReceiveOption.networkOptions ?? [] as option}
+              <button
+                type="button"
+                class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
+                  border-border/60 hover:bg-muted/30"
+                onclick={() => selectReceiveNetworkOption(option.id)}
+              >
+                <div class="flex min-w-0 items-start gap-2">
+                  <CoinIcon coinId={option.destinationId} coinName={option.label} size={18} decorative={true} />
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                      <p class="truncate text-sm font-medium">{option.label}</p>
+                      {#if option.hasOnChainPath}
+                        <span class="rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold">
+                          {i18n.t('wallet.transfer.sameNetwork')}
+                        </span>
+                      {/if}
+                    </div>
+                    <p class="text-muted-foreground truncate text-xs">
+                      {i18n.t('wallet.transfer.receiveAs', {
+                        value: option.fullyqualifiedname || option.ticker || option.label
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <ChevronRightIcon class="text-foreground/45 ml-3 size-4 shrink-0" />
+              </button>
+            {/each}
+          </div>
+        </ScrollArea.Viewport>
+        <ScrollArea.Scrollbar orientation="vertical" />
+      </ScrollArea.Root>
+    {:else}
+      <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.viaNoOptions')}</p>
+    {/if}
+  </div>
+</StandardRightSheet>
+
+<StandardRightSheet bind:isOpen={showExportSheet} title={i18n.t('wallet.transfer.exportSheetTitle')}>
+  <div class="flex h-full min-h-0 flex-col gap-3">
+    {#if pendingTargetOption}
+      <p class="text-muted-foreground text-sm">
+        {#if !pendingTargetOption.hasOnChainPath && pendingTargetOption.exportOptions.length === 1}
+          {i18n.t('wallet.transfer.onlyAvailableOnNetwork', {
+            value: pendingTargetOption.exportOptions[0].exportToName
+          })}
+        {:else}
+          {i18n.t('wallet.transfer.exportSheetDescription', { value: pendingTargetOption.label })}
+        {/if}
+      </p>
+      <ScrollArea.Root class="min-h-0 flex-1">
+        <ScrollArea.Viewport class="h-full pr-1">
+          <div class="space-y-2 pb-1">
+            {#if pendingTargetOption.hasOnChainPath}
+              <button
+                type="button"
+                class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
+                  {selectedReceiveAssetId === pendingTargetOption.id && selectedExportSystemId === null
+                    ? 'border-primary/70 bg-primary/5'
+                    : 'border-border/60 hover:bg-muted/30'}"
+                onclick={selectSameNetworkOption}
+              >
+                <div class="flex min-w-0 items-start gap-2">
+                  <CoinIcon
+                    coinId={selectedCoin?.id || pendingTargetOption.destinationId}
+                    coinName={pendingTargetOption.label}
+                    size={18}
+                    decorative={true}
+                  />
+                  <div class="min-w-0">
+                    <p class="truncate text-sm font-medium">{i18n.t('wallet.transfer.sameNetwork')}</p>
+                    <p class="text-muted-foreground truncate text-xs">
+                      {i18n.t('wallet.transfer.receiveAs', {
+                        value:
+                          pendingTargetOption.fullyqualifiedname ||
+                          pendingTargetOption.ticker ||
+                          pendingTargetOption.label
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            {/if}
+
+            {#each pendingTargetOption.exportOptions as option}
+              <button
+                type="button"
+                class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
+                  {selectedReceiveAssetId === pendingTargetOption.id &&
+                  selectedExportSystemId === option.exportTo
+                    ? 'border-primary/70 bg-primary/5'
+                    : 'border-border/60 hover:bg-muted/30'}"
+                onclick={() => selectExportOption(option.exportTo)}
+              >
+                <div class="flex min-w-0 items-start gap-2">
+                  <CoinIcon
+                    coinId={option.exportTo}
+                    coinName={option.exportToName}
+                    size={18}
+                    decorative={true}
+                  />
+                  <div class="min-w-0">
+                    <p class="truncate text-sm font-medium">{option.exportToName}</p>
+                    <p class="text-muted-foreground truncate text-xs">
+                      {i18n.t('wallet.transfer.receiveAs', {
+                        value:
+                          pendingTargetOption.fullyqualifiedname ||
+                          pendingTargetOption.ticker ||
+                          pendingTargetOption.label
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <ChevronRightIcon class="text-foreground/45 ml-3 size-4 shrink-0" />
+              </button>
+            {/each}
+          </div>
+        </ScrollArea.Viewport>
+        <ScrollArea.Scrollbar orientation="vertical" />
+      </ScrollArea.Root>
+    {:else}
+      <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.viaNoOptions')}</p>
     {/if}
   </div>
 </StandardRightSheet>
@@ -1441,8 +1700,8 @@
                     </span>
                   {/if}
                 </div>
-                {#if option.subtitle}
-                  <p class="text-muted-foreground truncate text-xs">{option.subtitle}</p>
+                {#if getRouteSubtitle(option)}
+                  <p class="text-muted-foreground truncate text-xs">{getRouteSubtitle(option)}</p>
                 {/if}
                 {#if option.price}
                   <p class="text-muted-foreground text-xs">{i18n.t('wallet.transfer.rate', { value: option.price })}</p>

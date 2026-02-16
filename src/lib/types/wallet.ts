@@ -209,6 +209,7 @@ export interface BridgeConversionPathQuote {
   mapping: boolean;
   bounceback: boolean;
   ethDestination: boolean;
+  prelaunch?: boolean;
 }
 
 export interface BridgeConversionPathsResult {

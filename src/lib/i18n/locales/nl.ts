@@ -309,8 +309,21 @@ export const nl: Record<string, string> = {
   'wallet.transfer.sameAssetOption': '{ticker} versturen',
   'wallet.transfer.routeGroupSend': 'Dezelfde asset versturen',
   'wallet.transfer.routeGroupConvert': 'Omwisselroutes',
+  'wallet.transfer.routeGroupPopular': 'Populaire omwisselingen',
+  'wallet.transfer.routeGroupMore': 'Meer omwisselingen',
+  'wallet.transfer.routeGroupConversions': 'Omwisselingen',
   'wallet.transfer.routeSearchPlaceholder': 'Routes zoeken',
+  'wallet.transfer.receiveSearchPlaceholder': 'Valuta zoeken',
   'wallet.transfer.routeNoMatches': 'Geen routes gevonden voor je zoekopdracht.',
+  'wallet.transfer.networkSheetTitle': 'Netwerk selecteren',
+  'wallet.transfer.networkSheetDescription':
+    'Kies op welk netwerk de ontvanger {value} moet ontvangen.',
+  'wallet.transfer.exportSheetTitle': 'Bestemmingsnetwerk selecteren',
+  'wallet.transfer.exportSheetDescription':
+    'Kies op welk netwerk de ontvanger {value} moet ontvangen.',
+  'wallet.transfer.onlyAvailableOnNetwork': 'Deze asset is alleen beschikbaar op het {value}-netwerk.',
+  'wallet.transfer.sameNetwork': 'Zelfde netwerk',
+  'wallet.transfer.receiveAs': 'Ontvangen als {value}',
   'wallet.transfer.loadingTargets': 'Bestemmingsopties laden…',
   'wallet.transfer.noRoutes':
     'Geen omwisselroutes beschikbaar. Je kunt wel dezelfde asset versturen.',
