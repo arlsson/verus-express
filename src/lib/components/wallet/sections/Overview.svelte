@@ -8,6 +8,7 @@
 <script lang="ts">
   import { Button } from '$lib/components/ui/button';
   import * as ScrollArea from '$lib/components/ui/scroll-area';
+  import { Skeleton } from '$lib/components/ui/skeleton/index.js';
   import SendIcon from '@lucide/svelte/icons/send';
   import DownloadIcon from '@lucide/svelte/icons/download';
   import ArrowLeftRightIcon from '@lucide/svelte/icons/arrow-left-right';
@@ -19,6 +20,7 @@
   import { balanceStore } from '$lib/stores/balances.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { ratesStore } from '$lib/stores/rates.js';
+  import { walletBootstrapStore } from '$lib/stores/walletBootstrap.js';
   import { walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { i18nStore } from '$lib/i18n';
   import { buildWalletOverviewViewModel } from '$lib/utils/walletOverview.js';
@@ -50,6 +52,7 @@
   const walletChannels = $derived($walletChannelsStore);
   const balances = $derived($balanceStore);
   const rates = $derived($ratesStore);
+  const isBootstrapping = $derived($walletBootstrapStore);
   let showAddAssetSheet = $state(false);
   let listScrollElement = $state<HTMLElement | null>(null);
   let hasOverviewScroll = $state(false);
@@ -124,6 +127,7 @@
   const overview = $derived(liveOverview);
   const visibleRows = $derived(overview.rows);
   const rowIconSize = 34;
+  const overviewSkeletonRows = [0, 1, 2, 3, 4, 5];
 </script>
 
 <div class="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col px-6 pb-6 pt-0 sm:px-8">
@@ -135,38 +139,48 @@
     >
       <div class="flex items-start justify-between gap-4">
         <div class="relative z-20 min-w-0">
-          <div class={`holdings-obscured-bleed flex items-start ${hideHoldings ? 'holdings-obscured' : ''}`}>
-            {#if overview.heroFiatSymbolDisplay}
-              <span
-                class="text-muted-foreground mt-1 mr-1.5 text-xl font-semibold sm:text-2xl"
-              >
-                {overview.heroFiatSymbolDisplay}
-              </span>
-            {/if}
-            <p class="font-google-sans-17pt text-4xl leading-[1.02] font-semibold tracking-tight sm:text-5xl">
-              {overview.heroFiatValueDisplay}
-            </p>
-          </div>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          class="text-muted-foreground/85 mt-0.5 rounded-full hover:text-foreground"
-          aria-label={hideHoldings ? i18n.t('wallet.overview.showHoldings') : i18n.t('wallet.overview.hideHoldings')}
-          title={hideHoldings ? i18n.t('wallet.overview.showHoldings') : i18n.t('wallet.overview.hideHoldings')}
-          onclick={() => {
-            hideHoldings = !hideHoldings;
-          }}
-        >
-          {#if hideHoldings}
-            <EyeIcon class="h-4 w-4" />
+          {#if isBootstrapping}
+            <div class="holdings-obscured-bleed">
+              <Skeleton class="h-11 w-44 rounded-md sm:h-12 sm:w-56" />
+            </div>
           {:else}
-            <EyeOffIcon class="h-4 w-4" />
+            <div class={`holdings-obscured-bleed flex items-start ${hideHoldings ? 'holdings-obscured' : ''}`}>
+              {#if overview.heroFiatSymbolDisplay}
+                <span
+                  class="text-muted-foreground mt-1 mr-1.5 text-xl font-semibold sm:text-2xl"
+                >
+                  {overview.heroFiatSymbolDisplay}
+                </span>
+              {/if}
+              <p class="font-google-sans-17pt text-4xl leading-[1.02] font-semibold tracking-tight sm:text-5xl">
+                {overview.heroFiatValueDisplay}
+              </p>
+            </div>
           {/if}
-        </Button>
+        </div>
+        {#if isBootstrapping}
+          <Skeleton class="mt-0.5 h-8 w-8 rounded-full" />
+        {:else}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            class="text-muted-foreground/85 mt-0.5 rounded-full hover:text-foreground"
+            aria-label={hideHoldings ? i18n.t('wallet.overview.showHoldings') : i18n.t('wallet.overview.hideHoldings')}
+            title={hideHoldings ? i18n.t('wallet.overview.showHoldings') : i18n.t('wallet.overview.hideHoldings')}
+            onclick={() => {
+              hideHoldings = !hideHoldings;
+            }}
+          >
+            {#if hideHoldings}
+              <EyeIcon class="h-4 w-4" />
+            {:else}
+              <EyeOffIcon class="h-4 w-4" />
+            {/if}
+          </Button>
+        {/if}
       </div>
       <div class="min-w-0">
-        {#if overview.heroHasPartialRates}
+        {#if !isBootstrapping && overview.heroHasPartialRates}
           <p class="text-muted-foreground mt-0.5 text-xs">
             {i18n.t('wallet.overview.partialRatesNotice')}
           </p>
@@ -205,13 +219,38 @@
     </div>
 
     <div class="relative min-h-0 flex-1">
-      <ScrollArea.Root class="h-full">
+      <ScrollArea.Root class="h-full" type="scroll">
         <ScrollArea.Viewport
           class="overview-list-scroll h-full overscroll-contain pr-4"
           bind:ref={listScrollElement}
           onscroll={onOverviewScroll}
         >
-          {#if visibleRows.length === 0}
+          {#if isBootstrapping}
+            <ul class="space-y-1 pb-3">
+              {#each overviewSkeletonRows as skeletonRow (skeletonRow)}
+                <li class="grid grid-cols-[minmax(0,1fr)_11rem_10.25rem_auto] items-center gap-3.5 rounded-md px-3.5 py-3">
+                  <div class="min-w-0 flex items-center gap-3.5">
+                    <Skeleton class="h-[34px] w-[34px] rounded-full" />
+                    <div class="min-w-0 flex min-h-8 items-center">
+                      <Skeleton class="h-5 w-28 rounded-sm" />
+                    </div>
+                  </div>
+
+                  <div class="justify-self-end pr-4 text-right tabular-nums">
+                    <Skeleton class="ml-auto h-3 w-20 rounded-sm" />
+                    <Skeleton class="mt-1.5 ml-auto h-3 w-14 rounded-sm" />
+                  </div>
+
+                  <div class="text-right tabular-nums">
+                    <Skeleton class="ml-auto h-5 w-20 rounded-sm" />
+                    <Skeleton class="mt-1.5 ml-auto h-4 w-24 rounded-sm" />
+                  </div>
+
+                  <Skeleton class="h-[18px] w-[18px] justify-self-end rounded-sm" />
+                </li>
+              {/each}
+            </ul>
+          {:else if visibleRows.length === 0}
             <p class="text-muted-foreground px-1 py-8 text-sm">{i18n.t('wallet.overview.noChannel')}</p>
           {:else}
             <ul class="space-y-1 pb-3">
@@ -266,13 +305,13 @@
         <ScrollArea.Scrollbar orientation="vertical" />
       </ScrollArea.Root>
 
-      {#if canScrollDown}
+      {#if !isBootstrapping && canScrollDown}
         <div
           class="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-background to-transparent dark:from-[#111111]"
         ></div>
       {/if}
 
-      {#if canScrollDown && !hasOverviewScroll && !hasSeenScrollHint}
+      {#if !isBootstrapping && canScrollDown && !hasOverviewScroll && !hasSeenScrollHint}
         <div class="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
           <div class="scroll-hint text-muted-foreground/85 inline-flex items-center gap-1 text-[11px]">
             <ChevronDownIcon class="scroll-hint-icon h-3.5 w-3.5" aria-hidden="true" />

@@ -45,6 +45,13 @@ pub struct RatesUpdatedPayload {
     pub usd_change_24h_pct: Option<f64>,
 }
 
+/// Payload for wallet://bootstrap-updated.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BootstrapUpdatedPayload {
+    pub in_progress: bool,
+}
+
 /// Payload for wallet://error. Message must be user-facing, no internal details.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

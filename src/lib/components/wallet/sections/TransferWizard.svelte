@@ -18,7 +18,7 @@
   import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
   import TransferSummaryRail from './transfer-wizard/TransferSummaryRail.svelte';
   import { i18nStore } from '$lib/i18n';
-  import { resolveCoinPresentation } from '$lib/coins/presentation.js';
+  import { resolveCoinPresentation, resolveCoinPresentationById } from '$lib/coins/presentation.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { balanceStore, getBalance } from '$lib/stores/balances.js';
@@ -35,6 +35,7 @@
   import { preflightSend, sendTransaction } from '$lib/services/txService.js';
   import {
     estimateBridgeConversion,
+    getBridgeCapabilities,
     getBridgeConversionPaths,
     preflightBridgeTransfer
   } from '$lib/services/bridgeTransferService.js';
@@ -51,6 +52,7 @@
     type ViaRouteOption
   } from '$lib/transfer/convertTargetOptions';
   import type {
+    BridgeCapabilitiesResult,
     BridgeConversionPathQuote,
     BridgeTransferPreflightResult,
     PreflightResult,
@@ -70,6 +72,7 @@
     contactId: string;
     contactName: string;
     endpointId: string;
+    endpointKind: AddressEndpointKind;
     endpointLabel: string;
     endpointAddress: string;
     normalizedAddress: string;
@@ -94,6 +97,8 @@
     primary: string;
     secondary?: string;
     breakAll?: boolean;
+    iconCoinId?: string;
+    iconCoinName?: string;
   };
 
   type TransferWizardProps = {
@@ -167,6 +172,8 @@
   let pendingGroupedReceiveOption = $state<ReceiveAssetOption | null>(null);
   let pendingTargetOption = $state<ReceiveAssetOption | null>(null);
   let routeEstimateOutputs = $state<Record<string, string>>({});
+  let bridgeCapabilities = $state<BridgeCapabilitiesResult | null>(null);
+  let bridgeCapabilitiesLoading = $state(false);
 
   let loadingTargets = $state(false);
   let preflighting = $state(false);
@@ -200,7 +207,14 @@
   const selectedChannelId = $derived(selectedCoinOption?.channelId ?? null);
 
   const selectedChannelPrefix = $derived(selectedChannelId?.split('.')[0] ?? '');
-  const sourceSupportsConversion = $derived(selectedChannelPrefix === 'vrpc');
+  const sourceSupportsConversion = $derived(
+    (() => {
+      if (!selectedCoin || !selectedChannelId) return false;
+      if (bridgeCapabilities) return bridgeCapabilities.conversionSupported;
+      // Preserve existing behavior while capabilities are loading.
+      return selectedChannelPrefix === 'vrpc';
+    })()
+  );
 
   const selectedBalance = $derived(selectedCoinOption?.balanceTotal ?? '0');
   const selectedBalanceValue = $derived(toFiniteNumber(selectedBalance));
@@ -285,11 +299,27 @@
   const activeTargetOption = $derived(conversionEnabled ? activeConvertRoute : sameAssetOption);
 
   const convertUnavailableForSource = $derived(
-    selectedChannelPrefix === 'eth' || selectedChannelPrefix === 'erc20'
+    !!selectedCoin && !!selectedChannelId && !!bridgeCapabilities && !bridgeCapabilities.conversionSupported
   );
 
-  const showEvmConvertUnavailable = $derived(
+  const showConvertUnavailable = $derived(
     convertUnavailableForSource && (entryIntent === 'convert' || conversionEnabled)
+  );
+
+  const convertUnavailableMessage = $derived(
+    (() => {
+      const reasonCode = bridgeCapabilities?.reasonCode ?? '';
+      if (reasonCode === 'feature_disabled') {
+        return i18n.t('wallet.transfer.convertUnavailableFeatureDisabled');
+      }
+      if (reasonCode === 'eth_not_configured') {
+        return i18n.t('wallet.transfer.convertUnavailableEthNotConfigured');
+      }
+      if (reasonCode === 'unsupported_channel') {
+        return i18n.t('wallet.transfer.convertUnavailableUnsupportedChannel');
+      }
+      return i18n.t('wallet.transfer.convertUnavailableEvm');
+    })()
   );
 
   const destinationAddressKind = $derived<DestinationAddressKind>(
@@ -326,6 +356,7 @@
             contactId: contact.id,
             contactName: contact.displayName,
             endpointId: endpoint.id,
+            endpointKind: endpoint.kind,
             endpointLabel: endpoint.label,
             endpointAddress: endpoint.address,
             normalizedAddress: endpoint.normalizedAddress,
@@ -545,21 +576,23 @@
         rows.push({
           label: i18n.t('wallet.transfer.summary.from'),
           primary: sourcePrimary,
-          secondary: sourceSecondary
+          secondary: sourceSecondary,
+          iconCoinId: selectedCoin?.id,
+          iconCoinName: sourcePrimary
         });
       }
 
       if (conversionEnabled) {
-        const toPrimary = selectedReceiveAssetOption?.label?.trim() ?? '';
-        const toSecondary = normalizeSummarySecondary(
-          toPrimary,
-          selectedReceiveAssetOption?.ticker ?? ''
-        );
+        const toDisplay = selectedReceiveAssetOption ? getReceiveOptionDisplay(selectedReceiveAssetOption) : null;
+        const toPrimary = toDisplay?.primary?.trim() ?? '';
+        const toSecondary = toDisplay?.secondary;
         if (toPrimary) {
           rows.push({
             label: i18n.t('wallet.transfer.summary.to'),
             primary: toPrimary,
-            secondary: toSecondary
+            secondary: toSecondary,
+            iconCoinId: selectedReceiveAssetOption?.destinationId,
+            iconCoinName: toPrimary
           });
         }
       }
@@ -581,15 +614,10 @@
 
       if (amountValid) {
         const amountPrimary = amount.trim();
-        const amountSecondary = normalizeSummarySecondary(
-          amountPrimary,
-          selectedCoinPresentation?.displayTicker ?? ''
-        );
         if (amountPrimary) {
           rows.push({
             label: i18n.t('wallet.transfer.summary.amount'),
-            primary: amountPrimary,
-            secondary: amountSecondary
+            primary: amountPrimary
           });
         }
       }
@@ -605,15 +633,10 @@
 
       if (conversionEnabled && estimatedConversionValue && selectedReceiveAssetOption) {
         const estimatedPrimary = estimatedConversionValue.trim();
-        const estimatedSecondary = normalizeSummarySecondary(
-          estimatedPrimary,
-          selectedReceiveAssetOption.ticker || selectedReceiveAssetOption.label
-        );
         if (estimatedPrimary) {
           rows.push({
             label: i18n.t('wallet.transfer.summary.estimatedReceive'),
-            primary: estimatedPrimary,
-            secondary: estimatedSecondary
+            primary: estimatedPrimary
           });
         }
       }
@@ -656,6 +679,47 @@
   });
 
   $effect(() => {
+    const coin = selectedCoin;
+    const channelId = selectedChannelId;
+    let cancelled = false;
+
+    bridgeCapabilities = null;
+    bridgeCapabilitiesLoading = false;
+
+    if (!coin || !channelId) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    bridgeCapabilitiesLoading = true;
+
+    void (async () => {
+      try {
+        const capabilities = await getBridgeCapabilities({
+          coinId: coin.id,
+          channelId
+        });
+        if (cancelled) return;
+        bridgeCapabilities = capabilities;
+      } catch (error) {
+        if (cancelled) return;
+        bridgeCapabilities = {
+          conversionSupported: false,
+          executionEngine: 'unknown',
+          reasonCode: extractWalletErrorType(error)
+        };
+      } finally {
+        if (!cancelled) bridgeCapabilitiesLoading = false;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  $effect(() => {
     if (positiveSendableCoinOptions.length === 0) {
       selectedCoinId = '';
       sourceCoinManuallyChosen = false;
@@ -691,7 +755,7 @@
   });
 
   $effect(() => {
-    if (showEvmConvertUnavailable && conversionEnabled) {
+    if (showConvertUnavailable && conversionEnabled) {
       conversionEnabled = false;
       manualViaLocked = false;
       selectedViaOptionId = '';
@@ -977,6 +1041,11 @@
     return `${trimmed.slice(0, 10)}...${trimmed.slice(-10)}`;
   }
 
+  function endpointBadgeLabel(kind: AddressEndpointKind): string {
+    if (kind === 'vrpc') return 'VERUS';
+    return kind.toUpperCase();
+  }
+
   function selectAddressBookRecipient(option: AddressBookEndpointOption) {
     destinationAddress = option.endpointAddress;
     showAddressBookSheet = false;
@@ -1146,6 +1215,24 @@
     });
   }
 
+  function getReceiveOptionDisplay(option: ReceiveAssetOption): { primary: string; secondary?: string } {
+    const presentation = resolveCoinPresentationById(option.destinationId);
+    const primary =
+      presentation?.displayName?.trim() ||
+      option.subtitle?.trim() ||
+      option.label.trim();
+    const secondaryCandidate =
+      presentation?.displayTicker?.trim() ||
+      option.fullyqualifiedname?.trim() ||
+      option.ticker?.trim();
+    const secondary =
+      secondaryCandidate && secondaryCandidate.toLowerCase() !== primary.toLowerCase()
+        ? secondaryCandidate
+        : undefined;
+
+    return { primary, secondary };
+  }
+
   function validateDestinationAddress(value: string, kind: DestinationAddressKind): boolean {
     const input = value.trim();
     if (!input) return false;
@@ -1255,15 +1342,45 @@
     return null;
   }
 
+  function extractWalletErrorMessage(error: unknown): string | null {
+    if (!error || typeof error !== 'object') return null;
+    const object = error as Record<string, unknown>;
+
+    if (typeof object.message === 'string' && object.message.trim()) {
+      return object.message.trim();
+    }
+    if (object.data && typeof object.data === 'object') {
+      const data = object.data as Record<string, unknown>;
+      if (typeof data.message === 'string' && data.message.trim()) {
+        return data.message.trim();
+      }
+    }
+    return null;
+  }
+
   function mapWalletError(error: unknown): string {
     const errorType = extractWalletErrorType(error);
+    const rawMessage = extractWalletErrorMessage(error);
     if (errorType === 'BridgeNotImplemented') return i18n.t('wallet.transfer.error.bridgeNotImplemented');
+    if (errorType === 'BridgeRouteInvalid') return i18n.t('wallet.transfer.error.bridgeRouteInvalid');
+    if (errorType === 'BridgeUnsupportedDestinationCombination') {
+      return i18n.t('wallet.transfer.error.bridgeUnsupportedDestinationCombination');
+    }
+    if (errorType === 'BridgeApprovalFailed') return i18n.t('wallet.transfer.error.bridgeApprovalFailed');
+    if (errorType === 'BridgeInsufficientEthFeeEnvelope') {
+      return i18n.t('wallet.transfer.error.bridgeInsufficientEthFeeEnvelope');
+    }
+    if (errorType === 'BridgeGasDriftExceeded') return i18n.t('wallet.transfer.error.bridgeGasDriftExceeded');
     if (errorType === 'UnsupportedChannel') return i18n.t('wallet.transfer.error.unsupportedChannel');
     if (errorType === 'InvalidAddress') return i18n.t('wallet.transfer.error.invalidAddress');
     if (errorType === 'InsufficientFunds') return i18n.t('wallet.transfer.error.insufficientFunds');
     if (errorType === 'NetworkError') return i18n.t('wallet.transfer.error.network');
-    if (errorType === 'OperationFailed') return i18n.t('wallet.transfer.error.operationFailed');
+    if (errorType === 'OperationFailed') {
+      if (rawMessage && rawMessage.toLowerCase() !== 'operation failed') return rawMessage;
+      return i18n.t('wallet.transfer.error.operationFailed');
+    }
 
+    if (rawMessage) return rawMessage;
     if (error instanceof Error && error.message) return error.message;
     return i18n.t('common.unknownError');
   }
@@ -1363,6 +1480,11 @@
       }
       currentStep = 'review';
     } catch (error) {
+      console.error('[TransferWizard] preflight failed', {
+        type: extractWalletErrorType(error),
+        message: extractWalletErrorMessage(error),
+        error
+      });
       transferError = mapWalletError(error);
       currentStep = 'recipient';
     } finally {
@@ -1384,6 +1506,11 @@
       await refreshTxHistory();
       currentStep = 'success';
     } catch (error) {
+      console.error('[TransferWizard] broadcast failed', {
+        type: extractWalletErrorType(error),
+        message: extractWalletErrorMessage(error),
+        error
+      });
       transferError = mapWalletError(error);
     } finally {
       sending = false;
@@ -1416,7 +1543,7 @@
 
   function setTransferMode(mode: 'send' | 'convert') {
     if (mode === 'convert') {
-      if (!sourceSupportsConversion || convertUnavailableForSource) return;
+      if (selectedCoin && !sourceSupportsConversion) return;
       conversionEnabled = true;
       manualViaLocked = false;
       return;
@@ -1564,7 +1691,7 @@
                 <Tabs.Trigger
                   value="convert"
                   class="h-8 min-w-[5.75rem] rounded-lg px-3 text-sm font-semibold data-[state=active]:shadow-none"
-                  disabled={!sourceSupportsConversion || convertUnavailableForSource}
+                  disabled={!!selectedCoin && !sourceSupportsConversion}
                   onclick={() => setTransferMode('convert')}
                 >
                   {i18n.t('wallet.overview.convert')}
@@ -1676,14 +1803,18 @@
                       }}
                     >
                       {#if selectedReceiveAssetOption}
+                        {@const receiveDisplay = getReceiveOptionDisplay(selectedReceiveAssetOption)}
                         <CoinIcon
                           coinId={selectedReceiveAssetOption.destinationId}
-                          coinName={selectedReceiveAssetOption.label}
+                          coinName={receiveDisplay.primary}
                           size={24}
                           decorative={true}
                         />
-                        <span class="truncate text-base font-semibold">
-                          {selectedReceiveAssetOption.label}
+                        <span class="min-w-0 text-left leading-tight">
+                          <span class="block truncate text-base font-semibold">{receiveDisplay.primary}</span>
+                          {#if receiveDisplay.secondary}
+                            <span class="text-muted-foreground block truncate text-xs">{receiveDisplay.secondary}</span>
+                          {/if}
                         </span>
                         <ChevronRightIcon class="text-foreground/45 ml-auto size-4 shrink-0" />
                       {:else}
@@ -1726,13 +1857,13 @@
             {/if}
           </div>
 
-          {#if showEvmConvertUnavailable}
+          {#if showConvertUnavailable}
             <div class="rounded-md border border-border/60 px-3 py-2 text-sm text-muted-foreground">
-              {i18n.t('wallet.transfer.convertUnavailableEvm')}
+              {convertUnavailableMessage}
             </div>
           {/if}
 
-          {#if loadingTargets && sourceSupportsConversion}
+          {#if (loadingTargets && sourceSupportsConversion) || bridgeCapabilitiesLoading}
             <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.loadingTargets')}</p>
           {/if}
 
@@ -2003,19 +2134,24 @@
             {#each addressBookEndpointOptions as option}
               <button
                 type="button"
-                class="flex w-full items-start justify-between rounded-lg bg-muted/65 px-3 py-2 text-left transition-colors
+                class="flex w-full items-start justify-between rounded-lg bg-muted/65 px-3.5 py-3 text-left transition-colors
                   hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60
                   dark:bg-muted/55 dark:hover:bg-muted/65"
                 onclick={() => selectAddressBookRecipient(option)}
               >
                 <div class="min-w-0">
-                  <p class="truncate text-sm font-medium">{option.contactName}</p>
-                  <p class="text-muted-foreground truncate text-xs">
-                    {option.endpointLabel} • {shortRecipientAddress(option.endpointAddress)}
+                  <p class="truncate text-[15px] leading-tight font-medium">{option.contactName}</p>
+                  <p class="text-muted-foreground mt-0.5 flex items-center gap-1.5 truncate text-sm">
+                    <span
+                      class="bg-background/60 text-muted-foreground inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide dark:bg-background/45"
+                    >
+                      {endpointBadgeLabel(option.endpointKind)}
+                    </span>
+                    <span class="truncate">{shortRecipientAddress(option.endpointAddress)}</span>
                   </p>
                 </div>
                 {#if option.lastUsedAt}
-                  <p class="text-muted-foreground ml-3 text-[11px]">
+                  <p class="text-muted-foreground ml-3 mt-0.5 text-xs">
                     {i18n.t('wallet.transfer.addressBook.recent')}
                   </p>
                 {/if}
@@ -2031,10 +2167,10 @@
 
 <StandardRightSheet bind:isOpen={showReceiveAssetSheet} title={i18n.t('wallet.transfer.receiveSheetTitle')}>
   <div class="flex h-full min-h-0 flex-col gap-3">
-    <Input
+    <SearchInput
       bind:value={receiveSearchTerm}
       placeholder={i18n.t('wallet.transfer.receiveSearchPlaceholder')}
-      class="h-10"
+      inputClass="h-10"
     />
 
     {#if loadingTargets}
@@ -2059,33 +2195,30 @@
                   {i18n.t('wallet.transfer.routeGroupPopular')}
                 </p>
                 {#each popularReceiveAssetOptions as option}
-                  {@const bestRoute = sortViaOptionsByScore(option.viaOptions, amount, routeEstimateOutputs)[0] ?? null}
-                  {@const estimatedValue = bestRoute ? formatEstimatedReceive(bestRoute) : null}
+                  {@const display = getReceiveOptionDisplay(option)}
                   <button
                     type="button"
-                    class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
+                    class="group flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors
+                      focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
                       {isReceiveOptionSelected(option)
-                        ? 'border-primary/70 bg-primary/5'
-                        : 'border-border/60 hover:bg-muted/30'}"
+                        ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
+                        : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'}"
                     onclick={() => selectReceiveAsset(option.id)}
                   >
-                    <div class="flex min-w-0 items-start gap-2">
+                    <div class="flex min-w-0 items-center gap-2.5">
                       <CoinIcon
                         coinId={option.destinationId}
-                        coinName={option.label}
+                        coinName={display.primary}
                         size={18}
                         decorative={true}
                       />
                       <div class="min-w-0">
-                        <p class="truncate text-sm font-medium">{option.label}</p>
-                        {#if option.subtitle}
-                          <p class="text-muted-foreground truncate text-xs">{option.subtitle}</p>
+                        <p class="truncate text-sm font-semibold">{display.primary}</p>
+                        {#if display.secondary}
+                          <p class="text-muted-foreground truncate text-xs">{display.secondary}</p>
                         {/if}
                       </div>
                     </div>
-                    {#if estimatedValue}
-                      <p class="text-muted-foreground ml-3 text-xs">{estimatedValue}</p>
-                    {/if}
                   </button>
                 {/each}
               </section>
@@ -2099,33 +2232,30 @@
                     : i18n.t('wallet.transfer.routeGroupConversions')}
                 </p>
                 {#each otherReceiveAssetOptions as option}
-                  {@const bestRoute = sortViaOptionsByScore(option.viaOptions, amount, routeEstimateOutputs)[0] ?? null}
-                  {@const estimatedValue = bestRoute ? formatEstimatedReceive(bestRoute) : null}
+                  {@const display = getReceiveOptionDisplay(option)}
                   <button
                     type="button"
-                    class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
+                    class="group flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors
+                      focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
                       {isReceiveOptionSelected(option)
-                        ? 'border-primary/70 bg-primary/5'
-                        : 'border-border/60 hover:bg-muted/30'}"
+                        ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
+                        : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'}"
                     onclick={() => selectReceiveAsset(option.id)}
                   >
-                    <div class="flex min-w-0 items-start gap-2">
+                    <div class="flex min-w-0 items-center gap-2.5">
                       <CoinIcon
                         coinId={option.destinationId}
-                        coinName={option.label}
+                        coinName={display.primary}
                         size={18}
                         decorative={true}
                       />
                       <div class="min-w-0">
-                        <p class="truncate text-sm font-medium">{option.label}</p>
-                        {#if option.subtitle}
-                          <p class="text-muted-foreground truncate text-xs">{option.subtitle}</p>
+                        <p class="truncate text-sm font-semibold">{display.primary}</p>
+                        {#if display.secondary}
+                          <p class="text-muted-foreground truncate text-xs">{display.secondary}</p>
                         {/if}
                       </div>
                     </div>
-                    {#if estimatedValue}
-                      <p class="text-muted-foreground ml-3 text-xs">{estimatedValue}</p>
-                    {/if}
                   </button>
                 {/each}
               </section>

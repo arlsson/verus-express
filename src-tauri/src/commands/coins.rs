@@ -15,6 +15,7 @@ use serde_json::Value;
 use tauri::State;
 use tokio::sync::Mutex;
 
+use crate::core::channels::eth::bridge::token_mapping::get_currencies_mapped_to_eth;
 use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::{Channel, CoinDefinition, CoinRegistry, Protocol, SessionManager};
@@ -206,6 +207,7 @@ fn build_erc20_coin_definition(
     symbol: &str,
     name: &str,
     decimals: u8,
+    mapped_to: Option<String>,
 ) -> Result<CoinDefinition, WalletError> {
     let symbol_trimmed = symbol.trim();
     if symbol_trimmed.is_empty() {
@@ -234,7 +236,16 @@ fn build_erc20_coin_definition(
         vrpc_endpoints: vec![],
         electrum_endpoints: None,
         seconds_per_block: 12,
-        mapped_to: Some("ETH".to_string()),
+        mapped_to: mapped_to
+            .and_then(|value| {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            })
+            .or_else(|| Some("ETH".to_string())),
         is_testnet: false,
     })
 }
@@ -349,6 +360,7 @@ pub async fn resolve_erc20_contract(
     contract: String,
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     eth_provider_pool: State<'_, Arc<EthProviderPool>>,
+    vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
 ) -> Result<Erc20ResolveResult, WalletError> {
     let network = require_active_network(session_manager.inner()).await?;
     if !matches!(network, WalletNetwork::Mainnet) {
@@ -393,7 +405,22 @@ pub async fn resolve_erc20_contract(
         .await
         .map_err(|_| WalletError::InvalidContract)?;
 
-    let coin = build_erc20_coin_definition(contract_address, &symbol, &name, decimals)?;
+    let mapped_to =
+        match get_currencies_mapped_to_eth(vrpc_provider_pool.for_network(network), Some(provider))
+            .await
+        {
+            Ok(mappings) => {
+                let contract_key = format!("{:#x}", contract_address).to_ascii_lowercase();
+                mappings
+                    .contract_to_currencies
+                    .get(&contract_key)
+                    .and_then(|currencies| currencies.first())
+                    .map(|currency| currency.currency_id.clone())
+            }
+            Err(_) => None,
+        };
+
+    let coin = build_erc20_coin_definition(contract_address, &symbol, &name, decimals, mapped_to)?;
 
     Ok(Erc20ResolveResult::Resolved { coin })
 }
@@ -412,8 +439,8 @@ mod tests {
     fn build_erc20_coin_definition_uses_deterministic_id() {
         let contract = parse_contract_address("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
             .expect("valid contract");
-        let coin =
-            build_erc20_coin_definition(contract, "usdc", "USD Coin", 6).expect("coin definition");
+        let coin = build_erc20_coin_definition(contract, "usdc", "USD Coin", 6, None)
+            .expect("coin definition");
 
         assert_eq!(coin.id, "erc20_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
         assert_eq!(coin.display_ticker, "USDC");

@@ -14,10 +14,61 @@ use crate::core::channels::PreflightStore;
 use crate::core::coins::{Channel, CoinRegistry};
 use crate::types::wallet::WalletNetwork;
 use crate::types::{
-    BridgeConversionEstimateRequest, BridgeConversionEstimateResult, BridgeConversionPathRequest,
-    BridgeConversionPathsResult, BridgeExecutionHint, BridgeTransferPreflightParams,
-    BridgeTransferPreflightResult, BridgeTransferRoute, VrpcTransferPreflightParams, WalletError,
+    BridgeCapabilitiesRequest, BridgeCapabilitiesResult, BridgeConversionEstimateRequest,
+    BridgeConversionEstimateResult, BridgeConversionPathRequest, BridgeConversionPathsResult,
+    BridgeExecutionHint, BridgeTransferPreflightParams, BridgeTransferPreflightResult,
+    BridgeTransferRoute, VrpcTransferPreflightParams, WalletError,
 };
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_bridge_capabilities(
+    request: BridgeCapabilitiesRequest,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+    eth_provider_pool: State<'_, Arc<EthProviderPool>>,
+) -> Result<BridgeCapabilitiesResult, WalletError> {
+    let session = session_manager.lock().await;
+    if !session.is_unlocked() {
+        return Err(WalletError::WalletLocked);
+    }
+    drop(session);
+
+    let prefix = request.channel_id.split('.').next().unwrap_or_default();
+    let capability = match prefix {
+        "vrpc" => BridgeCapabilitiesResult {
+            conversion_supported: true,
+            execution_engine: "vrpc_sendcurrency".to_string(),
+            reason_code: None,
+        },
+        "eth" | "erc20" => {
+            if !eth_provider_pool.is_enabled() {
+                BridgeCapabilitiesResult {
+                    conversion_supported: false,
+                    execution_engine: "eth_delegator_bridge".to_string(),
+                    reason_code: Some("eth_not_configured".to_string()),
+                }
+            } else if !crate::core::channels::eth::bridge::parity_feature_enabled() {
+                BridgeCapabilitiesResult {
+                    conversion_supported: false,
+                    execution_engine: "eth_delegator_bridge".to_string(),
+                    reason_code: Some("feature_disabled".to_string()),
+                }
+            } else {
+                BridgeCapabilitiesResult {
+                    conversion_supported: true,
+                    execution_engine: "eth_delegator_bridge".to_string(),
+                    reason_code: None,
+                }
+            }
+        }
+        _ => BridgeCapabilitiesResult {
+            conversion_supported: false,
+            execution_engine: "unsupported".to_string(),
+            reason_code: Some("unsupported_channel".to_string()),
+        },
+    };
+
+    Ok(capability)
+}
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_bridge_conversion_paths(
@@ -25,7 +76,7 @@ pub async fn get_bridge_conversion_paths(
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     coin_registry: State<'_, Arc<CoinRegistry>>,
     vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
-    _eth_provider_pool: State<'_, Arc<EthProviderPool>>,
+    eth_provider_pool: State<'_, Arc<EthProviderPool>>,
 ) -> Result<BridgeConversionPathsResult, WalletError> {
     let session = session_manager.lock().await;
     if !session.is_unlocked() {
@@ -44,10 +95,24 @@ pub async fn get_bridge_conversion_paths(
                 network,
                 coin_registry.as_ref(),
                 vrpc_provider_pool.inner().as_ref(),
+                eth_provider_pool.inner().as_ref(),
             )
             .await
         }
-        "eth" | "erc20" => Err(WalletError::BridgeNotImplemented),
+        "eth" | "erc20" => {
+            if !crate::core::channels::eth::bridge::parity_feature_enabled() {
+                return Err(WalletError::BridgeNotImplemented);
+            }
+
+            get_bridge_conversion_paths_evm(
+                request,
+                network,
+                coin_registry.as_ref(),
+                vrpc_provider_pool.inner().as_ref(),
+                eth_provider_pool.inner().as_ref(),
+            )
+            .await
+        }
         _ => Err(WalletError::UnsupportedChannel),
     }
 }
@@ -58,7 +123,7 @@ pub async fn estimate_bridge_conversion(
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     coin_registry: State<'_, Arc<CoinRegistry>>,
     vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
-    _eth_provider_pool: State<'_, Arc<EthProviderPool>>,
+    eth_provider_pool: State<'_, Arc<EthProviderPool>>,
 ) -> Result<BridgeConversionEstimateResult, WalletError> {
     let session = session_manager.lock().await;
     if !session.is_unlocked() {
@@ -77,10 +142,24 @@ pub async fn estimate_bridge_conversion(
                 network,
                 coin_registry.as_ref(),
                 vrpc_provider_pool.inner().as_ref(),
+                eth_provider_pool.inner().as_ref(),
             )
             .await
         }
-        "eth" | "erc20" => Err(WalletError::BridgeNotImplemented),
+        "eth" | "erc20" => {
+            if !crate::core::channels::eth::bridge::parity_feature_enabled() {
+                return Err(WalletError::BridgeNotImplemented);
+            }
+
+            estimate_bridge_conversion_evm(
+                request,
+                network,
+                coin_registry.as_ref(),
+                vrpc_provider_pool.inner().as_ref(),
+                eth_provider_pool.inner().as_ref(),
+            )
+            .await
+        }
         _ => Err(WalletError::UnsupportedChannel),
     }
 }
@@ -91,6 +170,7 @@ async fn get_bridge_conversion_paths_vrpc(
     network: WalletNetwork,
     coin_registry: &CoinRegistry,
     vrpc_provider_pool: &VrpcProviderPool,
+    eth_provider_pool: &EthProviderPool,
 ) -> Result<BridgeConversionPathsResult, WalletError> {
     let resolved = vrpc::parse_vrpc_channel_id(&request.channel_id, Some(session_vrpc_address))?;
     if resolved.address != session_vrpc_address {
@@ -118,6 +198,7 @@ async fn get_bridge_conversion_paths_vrpc(
     crate::core::channels::eth::bridge::get_conversion_paths(
         &request,
         vrpc_provider_pool.for_network(network),
+        eth_provider_pool.for_network(network).ok(),
     )
     .await
 }
@@ -128,6 +209,7 @@ async fn estimate_bridge_conversion_vrpc(
     network: WalletNetwork,
     coin_registry: &CoinRegistry,
     vrpc_provider_pool: &VrpcProviderPool,
+    eth_provider_pool: &EthProviderPool,
 ) -> Result<BridgeConversionEstimateResult, WalletError> {
     let resolved = vrpc::parse_vrpc_channel_id(&request.channel_id, Some(session_vrpc_address))?;
     if resolved.address != session_vrpc_address {
@@ -155,6 +237,81 @@ async fn estimate_bridge_conversion_vrpc(
     crate::core::channels::eth::bridge::estimate_conversion(
         &request,
         vrpc_provider_pool.for_network(network),
+        eth_provider_pool.for_network(network).ok(),
+    )
+    .await
+}
+
+async fn get_bridge_conversion_paths_evm(
+    request: BridgeConversionPathRequest,
+    network: WalletNetwork,
+    coin_registry: &CoinRegistry,
+    vrpc_provider_pool: &VrpcProviderPool,
+    eth_provider_pool: &EthProviderPool,
+) -> Result<BridgeConversionPathsResult, WalletError> {
+    let prefix = request.channel_id.split('.').next().unwrap_or_default();
+    let expected_channel = match prefix {
+        "eth" => Channel::Eth,
+        "erc20" => Channel::Erc20,
+        _ => return Err(WalletError::UnsupportedChannel),
+    };
+
+    let is_testnet = matches!(network, WalletNetwork::Testnet);
+    let source_coin = coin_registry
+        .find_by_id(&request.coin_id, is_testnet)
+        .ok_or(WalletError::UnsupportedChannel)?;
+    if !source_coin
+        .compatible_channels
+        .iter()
+        .any(|channel| channel == &expected_channel)
+    {
+        return Err(WalletError::UnsupportedChannel);
+    }
+
+    // Ensure we can execute on the selected EVM network before returning route paths.
+    let _ = eth_provider_pool.for_network(network)?;
+
+    crate::core::channels::eth::bridge::get_conversion_paths(
+        &request,
+        vrpc_provider_pool.for_network(network),
+        Some(eth_provider_pool.for_network(network)?),
+    )
+    .await
+}
+
+async fn estimate_bridge_conversion_evm(
+    request: BridgeConversionEstimateRequest,
+    network: WalletNetwork,
+    coin_registry: &CoinRegistry,
+    vrpc_provider_pool: &VrpcProviderPool,
+    eth_provider_pool: &EthProviderPool,
+) -> Result<BridgeConversionEstimateResult, WalletError> {
+    let prefix = request.channel_id.split('.').next().unwrap_or_default();
+    let expected_channel = match prefix {
+        "eth" => Channel::Eth,
+        "erc20" => Channel::Erc20,
+        _ => return Err(WalletError::UnsupportedChannel),
+    };
+
+    let is_testnet = matches!(network, WalletNetwork::Testnet);
+    let source_coin = coin_registry
+        .find_by_id(&request.coin_id, is_testnet)
+        .ok_or(WalletError::UnsupportedChannel)?;
+    if !source_coin
+        .compatible_channels
+        .iter()
+        .any(|channel| channel == &expected_channel)
+    {
+        return Err(WalletError::UnsupportedChannel);
+    }
+
+    // Ensure we can execute on the selected EVM network before returning route estimates.
+    let _ = eth_provider_pool.for_network(network)?;
+
+    crate::core::channels::eth::bridge::estimate_conversion(
+        &request,
+        vrpc_provider_pool.for_network(network),
+        Some(eth_provider_pool.for_network(network)?),
     )
     .await
 }
@@ -181,23 +338,31 @@ pub async fn preflight_bridge_transfer(
             .await
         }
         "eth" => {
+            if !crate::core::channels::eth::bridge::parity_feature_enabled() {
+                return Err(WalletError::BridgeNotImplemented);
+            }
             preflight_bridge_eth(
                 params,
                 "eth",
                 session_manager,
                 preflight_store,
                 coin_registry,
+                vrpc_provider_pool,
                 eth_provider_pool,
             )
             .await
         }
         "erc20" => {
+            if !crate::core::channels::eth::bridge::parity_feature_enabled() {
+                return Err(WalletError::BridgeNotImplemented);
+            }
             preflight_bridge_eth(
                 params,
                 "erc20",
                 session_manager,
                 preflight_store,
                 coin_registry,
+                vrpc_provider_pool,
                 eth_provider_pool,
             )
             .await
@@ -286,6 +451,7 @@ async fn preflight_bridge_eth(
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     preflight_store: State<'_, PreflightStore>,
     coin_registry: State<'_, Arc<CoinRegistry>>,
+    vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
     eth_provider_pool: State<'_, Arc<EthProviderPool>>,
 ) -> Result<BridgeTransferPreflightResult, WalletError> {
     let session = session_manager.lock().await;
@@ -297,7 +463,7 @@ async fn preflight_bridge_eth(
         .active_account_id()
         .ok_or(WalletError::WalletLocked)?
         .to_string();
-    let (_, eth_address, _) = session.get_addresses()?;
+    let (vrpc_address, eth_address, _) = session.get_addresses()?;
     let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
     drop(session);
 
@@ -325,8 +491,11 @@ async fn preflight_bridge_eth(
         params,
         &preflight_store,
         &account_id,
+        &coin,
         &eth_address,
+        &vrpc_address,
         &channel_id,
+        vrpc_provider_pool.for_network(network),
         eth_provider_pool.for_network(network)?,
     )
     .await

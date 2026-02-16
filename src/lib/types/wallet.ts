@@ -194,6 +194,17 @@ export interface BridgeConversionPathRequest {
   destinationCurrency?: string | null;
 }
 
+export interface BridgeCapabilitiesRequest {
+  coinId: string;
+  channelId: string;
+}
+
+export interface BridgeCapabilitiesResult {
+  conversionSupported: boolean;
+  executionEngine: string;
+  reasonCode?: string | null;
+}
+
 export interface BridgeConversionPathQuote {
   destinationId: string;
   destinationDisplayName?: string | null;

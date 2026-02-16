@@ -4,10 +4,11 @@
 use std::str::FromStr;
 
 use bitcoin::absolute::LockTime;
+use bitcoin::address::NetworkUnchecked;
 use bitcoin::blockdata::script::Builder;
 use bitcoin::blockdata::transaction::{OutPoint, Transaction, TxIn, TxOut};
 use bitcoin::consensus::Encodable;
-use bitcoin::{Amount, ScriptBuf, Sequence, Txid};
+use bitcoin::{Amount, Network as BtcNetwork, ScriptBuf, Sequence, Txid};
 use bs58;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -40,8 +41,20 @@ pub struct BtcInputRef {
     pub value: u64,
 }
 
-/// Validate Bitcoin P2PKH address for the selected network.
-fn validate_btc_address(addr: &str, network: WalletNetwork) -> Result<[u8; 20], WalletError> {
+fn expected_btc_network(network: WalletNetwork) -> BtcNetwork {
+    match network {
+        WalletNetwork::Mainnet => BtcNetwork::Bitcoin,
+        WalletNetwork::Testnet => BtcNetwork::Testnet,
+    }
+}
+
+/// Validate source Bitcoin address as legacy P2PKH for the selected network.
+///
+/// The current signer implementation is P2PKH-only for inputs, so source must remain P2PKH.
+fn validate_btc_source_address(
+    addr: &str,
+    network: WalletNetwork,
+) -> Result<[u8; 20], WalletError> {
     let trimmed = addr.trim();
     if trimmed.is_empty() || trimmed.len() > 35 {
         return Err(WalletError::InvalidAddress);
@@ -60,6 +73,25 @@ fn validate_btc_address(addr: &str, network: WalletNetwork) -> Result<[u8; 20], 
     let mut hash = [0u8; 20];
     hash.copy_from_slice(&decoded[1..21]);
     Ok(hash)
+}
+
+/// Parse destination address (P2PKH/P2SH/Bech32) and return its scriptPubKey.
+fn parse_btc_destination_script(
+    addr: &str,
+    network: WalletNetwork,
+) -> Result<ScriptBuf, WalletError> {
+    let trimmed = addr.trim();
+    if trimmed.is_empty() {
+        return Err(WalletError::InvalidAddress);
+    }
+
+    let parsed = trimmed
+        .parse::<bitcoin::Address<NetworkUnchecked>>()
+        .map_err(|_| WalletError::InvalidAddress)?;
+    let checked = parsed
+        .require_network(expected_btc_network(network))
+        .map_err(|_| WalletError::InvalidAddress)?;
+    Ok(checked.script_pubkey())
 }
 
 fn p2pkh_script_from_hash160(hash: &[u8; 20]) -> ScriptBuf {
@@ -83,8 +115,8 @@ pub async fn preflight(
     provider: &BtcProvider,
     network: WalletNetwork,
 ) -> Result<PreflightResult, WalletError> {
-    let to_hash = validate_btc_address(&params.to_address, network)?;
-    validate_btc_address(from_address, network)?;
+    let to_script = parse_btc_destination_script(&params.to_address, network)?;
+    validate_btc_source_address(from_address, network)?;
 
     let amount_sat = params
         .amount
@@ -118,8 +150,7 @@ pub async fn preflight(
     }
 
     let change = total.saturating_sub(amount_sat).saturating_sub(fee_sat);
-    let from_hash = validate_btc_address(from_address, network)?;
-    let to_script = p2pkh_script_from_hash160(&to_hash);
+    let from_hash = validate_btc_source_address(from_address, network)?;
     let from_script = p2pkh_script_from_hash160(&from_hash);
 
     let mut inputs: Vec<TxIn> = Vec::new();
@@ -203,4 +234,38 @@ pub async fn preflight(
         warnings,
         memo: params.memo,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_btc_destination_script_accepts_mainnet_bech32() {
+        let script = parse_btc_destination_script(
+            "bc1qggqzj0uzun238nhzzs5wdz2en05s0d9ncwhxcf",
+            WalletNetwork::Mainnet,
+        )
+        .expect("mainnet bech32 address should be valid");
+        assert!(script.is_witness_program());
+    }
+
+    #[test]
+    fn parse_btc_destination_script_rejects_network_mismatch() {
+        let result = parse_btc_destination_script(
+            "bc1qggqzj0uzun238nhzzs5wdz2en05s0d9ncwhxcf",
+            WalletNetwork::Testnet,
+        );
+        assert!(matches!(result, Err(WalletError::InvalidAddress)));
+    }
+
+    #[test]
+    fn parse_btc_destination_script_accepts_testnet_bech32() {
+        let script = parse_btc_destination_script(
+            "tb1qggqzj0uzun238nhzzs5wdz2en05s0d9njgv4r6",
+            WalletNetwork::Testnet,
+        )
+        .expect("testnet bech32 address should be valid");
+        assert!(script.is_witness_program());
+    }
 }

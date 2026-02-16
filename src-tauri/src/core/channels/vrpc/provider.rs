@@ -209,6 +209,17 @@ impl VrpcProvider {
         method == "fundrawtransaction" && message.contains("utxos provided")
     }
 
+    fn is_invalid_address_rpc(method: &str, error_obj: &Value) -> bool {
+        if Self::rpc_error_code(error_obj) == Some(-5) {
+            return true;
+        }
+
+        let message = Self::rpc_error_message(error_obj);
+        message.contains("invalid destination address")
+            || message.contains("invalid transparent address")
+            || (method == "sendcurrency" && message.contains("invalid destination"))
+    }
+
     fn format_network_error_details(err: &reqwest::Error) -> String {
         let mut out = err.to_string();
         let mut source = err.source();
@@ -299,6 +310,9 @@ impl VrpcProvider {
                 if Self::is_insufficient_funds_rpc(method, error_obj) {
                     return Err(WalletError::InsufficientFunds);
                 }
+                if Self::is_invalid_address_rpc(method, error_obj) {
+                    return Err(WalletError::InvalidAddress);
+                }
                 return Err(WalletError::OperationFailed);
             }
 
@@ -330,14 +344,28 @@ impl VrpcProvider {
             .json(&body)
             .send()
             .await
-            .map_err(|_| WalletError::NetworkError)?;
+            .map_err(|err| {
+                println!("[VRPC] {} network failure: {}", method, err);
+                WalletError::NetworkError
+            })?;
 
         if !res.status().is_success() {
+            let status = res.status();
+            let body = res.text().await.unwrap_or_default();
+            if body.trim().is_empty() {
+                println!("[VRPC] {} HTTP {}", method, status);
+            } else {
+                println!("[VRPC] {} HTTP {} body: {}", method, status, body);
+            }
             return Err(WalletError::OperationFailed);
         }
 
-        let json: Value = res.json().await.map_err(|_| WalletError::NetworkError)?;
+        let json: Value = res.json().await.map_err(|err| {
+            println!("[VRPC] {} response parse failure: {}", method, err);
+            WalletError::NetworkError
+        })?;
         if let Some(error_obj) = json.get("error").filter(|e| !e.is_null()) {
+            println!("[VRPC] {} RPC error response: {}", method, error_obj);
             let code = error_obj.get("code").and_then(|c| c.as_i64());
             if code == Some(-32601) {
                 return Err(WalletError::IdentityRpcUnsupported);
@@ -345,10 +373,16 @@ impl VrpcProvider {
             return Err(WalletError::IdentityBuildFailed);
         }
 
-        json.get("result")
-            .filter(|v| !v.is_null())
-            .cloned()
-            .ok_or(WalletError::IdentityBuildFailed)
+        match json.get("result").filter(|v| !v.is_null()) {
+            Some(result) => Ok(result.clone()),
+            None => {
+                println!(
+                    "[VRPC] {} RPC response missing non-null result payload: {}",
+                    method, json
+                );
+                Err(WalletError::IdentityBuildFailed)
+            }
+        }
     }
 
     async fn call_without_cache(&self, method: &str, params: Value) -> Result<Value, WalletError> {
@@ -365,31 +399,50 @@ impl VrpcProvider {
             .json(&body)
             .send()
             .await
-            .map_err(|_| WalletError::NetworkError)?;
+            .map_err(|err| {
+                println!("[VRPC] {} network failure: {}", method, err);
+                WalletError::NetworkError
+            })?;
 
         if !res.status().is_success() {
+            let status = res.status();
+            let body = res.text().await.unwrap_or_default();
+            if body.trim().is_empty() {
+                println!("[VRPC] {} HTTP {}", method, status);
+            } else {
+                println!("[VRPC] {} HTTP {} body: {}", method, status, body);
+            }
             return Err(WalletError::OperationFailed);
         }
 
-        let json: Value = res.json().await.map_err(|_| WalletError::NetworkError)?;
+        let json: Value = res.json().await.map_err(|err| {
+            println!("[VRPC] {} response parse failure: {}", method, err);
+            WalletError::NetworkError
+        })?;
         if let Some(error_obj) = json.get("error").filter(|e| !e.is_null()) {
-            let code = Self::rpc_error_code(error_obj);
-            if code == Some(-32601) {
+            println!("[VRPC] {} RPC error response: {}", method, error_obj);
+            if Self::rpc_error_code(error_obj) == Some(-32601) {
                 return Err(WalletError::UnsupportedChannel);
-            }
-            if code == Some(-5) {
-                return Err(WalletError::InvalidAddress);
             }
             if Self::is_insufficient_funds_rpc(method, error_obj) {
                 return Err(WalletError::InsufficientFunds);
             }
+            if Self::is_invalid_address_rpc(method, error_obj) {
+                return Err(WalletError::InvalidAddress);
+            }
             return Err(WalletError::OperationFailed);
         }
 
-        json.get("result")
-            .filter(|v| !v.is_null())
-            .cloned()
-            .ok_or(WalletError::OperationFailed)
+        match json.get("result").filter(|v| !v.is_null()) {
+            Some(result) => Ok(result.clone()),
+            None => {
+                println!(
+                    "[VRPC] {} RPC response missing non-null result payload: {}",
+                    method, json
+                );
+                Err(WalletError::OperationFailed)
+            }
+        }
     }
 
     async fn call_without_cache_with_bridge_mapping(
@@ -410,14 +463,28 @@ impl VrpcProvider {
             .json(&body)
             .send()
             .await
-            .map_err(|_| WalletError::NetworkError)?;
+            .map_err(|err| {
+                println!("[VRPC] {} network failure: {}", method, err);
+                WalletError::NetworkError
+            })?;
 
         if !res.status().is_success() {
+            let status = res.status();
+            let body = res.text().await.unwrap_or_default();
+            if body.trim().is_empty() {
+                println!("[VRPC] {} HTTP {}", method, status);
+            } else {
+                println!("[VRPC] {} HTTP {} body: {}", method, status, body);
+            }
             return Err(WalletError::OperationFailed);
         }
 
-        let json: Value = res.json().await.map_err(|_| WalletError::NetworkError)?;
+        let json: Value = res.json().await.map_err(|err| {
+            println!("[VRPC] {} response parse failure: {}", method, err);
+            WalletError::NetworkError
+        })?;
         if let Some(error_obj) = json.get("error").filter(|e| !e.is_null()) {
+            println!("[VRPC] {} RPC error response: {}", method, error_obj);
             let code = error_obj.get("code").and_then(|c| c.as_i64());
             if code == Some(-32601) {
                 return Err(WalletError::BridgeNotImplemented);
@@ -425,10 +492,16 @@ impl VrpcProvider {
             return Err(WalletError::OperationFailed);
         }
 
-        json.get("result")
-            .filter(|v| !v.is_null())
-            .cloned()
-            .ok_or(WalletError::OperationFailed)
+        match json.get("result").filter(|v| !v.is_null()) {
+            Some(result) => Ok(result.clone()),
+            None => {
+                println!(
+                    "[VRPC] {} RPC response missing non-null result payload: {}",
+                    method, json
+                );
+                Err(WalletError::OperationFailed)
+            }
+        }
     }
 
     async fn call(&self, method: &str, params: Value, ttl_secs: u64) -> Result<Value, WalletError> {

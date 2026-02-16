@@ -15,7 +15,6 @@ export const en: Record<string, string> = {
   'welcome.cta.start': 'Create new wallet',
   'welcome.cta.existing': 'Use an existing wallet',
 
-  'unlock.hero.tagline': 'Back in control of your digital life',
   'unlock.switch': 'Switch',
   'unlock.password': 'Password',
   'unlock.button.unlocking': 'Unlocking…',
@@ -323,6 +322,12 @@ export const en: Record<string, string> = {
   'wallet.transfer.noRoutes': 'No conversion routes available. You can still send the same asset.',
   'wallet.transfer.convertUnavailableEvm':
     'Convert is not available for this source yet. You can continue with send.',
+  'wallet.transfer.convertUnavailableFeatureDisabled':
+    'Convert is currently disabled for this route. Try again after bridge rollout is enabled.',
+  'wallet.transfer.convertUnavailableEthNotConfigured':
+    'Ethereum bridge support is not configured in this build.',
+  'wallet.transfer.convertUnavailableUnsupportedChannel':
+    'Convert is not available for this channel.',
   'wallet.transfer.routeDetails': 'Route details',
   'wallet.transfer.routeDetailsTitle': 'Selected route',
   'wallet.transfer.noRouteDetails': 'No route details available.',
@@ -398,6 +403,16 @@ export const en: Record<string, string> = {
   'wallet.transfer.pathPrice': 'Price: {value}',
   'wallet.transfer.error.bridgeNotImplemented':
     'This conversion route is not available on desktop yet.',
+  'wallet.transfer.error.bridgeRouteInvalid':
+    'This conversion route is invalid for the selected amount or destination.',
+  'wallet.transfer.error.bridgeUnsupportedDestinationCombination':
+    'This destination is not supported for the selected conversion route.',
+  'wallet.transfer.error.bridgeApprovalFailed':
+    'Token approval failed. Confirm approval and try again.',
+  'wallet.transfer.error.bridgeInsufficientEthFeeEnvelope':
+    'Insufficient ETH to cover bridge fees and gas for this transfer.',
+  'wallet.transfer.error.bridgeGasDriftExceeded':
+    'Network gas moved too far after preflight. Refresh review and try again.',
   'wallet.transfer.error.unsupportedChannel': 'This channel is not supported for transfer.',
   'wallet.transfer.error.invalidAddress': 'The destination address is invalid.',
   'wallet.transfer.error.insufficientFunds': 'Insufficient funds for this transfer.',

@@ -10,6 +10,8 @@ use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use crate::core::channels::store::{PreflightRecord, PreflightStore};
+use crate::core::channels::vrpc::identity::verus_tx::codec::decode_hex as decode_verus_tx;
+use crate::core::channels::vrpc::identity::verus_tx::model::txid_le_bytes_to_hex;
 use crate::core::channels::vrpc::preflight::{VrpcInputRef, VrpcPreflightPayload};
 use crate::core::channels::vrpc::provider::VrpcProvider;
 use crate::types::transaction::PreflightWarning;
@@ -147,7 +149,7 @@ fn parse_funding_utxos(raw: &Value) -> Vec<FundingUtxo> {
             let satoshis = parse_i64(entry.get("satoshis").or(entry.get("amount"))).unwrap_or(0);
             let script_pub_key = parse_string(entry.get("script").or(entry.get("scriptPubKey")))?;
             let is_spendable = parse_i64(entry.get("isspendable")).unwrap_or(1) != 0;
-            if !is_spendable || satoshis <= 0 {
+            if !is_spendable {
                 return None;
             }
             Some(FundingUtxo {
@@ -200,6 +202,14 @@ fn total_available_satoshis(utxos: &[FundingUtxo]) -> i64 {
     utxos
         .iter()
         .fold(0i64, |acc, utxo| acc.saturating_add(utxo.satoshis))
+}
+
+fn compact_address(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.len() <= 16 {
+        return trimmed.to_string();
+    }
+    format!("{}...{}", &trimmed[..8], &trimmed[trimmed.len() - 8..])
 }
 
 fn resolve_send_value_for_native_fee(
@@ -429,25 +439,73 @@ fn build_sendcurrency_output(
     Ok(Value::Object(out))
 }
 
+fn parse_funded_input_refs(funded_hex: &str) -> Result<Vec<(String, u32)>, WalletError> {
+    if let Ok(verus_tx) = decode_verus_tx(funded_hex) {
+        let refs = verus_tx
+            .inputs
+            .iter()
+            .map(|input| {
+                (
+                    txid_le_bytes_to_hex(&input.prevout_txid_le),
+                    input.prevout_vout,
+                )
+            })
+            .collect::<Vec<_>>();
+        if !refs.is_empty() {
+            return Ok(refs);
+        }
+    }
+
+    let raw = hex::decode(funded_hex.trim_start_matches("0x"))
+        .or_else(|_| hex::decode(funded_hex))
+        .map_err(|err| {
+            println!(
+                "[VRPC][preflight_transfer] failed to decode funded hex bytes for input extraction: {}",
+                err
+            );
+            WalletError::OperationFailed
+        })?;
+    let mut cursor = Cursor::new(&raw[..]);
+    let funded_tx: bitcoin::Transaction = bitcoin::Transaction::consensus_decode(&mut cursor)
+        .map_err(|err| {
+            println!(
+                "[VRPC][preflight_transfer] failed to decode funded transaction with bitcoin parser for input extraction: {}",
+                err
+            );
+            WalletError::OperationFailed
+        })?;
+    Ok(funded_tx
+        .input
+        .into_iter()
+        .map(|input| {
+            (
+                input.previous_output.txid.to_string(),
+                input.previous_output.vout,
+            )
+        })
+        .collect())
+}
+
 fn collect_payload_inputs(
     funded_hex: &str,
     available_utxos: &[FundingUtxo],
 ) -> Result<Vec<VrpcInputRef>, WalletError> {
-    let raw = hex::decode(funded_hex.trim_start_matches("0x"))
-        .or_else(|_| hex::decode(funded_hex))
-        .map_err(|_| WalletError::OperationFailed)?;
-    let mut cursor = Cursor::new(&raw[..]);
-    let funded_tx: bitcoin::Transaction = bitcoin::Transaction::consensus_decode(&mut cursor)
-        .map_err(|_| WalletError::OperationFailed)?;
+    let funded_inputs = parse_funded_input_refs(funded_hex)?;
 
     let mut payload_inputs = Vec::new();
-    for input in funded_tx.input {
-        let in_hash = input.previous_output.txid.to_string();
-        let in_vout = input.previous_output.vout;
+    for (in_hash, in_vout) in funded_inputs {
         let utxo = available_utxos
             .iter()
             .find(|u| u.txid == in_hash && u.vout == in_vout)
-            .ok_or(WalletError::OperationFailed)?;
+            .ok_or_else(|| {
+                println!(
+                    "[VRPC][preflight_transfer] funded input missing from candidate utxos: txid={} vout={} candidate_count={}",
+                    in_hash,
+                    in_vout,
+                    available_utxos.len()
+                );
+                WalletError::OperationFailed
+            })?;
         payload_inputs.push(VrpcInputRef {
             txid: utxo.txid.clone(),
             vout: utxo.vout,
@@ -535,33 +593,120 @@ pub async fn preflight_transfer(
     let send_amount = send_value_sat as f64 / SATOSHIS_PER_COIN as f64;
     let amount_adjusted = amount_was_adjusted.then(|| sat_to_decimal_string(send_value_sat));
 
+    println!(
+        "[VRPC][preflight_transfer] prepare sendcurrency: source={} destination={} channel={} submitted_sat={} available_sat={} send_value_sat={} amount_adjusted={} source_is_native={} conversion_or_export={} route={{convert_to:{:?}, export_to:{:?}, via:{:?}, map_to:{:?}}} fee={{parent_fee_coin:{:.8}, parent_fee_sat={}, transfer_fee_sat={}, native_required_fee_sat={}, effective_fee_currency_id={:?}}}",
+        compact_address(from_address),
+        compact_address(&normalized_destination),
+        channel_id,
+        submitted_sat,
+        available_sat,
+        send_value_sat,
+        amount_adjusted.as_deref().unwrap_or("none"),
+        source_is_native,
+        is_conversion_or_export,
+        params.convert_to.as_deref(),
+        params.export_to.as_deref(),
+        params.via.as_deref(),
+        params.map_to.as_deref(),
+        parent_fee_coin,
+        parent_fee_sat,
+        transfer_fee_sat,
+        native_required_fee_sat,
+        effective_fee_currency_id.as_deref()
+    );
+
     let mut output = build_sendcurrency_output(&params, &normalized_destination, send_amount)?;
-    if let Some(fee_currency) = effective_fee_currency_id {
+    if let Some(fee_currency) = effective_fee_currency_id.clone() {
         if let Some(output_obj) = output.as_object_mut() {
             output_obj.insert("feecurrency".to_string(), Value::String(fee_currency));
         }
     }
 
-    let sendcurrency_result = provider
+    let sendcurrency_result = match provider
         .sendcurrency(from_address, &[output], 1, parent_fee_coin, true)
-        .await?;
-    let unfunded_hex = parse_sendcurrency_hex(sendcurrency_result)?;
+        .await
+    {
+        Ok(result) => result,
+        Err(err) => {
+            println!(
+                "[VRPC][preflight_transfer] sendcurrency failed: {:?}; source={} destination={} channel={} submitted_sat={} send_value_sat={} route={{convert_to:{:?}, export_to:{:?}, via:{:?}, map_to:{:?}}}",
+                err,
+                compact_address(from_address),
+                compact_address(&normalized_destination),
+                channel_id,
+                submitted_sat,
+                send_value_sat,
+                params.convert_to.as_deref(),
+                params.export_to.as_deref(),
+                params.via.as_deref(),
+                params.map_to.as_deref()
+            );
+            return Err(err);
+        }
+    };
+    let unfunded_hex = match parse_sendcurrency_hex(sendcurrency_result.clone()) {
+        Ok(hex) => hex,
+        Err(err) => {
+            println!(
+                "[VRPC][preflight_transfer] sendcurrency result missing hextx/hex/txhex: {}",
+                sendcurrency_result
+            );
+            return Err(err);
+        }
+    };
 
     let funding_utxos: Vec<Value> = available_utxos
         .iter()
         .map(|utxo| serde_json::json!({"txid": utxo.txid, "voutnum": utxo.vout}))
         .collect();
-    let funded_raw = provider
+    let funded_raw = match provider
         .fundrawtransaction_with_options(
             &unfunded_hex,
             Some(&funding_utxos),
             Some(from_address),
             Some(parent_fee_coin),
         )
-        .await?;
-    let (funded_hex, fee_sat) = parse_fund_result(funded_raw, parent_fee_sat)?;
-    let payload_inputs = collect_payload_inputs(&funded_hex, &available_utxos)?;
+        .await
+    {
+        Ok(raw) => raw,
+        Err(err) => {
+            println!(
+                "[VRPC][preflight_transfer] fundrawtransaction failed: {:?}; source={} destination={} utxo_count={} available_sat={} parent_fee_coin={:.8}",
+                err,
+                compact_address(from_address),
+                compact_address(&normalized_destination),
+                available_utxos.len(),
+                available_sat,
+                parent_fee_coin
+            );
+            return Err(err);
+        }
+    };
+    let (funded_hex, fee_sat) = match parse_fund_result(funded_raw.clone(), parent_fee_sat) {
+        Ok(value) => value,
+        Err(err) => {
+            println!(
+                "[VRPC][preflight_transfer] fundrawtransaction result missing expected fields (hex/fee): {}",
+                funded_raw
+            );
+            return Err(err);
+        }
+    };
+    let payload_inputs = match collect_payload_inputs(&funded_hex, &available_utxos) {
+        Ok(inputs) => inputs,
+        Err(err) => {
+            println!(
+                "[VRPC][preflight_transfer] collect_payload_inputs failed: {:?}; funded_hex_len={} available_utxo_count={} available_sat={}",
+                err,
+                funded_hex.len(),
+                available_utxos.len(),
+                available_sat
+            );
+            return Err(err);
+        }
+    };
     if payload_inputs.is_empty() {
+        println!("[VRPC][preflight_transfer] funded transaction produced zero payload inputs");
         return Err(WalletError::OperationFailed);
     }
 

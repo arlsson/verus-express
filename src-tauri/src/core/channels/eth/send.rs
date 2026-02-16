@@ -5,6 +5,7 @@ use ethers::contract::Contract;
 use ethers::middleware::SignerMiddleware;
 use ethers::providers::Middleware;
 use ethers::signers::{LocalWallet, Signer};
+use ethers::types::Bytes;
 use ethers::types::{Address, Eip1559TransactionRequest, U256};
 use tokio::sync::Mutex;
 
@@ -25,6 +26,62 @@ const ERC20_TRANSFER_ABI: &str = r#"[
     ],
     "name": "transfer",
     "outputs": [{"name": "", "type": "bool"}],
+    "type": "function"
+  }
+]"#;
+
+const ERC20_APPROVE_ABI: &str = r#"[
+  {
+    "constant": false,
+    "inputs": [
+      {"name": "_spender", "type": "address"},
+      {"name": "_value", "type": "uint256"}
+    ],
+    "name": "approve",
+    "outputs": [{"name": "", "type": "bool"}],
+    "type": "function"
+  }
+]"#;
+
+const SEND_TRANSFER_ABI: &str = r#"[
+  {
+    "inputs": [
+      {
+        "components": [
+          {"internalType": "uint32", "name": "version", "type": "uint32"},
+          {
+            "components": [
+              {"internalType": "address", "name": "currency", "type": "address"},
+              {"internalType": "uint64", "name": "amount", "type": "uint64"}
+            ],
+            "internalType": "struct VerusObjects.CCurrencyValueMap",
+            "name": "currencyvalue",
+            "type": "tuple"
+          },
+          {"internalType": "uint32", "name": "flags", "type": "uint32"},
+          {"internalType": "address", "name": "feecurrencyid", "type": "address"},
+          {"internalType": "uint64", "name": "fees", "type": "uint64"},
+          {
+            "components": [
+              {"internalType": "uint8", "name": "destinationtype", "type": "uint8"},
+              {"internalType": "bytes", "name": "destinationaddress", "type": "bytes"}
+            ],
+            "internalType": "struct VerusObjectsCommon.CTransferDestination",
+            "name": "destination",
+            "type": "tuple"
+          },
+          {"internalType": "address", "name": "destcurrencyid", "type": "address"},
+          {"internalType": "address", "name": "destsystemid", "type": "address"},
+          {"internalType": "address", "name": "secondreserveid", "type": "address"}
+        ],
+        "internalType": "struct VerusObjects.CReserveTransfer",
+        "name": "_transfer",
+        "type": "tuple"
+      }
+    ],
+    "name": "sendTransfer",
+    "outputs": [],
+    "stateMutability": "payable",
     "type": "function"
   }
 ]"#;
@@ -181,11 +238,195 @@ pub async fn send(
                 from_address,
             })
         }
+        EthPreflightPayload::Bridge {
+            from_address,
+            to_address,
+            source_contract,
+            source_amount_token_raw,
+            reserve_transfer_version,
+            reserve_transfer_currency,
+            reserve_transfer_amount,
+            reserve_transfer_flags,
+            reserve_transfer_fee_currency_id,
+            reserve_transfer_fees,
+            reserve_transfer_destination_type,
+            reserve_transfer_destination_address,
+            reserve_transfer_dest_currency_id,
+            reserve_transfer_dest_system_id,
+            reserve_transfer_second_reserve_id,
+            bridge_contract,
+            transfer_value_wei,
+            gas_limit,
+            transfer_gas_limit,
+            approval_gas_limit,
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+            max_fee_cap,
+            approval_zero_out,
+            fee,
+            value,
+            ..
+        } => {
+            let parsed_from: Address = from_address
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
+            let source_contract: Address = source_contract
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
+            let bridge_contract: Address = bridge_contract
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
+            let reserve_currency: Address = reserve_transfer_currency
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
+            let reserve_fee_currency: Address = reserve_transfer_fee_currency_id
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
+            let reserve_dest_currency: Address = reserve_transfer_dest_currency_id
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
+            let reserve_dest_system: Address = reserve_transfer_dest_system_id
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
+            let reserve_second_reserve: Address = reserve_transfer_second_reserve_id
+                .parse()
+                .map_err(|_| WalletError::InvalidAddress)?;
+
+            let reserve_amount = parse_u64(&reserve_transfer_amount)?;
+            let reserve_destination_address =
+                parse_hex_bytes(&reserve_transfer_destination_address)?;
+            let transfer_value_wei = parse_u256(&transfer_value_wei)?;
+            let gas_limit = parse_u256(&gas_limit)?;
+            let transfer_gas_limit = parse_u256(&transfer_gas_limit)?;
+            let approval_gas_limit = parse_u256(&approval_gas_limit)?;
+            let max_fee_per_gas = parse_u256(&max_fee_per_gas)?;
+            let max_priority_fee_per_gas = parse_u256(&max_priority_fee_per_gas)?;
+            let max_fee_cap = parse_u256(&max_fee_cap)?;
+
+            let fee_data = network_provider
+                .rpc_provider
+                .estimate_eip1559_fees(None)
+                .await
+                .map_err(|_| WalletError::NetworkError)?;
+            let current_max_fee = fee_data.0;
+            if fee_drift_exceeds_cap(gas_limit, current_max_fee, max_fee_cap) {
+                return Err(WalletError::BridgeGasDriftExceeded);
+            }
+
+            if source_contract != Address::zero() {
+                let approval_amount_raw = source_amount_token_raw
+                    .as_deref()
+                    .ok_or(WalletError::InvalidPreflight)
+                    .and_then(parse_u256)?;
+
+                let abi: Abi = serde_json::from_str(ERC20_APPROVE_ABI)
+                    .map_err(|_| WalletError::OperationFailed)?;
+                let token_contract = Contract::new(source_contract, abi, signer.clone());
+
+                let approval_gas_price = max_fee_per_gas.max(max_priority_fee_per_gas);
+
+                if approval_zero_out {
+                    let zero_call = token_contract
+                        .method::<_, bool>("approve", (bridge_contract, U256::zero()))
+                        .map_err(|_| WalletError::OperationFailed)?;
+                    let zero_call = zero_call
+                        .from(parsed_from)
+                        .gas(approval_gas_limit)
+                        .gas_price(approval_gas_price);
+                    let zero_pending = zero_call
+                        .send()
+                        .await
+                        .map_err(|_| WalletError::NetworkError)?;
+                    let zero_receipt = zero_pending.await.map_err(|_| WalletError::NetworkError)?;
+                    let zero_ok = zero_receipt
+                        .and_then(|receipt| receipt.status)
+                        .map(|status| status.as_u64() == 1)
+                        .unwrap_or(false);
+                    if !zero_ok {
+                        return Err(WalletError::BridgeApprovalFailed);
+                    }
+                }
+
+                let approval_call = token_contract
+                    .method::<_, bool>("approve", (bridge_contract, approval_amount_raw))
+                    .map_err(|_| WalletError::OperationFailed)?;
+                let approval_call = approval_call
+                    .from(parsed_from)
+                    .gas(approval_gas_limit)
+                    .gas_price(approval_gas_price);
+                let approval_pending = approval_call
+                    .send()
+                    .await
+                    .map_err(|_| WalletError::NetworkError)?;
+                let approval_receipt = approval_pending
+                    .await
+                    .map_err(|_| WalletError::NetworkError)?;
+                let approval_ok = approval_receipt
+                    .and_then(|receipt| receipt.status)
+                    .map(|status| status.as_u64() == 1)
+                    .unwrap_or(false);
+                if !approval_ok {
+                    return Err(WalletError::BridgeApprovalFailed);
+                }
+            }
+
+            let reserve_transfer = (
+                reserve_transfer_version,
+                (reserve_currency, reserve_amount),
+                reserve_transfer_flags,
+                reserve_fee_currency,
+                reserve_transfer_fees,
+                (
+                    reserve_transfer_destination_type,
+                    reserve_destination_address,
+                ),
+                reserve_dest_currency,
+                reserve_dest_system,
+                reserve_second_reserve,
+            );
+
+            let send_transfer_abi: Abi = serde_json::from_str(SEND_TRANSFER_ABI)
+                .map_err(|_| WalletError::OperationFailed)?;
+            let delegator = Contract::new(bridge_contract, send_transfer_abi, signer.clone());
+            let send_transfer_call = delegator
+                .method::<_, ()>("sendTransfer", reserve_transfer)
+                .map_err(|_| WalletError::OperationFailed)?;
+            let send_transfer_call = send_transfer_call
+                .from(parsed_from)
+                .gas(transfer_gas_limit)
+                .gas_price(max_fee_per_gas.max(max_priority_fee_per_gas))
+                .value(transfer_value_wei);
+            let pending = send_transfer_call
+                .send()
+                .await
+                .map_err(|_| WalletError::NetworkError)?;
+
+            Ok(SendResult {
+                txid: format!("{:#x}", pending.tx_hash()),
+                fee,
+                value,
+                to_address,
+                from_address,
+            })
+        }
     }
 }
 
 fn parse_u256(input: &str) -> Result<U256, WalletError> {
     U256::from_dec_str(input.trim()).map_err(|_| WalletError::OperationFailed)
+}
+
+fn parse_u64(input: &str) -> Result<u64, WalletError> {
+    input
+        .trim()
+        .parse::<u64>()
+        .map_err(|_| WalletError::OperationFailed)
+}
+
+fn parse_hex_bytes(input: &str) -> Result<Bytes, WalletError> {
+    let trimmed = input.trim().trim_start_matches("0x");
+    let raw = hex::decode(trimmed).map_err(|_| WalletError::OperationFailed)?;
+    Ok(Bytes::from(raw))
 }
 
 fn fee_drift_exceeds_cap(

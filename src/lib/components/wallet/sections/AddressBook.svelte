@@ -48,7 +48,8 @@
   const ETH_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
   const VRPC_HANDLE_PATTERN = /^[A-Za-z0-9._-]+@$/;
   const VRPC_ADDRESS_PATTERN = /^[Ri][1-9A-HJ-NP-Za-km-z]{24,60}$/;
-  const BTC_ADDRESS_PATTERN = /^[1mn][1-9A-HJ-NP-Za-km-z]{24,60}$/;
+  const BTC_BECH32_ADDRESS_PATTERN = /^(bc1|tb1)[ac-hj-np-z02-9]{11,71}$/i;
+  const BTC_BASE58_ADDRESS_PATTERN = /^[13mn2][a-km-zA-HJ-NP-Z1-9]{25,39}$/;
 
   const filteredContacts = $derived(
     (() => {
@@ -93,13 +94,18 @@
     if (!trimmed) return null;
     if (ETH_ADDRESS_PATTERN.test(trimmed)) return 'eth';
     if (VRPC_HANDLE_PATTERN.test(trimmed) || VRPC_ADDRESS_PATTERN.test(trimmed)) return 'vrpc';
-    if (BTC_ADDRESS_PATTERN.test(trimmed)) return 'btc';
+    if (BTC_BECH32_ADDRESS_PATTERN.test(trimmed) || BTC_BASE58_ADDRESS_PATTERN.test(trimmed)) return 'btc';
     return null;
   }
 
   function buildEndpointLabel(index: number): string {
     const baseLabel = i18n.t('wallet.addressBook.endpointDefaultLabel');
     return index === 0 ? baseLabel : `${baseLabel} ${index + 1}`;
+  }
+
+  function endpointBadgeLabel(kind: AddressEndpointKind): string {
+    if (kind === 'vrpc') return 'VERUS';
+    return kind.toUpperCase();
   }
 
   async function resolveEndpointKind(address: string, initialKind: AddressEndpointKind | null): Promise<AddressEndpointKind | null> {
@@ -485,6 +491,11 @@
             {#each selectedContact.endpoints as endpoint}
               <div class="bg-muted/35 rounded-md p-3">
                 <div class="flex min-h-8 items-center gap-2">
+                  <span
+                    class="bg-background/60 text-muted-foreground inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide dark:bg-background/45"
+                  >
+                    {endpointBadgeLabel(endpoint.kind)}
+                  </span>
                   <p class="min-w-0 flex-1 break-all text-sm leading-6">{endpoint.address}</p>
                   <button
                     type="button"

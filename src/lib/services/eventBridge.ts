@@ -10,6 +10,7 @@ import { balanceStore } from '$lib/stores/balances.js';
 import { transactionStore } from '$lib/stores/transactions.js';
 import { networkStore } from '$lib/stores/network.js';
 import { ratesStore } from '$lib/stores/rates.js';
+import { walletBootstrapStore } from '$lib/stores/walletBootstrap.js';
 import { walletChannelsStore } from '$lib/stores/walletChannels.js';
 import { pushWalletError } from '$lib/stores/walletErrors.js';
 import type { BalanceResult, ChainInfo, Transaction } from '$lib/types/wallet.js';
@@ -19,6 +20,7 @@ const BALANCES_UPDATED = 'wallet://balances-updated';
 const TRANSACTIONS_UPDATED = 'wallet://transactions-updated';
 const INFO_UPDATED = 'wallet://info-updated';
 const RATES_UPDATED = 'wallet://rates-updated';
+const BOOTSTRAP_UPDATED = 'wallet://bootstrap-updated';
 const ERROR = 'wallet://error';
 const DEFAULT_COIN_KEY = '__default__';
 
@@ -51,6 +53,10 @@ interface RatesUpdatedPayload {
   coinId?: string;
   rates?: Record<string, number>;
   usdChange24hPct?: number | null;
+}
+
+interface BootstrapUpdatedPayload {
+  inProgress?: boolean;
 }
 
 interface UpdateErrorPayload {
@@ -152,6 +158,12 @@ export async function setupWalletEventBridge(): Promise<() => void> {
     }));
   });
   unsubs.push(() => unRates());
+
+  const unBootstrap = await listen<BootstrapUpdatedPayload>(BOOTSTRAP_UPDATED, (event) => {
+    const inProgress = event.payload?.inProgress;
+    walletBootstrapStore.set(typeof inProgress === 'boolean' ? inProgress : false);
+  });
+  unsubs.push(() => unBootstrap());
 
   const unError = await listen<UpdateErrorPayload>(ERROR, (event) => {
     const p = event.payload;

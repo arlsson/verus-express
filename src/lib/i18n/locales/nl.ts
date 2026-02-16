@@ -15,7 +15,6 @@ export const nl: Record<string, string> = {
   'welcome.cta.start': 'Nieuwe wallet maken',
   'welcome.cta.existing': 'Bestaande wallet gebruiken',
 
-  'unlock.hero.tagline': 'Weer in controle over je digitale leven',
   'unlock.switch': 'Wisselen',
   'unlock.password': 'Wachtwoord',
   'unlock.button.unlocking': 'Ontgrendelen…',
@@ -329,6 +328,12 @@ export const nl: Record<string, string> = {
     'Geen omwisselroutes beschikbaar. Je kunt wel dezelfde asset versturen.',
   'wallet.transfer.convertUnavailableEvm':
     'Omwisselen is nog niet beschikbaar voor deze bron. Je kunt doorgaan met versturen.',
+  'wallet.transfer.convertUnavailableFeatureDisabled':
+    'Omwisselen is nu uitgeschakeld voor deze route. Probeer het opnieuw als de bridge-rollout is ingeschakeld.',
+  'wallet.transfer.convertUnavailableEthNotConfigured':
+    'Ethereum bridge-ondersteuning is niet geconfigureerd in deze build.',
+  'wallet.transfer.convertUnavailableUnsupportedChannel':
+    'Omwisselen is niet beschikbaar voor dit kanaal.',
   'wallet.transfer.routeDetails': 'Routedetails',
   'wallet.transfer.routeDetailsTitle': 'Geselecteerde route',
   'wallet.transfer.noRouteDetails': 'Geen routedetails beschikbaar.',
@@ -411,6 +416,16 @@ export const nl: Record<string, string> = {
   'wallet.transfer.pathPrice': 'Prijs: {value}',
   'wallet.transfer.error.bridgeNotImplemented':
     'Deze omwisselroute is nog niet beschikbaar op desktop.',
+  'wallet.transfer.error.bridgeRouteInvalid':
+    'Deze omwisselroute is ongeldig voor het geselecteerde bedrag of bestemmingsadres.',
+  'wallet.transfer.error.bridgeUnsupportedDestinationCombination':
+    'Dit bestemmingsadres wordt niet ondersteund voor de geselecteerde omwisselroute.',
+  'wallet.transfer.error.bridgeApprovalFailed':
+    'Token-goedkeuring mislukt. Bevestig de goedkeuring en probeer opnieuw.',
+  'wallet.transfer.error.bridgeInsufficientEthFeeEnvelope':
+    'Onvoldoende ETH om bridge-kosten en gas voor deze transfer te betalen.',
+  'wallet.transfer.error.bridgeGasDriftExceeded':
+    'Netwerkgas is te veel veranderd na preflight. Vernieuw de review en probeer opnieuw.',
   'wallet.transfer.error.unsupportedChannel': 'Dit kanaal wordt niet ondersteund voor transfers.',
   'wallet.transfer.error.invalidAddress': 'Het bestemmingsadres is ongeldig.',
   'wallet.transfer.error.insufficientFunds': 'Onvoldoende saldo voor deze transfer.',

@@ -6,6 +6,11 @@ use std::collections::{HashMap, HashSet};
 
 use serde_json::Value;
 
+use super::token_mapping::{
+    get_currencies_mapped_to_eth, normalize_eth_address, CurrencyDefinitionRef, EthTokenMappings,
+    ETH_ZERO_ADDRESS,
+};
+use crate::core::channels::eth::provider::EthNetworkProvider;
 use crate::core::channels::vrpc::VrpcProvider;
 use crate::types::bridge::{
     BridgeConversionEstimateRequest, BridgeConversionEstimateResult, BridgeConversionPathQuote,
@@ -103,10 +108,15 @@ struct RouteBuildDebugStats {
 pub async fn get_conversion_paths(
     request: &BridgeConversionPathRequest,
     vrpc_provider: &VrpcProvider,
+    eth_provider: Option<&EthNetworkProvider>,
 ) -> Result<BridgeConversionPathsResult, WalletError> {
     let source_currency = request.source_currency.trim();
     if source_currency.is_empty() {
         return Err(WalletError::OperationFailed);
+    }
+
+    if normalize_eth_address(source_currency).is_some() {
+        return get_conversion_paths_from_evm_source(request, vrpc_provider, eth_provider).await;
     }
 
     let source_definition = vrpc_provider.getcurrency(source_currency).await?;
@@ -181,6 +191,15 @@ pub async fn get_conversion_paths(
         }
     }
 
+    append_eth_mappings_for_vrpc_source(
+        &mut normalized_paths,
+        &source_definition,
+        request,
+        vrpc_provider,
+        eth_provider,
+    )
+    .await?;
+
     Ok(BridgeConversionPathsResult {
         source_currency: request.source_currency.clone(),
         paths: normalized_paths,
@@ -190,6 +209,7 @@ pub async fn get_conversion_paths(
 pub async fn estimate_conversion(
     request: &BridgeConversionEstimateRequest,
     vrpc_provider: &VrpcProvider,
+    eth_provider: Option<&EthNetworkProvider>,
 ) -> Result<BridgeConversionEstimateResult, WalletError> {
     let source_currency = request.source_currency.trim();
     let convert_to = request.convert_to.trim();
@@ -206,7 +226,11 @@ pub async fn estimate_conversion(
         return Err(WalletError::OperationFailed);
     }
 
-    let raw_estimate = vrpc_provider
+    if normalize_eth_address(source_currency).is_some() {
+        return estimate_conversion_from_paths(request, vrpc_provider, eth_provider).await;
+    }
+
+    let raw_estimate = match vrpc_provider
         .estimateconversion(
             source_currency,
             convert_to,
@@ -214,7 +238,14 @@ pub async fn estimate_conversion(
             request.via.as_deref(),
             request.preconvert,
         )
-        .await?;
+        .await
+    {
+        Ok(value) => value,
+        Err(WalletError::BridgeNotImplemented) => {
+            return estimate_conversion_from_paths(request, vrpc_provider, eth_provider).await;
+        }
+        Err(err) => return Err(err),
+    };
 
     let estimated_currency_out = raw_estimate
         .get("estimatedcurrencyout")
@@ -225,6 +256,602 @@ pub async fn estimate_conversion(
         estimated_currency_out,
         price,
     })
+}
+
+async fn estimate_conversion_from_paths(
+    request: &BridgeConversionEstimateRequest,
+    vrpc_provider: &VrpcProvider,
+    eth_provider: Option<&EthNetworkProvider>,
+) -> Result<BridgeConversionEstimateResult, WalletError> {
+    let amount = request
+        .amount
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| WalletError::OperationFailed)?;
+    if !amount.is_finite() || amount <= 0.0 {
+        return Err(WalletError::OperationFailed);
+    }
+
+    let paths = get_conversion_paths(
+        &BridgeConversionPathRequest {
+            coin_id: request.coin_id.clone(),
+            channel_id: request.channel_id.clone(),
+            source_currency: request.source_currency.clone(),
+            destination_currency: None,
+        },
+        vrpc_provider,
+        eth_provider,
+    )
+    .await?;
+
+    let requested_convert_to = request.convert_to.trim();
+    let requested_via = request
+        .via
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    let mut selected_quote: Option<&BridgeConversionPathQuote> = None;
+    for quotes in paths.paths.values() {
+        for quote in quotes {
+            let quote_convert_to = quote
+                .convert_to
+                .as_deref()
+                .unwrap_or(quote.destination_id.as_str());
+            if !equals_ignore_case(quote_convert_to, requested_convert_to) {
+                continue;
+            }
+
+            let quote_via = quote
+                .via
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            let via_matches = match (requested_via, quote_via) {
+                (None, None) => true,
+                (Some(left), Some(right)) => equals_ignore_case(left, right),
+                (None, Some(_)) | (Some(_), None) => false,
+            };
+            if !via_matches {
+                continue;
+            }
+
+            selected_quote = Some(quote);
+            break;
+        }
+        if selected_quote.is_some() {
+            break;
+        }
+    }
+
+    let Some(quote) = selected_quote else {
+        return Err(WalletError::BridgeRouteInvalid);
+    };
+    let Some(price_string) = quote.price.as_deref() else {
+        return Err(WalletError::BridgeRouteInvalid);
+    };
+    let price_number = price_string
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| WalletError::BridgeRouteInvalid)?;
+    if !price_number.is_finite() || price_number <= 0.0 {
+        return Err(WalletError::BridgeRouteInvalid);
+    }
+
+    Ok(BridgeConversionEstimateResult {
+        estimated_currency_out: Some(format_decimal(amount * price_number)),
+        price: Some(format_decimal(price_number)),
+    })
+}
+
+async fn get_conversion_paths_from_evm_source(
+    request: &BridgeConversionPathRequest,
+    vrpc_provider: &VrpcProvider,
+    eth_provider: Option<&EthNetworkProvider>,
+) -> Result<BridgeConversionPathsResult, WalletError> {
+    let source_contract = normalize_eth_address(request.source_currency.trim())
+        .ok_or(WalletError::OperationFailed)?;
+    let system_id = resolve_system_id_for_request(request, vrpc_provider).await?;
+    let system_definition = vrpc_provider.getcurrency(&system_id).await?;
+    let system_currency_id = extract_currency_id(&system_definition).unwrap_or(system_id.clone());
+    let system_display_name = extract_currency_display_name(&system_definition)
+        .or_else(|| extract_currency_id(&system_definition))
+        .unwrap_or(system_currency_id.clone());
+
+    let bridge_definition = match vrpc_provider.getcurrency("Bridge.vETH").await {
+        Ok(value) => value,
+        Err(_) => vrpc_provider.getcurrency("vETH").await?,
+    };
+    let bridge_currency_id =
+        extract_currency_id(&bridge_definition).ok_or(WalletError::OperationFailed)?;
+    let bridge_display_name = extract_currency_display_name(&bridge_definition)
+        .or_else(|| extract_currency_id(&bridge_definition))
+        .unwrap_or(bridge_currency_id.clone());
+    let bridge_display_ticker = bridge_definition
+        .get("symbol")
+        .and_then(extract_stringish)
+        .or_else(|| bridge_definition.get("name").and_then(extract_stringish))
+        .or_else(|| Some(bridge_display_name.clone()));
+
+    let convertable_currency_ids = bridge_definition
+        .get("currencies")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(extract_currency_ref)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let mappings = get_currencies_mapped_to_eth(vrpc_provider, eth_provider).await?;
+    let source_mapped = mappings
+        .contract_to_currencies
+        .get(&source_contract)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut paths = HashMap::<String, Vec<BridgeConversionPathQuote>>::new();
+    let is_eth_source = source_contract.eq_ignore_ascii_case(ETH_ZERO_ADDRESS);
+
+    for source_currency in &source_mapped {
+        let source_currency_id = source_currency.currency_id.clone();
+        let source_is_bridge = equals_ignore_case(&source_currency_id, &bridge_currency_id);
+        let is_convertable_source = convertable_currency_ids
+            .iter()
+            .any(|candidate| equals_ignore_case(candidate, &source_currency_id));
+
+        if is_eth_source || is_convertable_source || source_is_bridge {
+            if !source_is_bridge {
+                if let Some(bridge_price) =
+                    extract_bridge_best_price(&bridge_definition, &source_currency_id)
+                {
+                    let price = 1.0 / bridge_price;
+                    add_path_quote(
+                        &mut paths,
+                        &bridge_currency_id,
+                        BridgeConversionPathQuote {
+                            destination_id: bridge_currency_id.clone(),
+                            destination_display_name: Some(bridge_display_name.clone()),
+                            destination_display_ticker: bridge_display_ticker.clone(),
+                            convert_to: Some(bridge_currency_id.clone()),
+                            convert_to_display_name: Some(bridge_display_name.clone()),
+                            export_to: Some(system_currency_id.clone()),
+                            export_to_display_name: Some(system_display_name.clone()),
+                            via: None,
+                            via_display_name: None,
+                            map_to: None,
+                            price: Some(format_decimal(price)),
+                            via_price_in_root: None,
+                            dest_price_in_via: None,
+                            gateway: true,
+                            mapping: false,
+                            bounceback: false,
+                            eth_destination: false,
+                            prelaunch: false,
+                        },
+                    );
+                }
+            }
+
+            for convertable_currency_id in &convertable_currency_ids {
+                let Some(convertable_currency) =
+                    resolve_currency_ref_by_id(vrpc_provider, &mappings, convertable_currency_id)
+                        .await
+                else {
+                    continue;
+                };
+
+                let mapped_contracts = mappings
+                    .currency_to_contracts
+                    .get(&convertable_currency_id.to_ascii_lowercase())
+                    .cloned()
+                    .unwrap_or_default();
+
+                if source_is_bridge {
+                    let Some(dest_price_in_via) =
+                        extract_bridge_best_price(&bridge_definition, convertable_currency_id)
+                    else {
+                        continue;
+                    };
+
+                    add_path_quote(
+                        &mut paths,
+                        convertable_currency_id,
+                        BridgeConversionPathQuote {
+                            destination_id: convertable_currency.currency_id.clone(),
+                            destination_display_name: convertable_currency
+                                .fully_qualified_name
+                                .clone()
+                                .or_else(|| convertable_currency.name.clone()),
+                            destination_display_ticker: convertable_currency
+                                .symbol
+                                .clone()
+                                .or_else(|| convertable_currency.name.clone()),
+                            convert_to: Some(convertable_currency.currency_id.clone()),
+                            convert_to_display_name: convertable_currency
+                                .fully_qualified_name
+                                .clone()
+                                .or_else(|| convertable_currency.name.clone())
+                                .or_else(|| Some(convertable_currency.currency_id.clone())),
+                            export_to: Some(system_currency_id.clone()),
+                            export_to_display_name: Some(system_display_name.clone()),
+                            via: None,
+                            via_display_name: None,
+                            map_to: None,
+                            price: Some(format_decimal(dest_price_in_via)),
+                            via_price_in_root: None,
+                            dest_price_in_via: None,
+                            gateway: true,
+                            mapping: false,
+                            bounceback: false,
+                            eth_destination: false,
+                            prelaunch: false,
+                        },
+                    );
+
+                    for contract_address in mapped_contracts {
+                        let (destination_name, destination_ticker) =
+                            contract_display(&contract_address, &mappings);
+                        add_path_quote(
+                            &mut paths,
+                            &contract_address,
+                            BridgeConversionPathQuote {
+                                destination_id: contract_address.clone(),
+                                destination_display_name: destination_name.clone(),
+                                destination_display_ticker: destination_ticker.clone(),
+                                convert_to: Some(convertable_currency.currency_id.clone()),
+                                convert_to_display_name: convertable_currency
+                                    .fully_qualified_name
+                                    .clone()
+                                    .or_else(|| convertable_currency.name.clone())
+                                    .or_else(|| Some(convertable_currency.currency_id.clone())),
+                                export_to: None,
+                                export_to_display_name: None,
+                                via: Some(convertable_currency.currency_id.clone()),
+                                via_display_name: convertable_currency
+                                    .fully_qualified_name
+                                    .clone()
+                                    .or_else(|| convertable_currency.name.clone()),
+                                map_to: Some(convertable_currency.currency_id.clone()),
+                                price: Some(format_decimal(dest_price_in_via)),
+                                via_price_in_root: None,
+                                dest_price_in_via: None,
+                                gateway: true,
+                                mapping: false,
+                                bounceback: true,
+                                eth_destination: true,
+                                prelaunch: false,
+                            },
+                        );
+                    }
+                } else if !equals_ignore_case(convertable_currency_id, &source_currency_id) {
+                    let Some(root_price) =
+                        extract_bridge_best_price(&bridge_definition, &source_currency_id)
+                    else {
+                        continue;
+                    };
+                    let Some(dest_price_in_via) =
+                        extract_bridge_best_price(&bridge_definition, convertable_currency_id)
+                    else {
+                        continue;
+                    };
+
+                    let via_price_in_root = 1.0 / root_price;
+                    let price = via_price_in_root * dest_price_in_via;
+
+                    add_path_quote(
+                        &mut paths,
+                        convertable_currency_id,
+                        BridgeConversionPathQuote {
+                            destination_id: convertable_currency.currency_id.clone(),
+                            destination_display_name: convertable_currency
+                                .fully_qualified_name
+                                .clone()
+                                .or_else(|| convertable_currency.name.clone()),
+                            destination_display_ticker: convertable_currency
+                                .symbol
+                                .clone()
+                                .or_else(|| convertable_currency.name.clone()),
+                            convert_to: Some(convertable_currency.currency_id.clone()),
+                            convert_to_display_name: convertable_currency
+                                .fully_qualified_name
+                                .clone()
+                                .or_else(|| convertable_currency.name.clone())
+                                .or_else(|| Some(convertable_currency.currency_id.clone())),
+                            export_to: Some(system_currency_id.clone()),
+                            export_to_display_name: Some(system_display_name.clone()),
+                            via: Some(bridge_currency_id.clone()),
+                            via_display_name: Some(bridge_display_name.clone()),
+                            map_to: None,
+                            price: Some(format_decimal(price)),
+                            via_price_in_root: Some(format_decimal(via_price_in_root)),
+                            dest_price_in_via: Some(format_decimal(dest_price_in_via)),
+                            gateway: true,
+                            mapping: false,
+                            bounceback: false,
+                            eth_destination: false,
+                            prelaunch: false,
+                        },
+                    );
+
+                    for contract_address in mapped_contracts {
+                        let (destination_name, destination_ticker) =
+                            contract_display(&contract_address, &mappings);
+                        add_path_quote(
+                            &mut paths,
+                            &contract_address,
+                            BridgeConversionPathQuote {
+                                destination_id: contract_address.clone(),
+                                destination_display_name: destination_name.clone(),
+                                destination_display_ticker: destination_ticker.clone(),
+                                convert_to: Some(convertable_currency.currency_id.clone()),
+                                convert_to_display_name: convertable_currency
+                                    .fully_qualified_name
+                                    .clone()
+                                    .or_else(|| convertable_currency.name.clone())
+                                    .or_else(|| Some(convertable_currency.currency_id.clone())),
+                                export_to: None,
+                                export_to_display_name: None,
+                                via: Some(bridge_currency_id.clone()),
+                                via_display_name: Some(bridge_display_name.clone()),
+                                map_to: Some(convertable_currency.currency_id.clone()),
+                                price: Some(format_decimal(price)),
+                                via_price_in_root: Some(format_decimal(via_price_in_root)),
+                                dest_price_in_via: Some(format_decimal(dest_price_in_via)),
+                                gateway: true,
+                                mapping: false,
+                                bounceback: true,
+                                eth_destination: true,
+                                prelaunch: false,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        add_path_quote(
+            &mut paths,
+            &source_currency_id,
+            BridgeConversionPathQuote {
+                destination_id: source_currency_id.clone(),
+                destination_display_name: source_currency
+                    .fully_qualified_name
+                    .clone()
+                    .or_else(|| source_currency.name.clone()),
+                destination_display_ticker: source_currency
+                    .symbol
+                    .clone()
+                    .or_else(|| source_currency.name.clone()),
+                convert_to: Some(source_currency_id.clone()),
+                convert_to_display_name: source_currency
+                    .fully_qualified_name
+                    .clone()
+                    .or_else(|| source_currency.name.clone())
+                    .or_else(|| Some(source_currency_id.clone())),
+                export_to: Some(system_currency_id.clone()),
+                export_to_display_name: Some(system_display_name.clone()),
+                via: None,
+                via_display_name: None,
+                map_to: None,
+                price: Some("1".to_string()),
+                via_price_in_root: None,
+                dest_price_in_via: None,
+                gateway: true,
+                mapping: true,
+                bounceback: false,
+                eth_destination: false,
+                prelaunch: false,
+            },
+        );
+    }
+
+    Ok(BridgeConversionPathsResult {
+        source_currency: request.source_currency.clone(),
+        paths,
+    })
+}
+
+async fn append_eth_mappings_for_vrpc_source(
+    paths: &mut HashMap<String, Vec<BridgeConversionPathQuote>>,
+    source_definition: &Value,
+    request: &BridgeConversionPathRequest,
+    vrpc_provider: &VrpcProvider,
+    eth_provider: Option<&EthNetworkProvider>,
+) -> Result<(), WalletError> {
+    let Some(source_currency_id) = extract_currency_id(source_definition) else {
+        return Ok(());
+    };
+    let mappings = get_currencies_mapped_to_eth(vrpc_provider, eth_provider).await?;
+    let Some(mapped_contracts) = mappings
+        .currency_to_contracts
+        .get(&source_currency_id.to_ascii_lowercase())
+        .cloned()
+    else {
+        return Ok(());
+    };
+
+    if mapped_contracts.is_empty() {
+        return Ok(());
+    }
+
+    let veth_definition = match vrpc_provider.getcurrency("Bridge.vETH").await {
+        Ok(value) => Some(value),
+        Err(_) => vrpc_provider.getcurrency("vETH").await.ok(),
+    };
+
+    let export_to = veth_definition
+        .as_ref()
+        .and_then(extract_currency_id)
+        .or_else(|| {
+            request
+                .channel_id
+                .rsplit_once('.')
+                .map(|(_, value)| value.to_string())
+        });
+    let export_to_label = veth_definition
+        .as_ref()
+        .and_then(extract_currency_display_name)
+        .or(export_to.clone());
+
+    for contract_address in mapped_contracts {
+        let (destination_name, destination_ticker) = contract_display(&contract_address, &mappings);
+        add_path_quote(
+            paths,
+            &contract_address,
+            BridgeConversionPathQuote {
+                destination_id: contract_address.clone(),
+                destination_display_name: destination_name.clone(),
+                destination_display_ticker: destination_ticker.clone(),
+                convert_to: Some(contract_address.clone()),
+                convert_to_display_name: destination_name
+                    .or_else(|| Some(contract_address.clone())),
+                export_to: export_to.clone(),
+                export_to_display_name: export_to_label.clone(),
+                via: None,
+                via_display_name: None,
+                map_to: None,
+                price: Some("1".to_string()),
+                via_price_in_root: None,
+                dest_price_in_via: None,
+                gateway: true,
+                mapping: true,
+                bounceback: false,
+                eth_destination: false,
+                prelaunch: false,
+            },
+        );
+    }
+
+    Ok(())
+}
+
+async fn resolve_currency_ref_by_id(
+    vrpc_provider: &VrpcProvider,
+    mappings: &EthTokenMappings,
+    currency_id: &str,
+) -> Option<CurrencyDefinitionRef> {
+    if let Some(mapped) = mappings
+        .currencies_by_id
+        .get(&currency_id.to_ascii_lowercase())
+        .cloned()
+    {
+        return Some(mapped);
+    }
+
+    let raw = vrpc_provider.getcurrency(currency_id).await.ok()?;
+    Some(CurrencyDefinitionRef {
+        currency_id: extract_currency_id(&raw)?,
+        fully_qualified_name: raw.get("fullyqualifiedname").and_then(extract_stringish),
+        name: raw.get("name").and_then(extract_stringish),
+        symbol: raw.get("symbol").and_then(extract_stringish),
+    })
+}
+
+fn extract_bridge_best_price(bridge_definition: &Value, currency_id: &str) -> Option<f64> {
+    let best_state = bridge_definition.get("bestcurrencystate")?;
+    let currencies = best_state.get("currencies")?.as_object()?;
+
+    for (key, entry) in currencies {
+        if !equals_ignore_case(key, currency_id) {
+            continue;
+        }
+        let value = entry
+            .get("lastconversionprice")
+            .and_then(extract_f64)
+            .or_else(|| extract_f64(entry))?;
+        if value.is_finite() && value > 0.0 {
+            return Some(value);
+        }
+    }
+
+    None
+}
+
+fn resolve_system_id_from_chain_info(info: &Value) -> Option<String> {
+    info.get("chainid").and_then(extract_stringish)
+}
+
+async fn resolve_system_id_for_request(
+    request: &BridgeConversionPathRequest,
+    vrpc_provider: &VrpcProvider,
+) -> Result<String, WalletError> {
+    if let Some((prefix, system_id)) = request.channel_id.split_once('.') {
+        if prefix.eq_ignore_ascii_case("vrpc")
+            && !system_id.trim().is_empty()
+            && system_id.contains('.')
+        {
+            if let Some((_, parsed_system_id)) = request.channel_id.rsplit_once('.') {
+                if !parsed_system_id.trim().is_empty() {
+                    return Ok(parsed_system_id.to_string());
+                }
+            }
+        } else if prefix.eq_ignore_ascii_case("vrpc") && !system_id.trim().is_empty() {
+            return Ok(system_id.to_string());
+        }
+    }
+
+    let info = vrpc_provider.getinfo().await?;
+    resolve_system_id_from_chain_info(&info).ok_or(WalletError::OperationFailed)
+}
+
+fn contract_display(
+    contract_address: &str,
+    mappings: &EthTokenMappings,
+) -> (Option<String>, Option<String>) {
+    if contract_address.eq_ignore_ascii_case(ETH_ZERO_ADDRESS) {
+        return (Some("Ethereum".to_string()), Some("ETH".to_string()));
+    }
+
+    let hit = mappings
+        .contract_to_currencies
+        .get(&contract_address.to_ascii_lowercase())
+        .and_then(|currencies| currencies.first());
+    if let Some(currency) = hit {
+        let name = currency
+            .fully_qualified_name
+            .clone()
+            .or_else(|| currency.name.clone())
+            .or_else(|| Some(currency.currency_id.clone()));
+        let ticker = currency
+            .symbol
+            .clone()
+            .or_else(|| currency.name.clone())
+            .or_else(|| name.clone());
+        return (name, ticker);
+    }
+
+    (
+        Some(contract_address.to_string()),
+        Some(contract_address.to_string()),
+    )
+}
+
+fn add_path_quote(
+    paths: &mut HashMap<String, Vec<BridgeConversionPathQuote>>,
+    destination_key: &str,
+    quote: BridgeConversionPathQuote,
+) {
+    let entry = paths.entry(destination_key.to_string()).or_default();
+    let duplicate = entry.iter().any(|existing| {
+        existing
+            .convert_to
+            .as_deref()
+            .eq(&quote.convert_to.as_deref())
+            && existing
+                .export_to
+                .as_deref()
+                .eq(&quote.export_to.as_deref())
+            && existing.via.as_deref().eq(&quote.via.as_deref())
+            && existing.map_to.as_deref().eq(&quote.map_to.as_deref())
+            && existing.mapping == quote.mapping
+            && existing.bounceback == quote.bounceback
+            && existing.eth_destination == quote.eth_destination
+    });
+    if !duplicate {
+        entry.push(quote);
+    }
 }
 
 async fn derive_paths_from_listcurrencies(
@@ -1727,7 +2354,9 @@ mod tests {
                     "currencyid": "iDest",
                     "fullyqualifiedname": "Bridge.DEST",
                     "name": "DEST",
-                    "options": 128,
+                    "options": 129,
+                    "startblock": 500,
+                    "maxpreconversion": [1],
                     "currencies": ["iSource"]
                 },
                 "bestcurrencystate": {
@@ -1799,6 +2428,8 @@ mod tests {
                     "symbol": "vUSDC",
                     "systemid": "iChain",
                     "options": 0,
+                    "startblock": 500,
+                    "maxpreconversion": [1],
                     "currencies": ["iVia"]
                 },
                 "bestcurrencystate": {
@@ -1833,7 +2464,14 @@ mod tests {
                         "iChain": {
                             "lastconversionprice": 1.0
                         }
-                    }
+                    },
+                    "reservecurrencies": [
+                        {
+                            "currencyid": "iChain",
+                            "weight": 0.2,
+                            "reserves": 2000
+                        }
+                    ]
                 }
             }
         ]);
@@ -1884,7 +2522,9 @@ mod tests {
                     "currencyid": "iPrelaunchDest",
                     "fullyqualifiedname": "Bridge.PRE",
                     "name": "PRE",
-                    "options": 128,
+                    "options": 129,
+                    "startblock": 500,
+                    "maxpreconversion": [1],
                     "currencies": ["iSource"]
                 },
                 "bestcurrencystate": {

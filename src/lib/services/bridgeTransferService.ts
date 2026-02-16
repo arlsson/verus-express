@@ -5,6 +5,8 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  BridgeCapabilitiesRequest,
+  BridgeCapabilitiesResult,
   BridgeConversionEstimateRequest,
   BridgeConversionEstimateResult,
   BridgeConversionPathRequest,
@@ -12,6 +14,17 @@ import type {
   BridgeTransferPreflightParams,
   BridgeTransferPreflightResult
 } from '$lib/types/wallet.js';
+
+export async function getBridgeCapabilities(
+  request: BridgeCapabilitiesRequest
+): Promise<BridgeCapabilitiesResult> {
+  return invoke<BridgeCapabilitiesResult>('get_bridge_capabilities', {
+    request: {
+      coinId: request.coinId,
+      channelId: request.channelId
+    }
+  });
+}
 
 export async function getBridgeConversionPaths(
   request: BridgeConversionPathRequest

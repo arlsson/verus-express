@@ -20,7 +20,8 @@ use crate::core::coins::Channel;
 use crate::core::coins::CoinRegistry;
 use crate::core::rates::{build_rates_http_client, coinpaprika, ecb, pbaas};
 use crate::core::updates::events::{
-    BalancesUpdatedPayload, RatesUpdatedPayload, TransactionsUpdatedPayload, UpdateErrorPayload,
+    BalancesUpdatedPayload, BootstrapUpdatedPayload, RatesUpdatedPayload,
+    TransactionsUpdatedPayload, UpdateErrorPayload,
 };
 use crate::core::updates::params::{
     jitter_duration, BALANCE_REFRESH_SECS, RATES_REFRESH_SECS, TRANSACTION_REFRESH_SECS,
@@ -32,6 +33,7 @@ use crate::types::WalletError;
 pub const EVENT_BALANCES_UPDATED: &str = "wallet://balances-updated";
 pub const EVENT_TRANSACTIONS_UPDATED: &str = "wallet://transactions-updated";
 pub const EVENT_RATES_UPDATED: &str = "wallet://rates-updated";
+pub const EVENT_BOOTSTRAP_UPDATED: &str = "wallet://bootstrap-updated";
 pub const EVENT_ERROR: &str = "wallet://error";
 const BOOTSTRAP_BALANCE_CONCURRENCY: usize = 4;
 const BOOTSTRAP_RATE_CONCURRENCY: usize = 3;
@@ -251,6 +253,13 @@ fn anchor_coin_id_for_system_id(system_id: &str) -> Option<&'static str> {
         VRSC_SYSTEM_ID => Some(VRSC_COIN_ID),
         VRSCTEST_SYSTEM_ID => Some(VRSCTEST_COIN_ID),
         _ => None,
+    }
+}
+
+fn emit_bootstrap_updated(app_handle: &AppHandle, in_progress: bool) {
+    let payload = BootstrapUpdatedPayload { in_progress };
+    if let Err(err) = app_handle.emit(EVENT_BOOTSTRAP_UPDATED, &payload) {
+        println!("[UPDATE] Emit bootstrap-updated failed: {:?}", err);
     }
 }
 
@@ -542,6 +551,7 @@ async fn run_update_loop(
     let priority_coin_ids = normalize_priority_entries(&start_config.priority_coin_ids);
     let priority_channel_ids = normalize_priority_entries(&start_config.priority_channel_ids);
     let mut bootstrap_completed = false;
+    emit_bootstrap_updated(&app_handle, true);
 
     loop {
         if cancel_token.is_cancelled() {
@@ -580,6 +590,10 @@ async fn run_update_loop(
         );
         let channels = dedupe_channel_pairs(&raw_channels);
         if channels.is_empty() {
+            if !bootstrap_completed {
+                emit_bootstrap_updated(&app_handle, false);
+                bootstrap_completed = true;
+            }
             tokio::time::sleep(jitter_duration(30)).await;
             continue;
         }
@@ -641,6 +655,7 @@ async fn run_update_loop(
                 bootstrap_elapsed.as_millis()
             );
 
+            emit_bootstrap_updated(&app_handle, false);
             bootstrap_completed = true;
         }
 

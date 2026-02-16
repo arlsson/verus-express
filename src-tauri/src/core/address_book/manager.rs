@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use bitcoin::{address::NetworkUnchecked, Network as BtcNetwork};
 use ethers::types::Address;
 use uuid::Uuid;
 
@@ -17,6 +18,13 @@ const MAX_ENDPOINTS_PER_CONTACT: usize = 20;
 const MAX_DISPLAY_NAME_LEN: usize = 64;
 const MAX_NOTE_LEN: usize = 140;
 const MAX_ENDPOINT_LABEL_LEN: usize = 32;
+
+fn expected_btc_network(network: WalletNetwork) -> BtcNetwork {
+    match network {
+        WalletNetwork::Mainnet => BtcNetwork::Bitcoin,
+        WalletNetwork::Testnet => BtcNetwork::Testnet,
+    }
+}
 
 pub fn empty_snapshot() -> AddressBookSnapshot {
     AddressBookSnapshot {
@@ -208,25 +216,13 @@ pub fn normalize_destination_address(
             Ok(format!("{:#x}", parsed).to_ascii_lowercase())
         }
         AddressEndpointKind::Btc => {
-            let decoded = bs58::decode(trimmed)
-                .with_check(None)
-                .into_vec()
+            let parsed = trimmed
+                .parse::<bitcoin::Address<NetworkUnchecked>>()
                 .map_err(|_| WalletError::InvalidAddress)?;
-
-            if decoded.len() != 21 {
-                return Err(WalletError::InvalidAddress);
-            }
-
-            let expected_prefix = match network {
-                WalletNetwork::Mainnet => 0x00u8,
-                WalletNetwork::Testnet => 0x6Fu8,
-            };
-
-            if decoded[0] != expected_prefix {
-                return Err(WalletError::InvalidAddress);
-            }
-
-            Ok(trimmed.to_string())
+            let checked = parsed
+                .require_network(expected_btc_network(network))
+                .map_err(|_| WalletError::InvalidAddress)?;
+            Ok(checked.to_string())
         }
         AddressEndpointKind::Vrpc => {
             if let Some(name) = trimmed.strip_suffix('@') {
@@ -325,5 +321,39 @@ mod tests {
 
         let result = upsert_contact(&mut snapshot, second, WalletNetwork::Mainnet);
         assert!(matches!(result, Err(WalletError::AddressBookDuplicate)));
+    }
+
+    #[test]
+    fn normalize_btc_bech32_accepts_mainnet_and_lowercases() {
+        let normalized = normalize_destination_address(
+            AddressEndpointKind::Btc,
+            "BC1QGGQZJ0UZUN238NHZZS5WDZ2EN05S0D9NCWHXCF",
+            WalletNetwork::Mainnet,
+        )
+        .expect("valid mainnet bech32");
+
+        assert_eq!(normalized, "bc1qggqzj0uzun238nhzzs5wdz2en05s0d9ncwhxcf");
+    }
+
+    #[test]
+    fn normalize_btc_bech32_rejects_network_mismatch() {
+        let result = normalize_destination_address(
+            AddressEndpointKind::Btc,
+            "bc1qggqzj0uzun238nhzzs5wdz2en05s0d9ncwhxcf",
+            WalletNetwork::Testnet,
+        );
+        assert!(matches!(result, Err(WalletError::InvalidAddress)));
+    }
+
+    #[test]
+    fn normalize_btc_bech32_accepts_testnet() {
+        let normalized = normalize_destination_address(
+            AddressEndpointKind::Btc,
+            "tb1qggqzj0uzun238nhzzs5wdz2en05s0d9njgv4r6",
+            WalletNetwork::Testnet,
+        )
+        .expect("valid testnet bech32");
+
+        assert_eq!(normalized, "tb1qggqzj0uzun238nhzzs5wdz2en05s0d9njgv4r6");
     }
 }

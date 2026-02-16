@@ -15,6 +15,10 @@ export function normalizeAddressByKind(kind: AddressEndpointKind, address: strin
     return trimmed.toLowerCase();
   }
 
+  if (kind === 'btc' && /^(bc1|tb1)/i.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
   if (kind === 'vrpc' && trimmed.endsWith('@')) {
     const name = trimmed.slice(0, -1).toLowerCase();
     return `${name}@`;
@@ -67,4 +71,3 @@ export function sharesSuspiciousPrefixSuffix(
     );
   });
 }
-

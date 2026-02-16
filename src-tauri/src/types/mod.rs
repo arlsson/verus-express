@@ -17,9 +17,10 @@ pub use address_book::{
     ValidateDestinationAddressResult,
 };
 pub use bridge::{
-    BridgeConversionEstimateRequest, BridgeConversionEstimateResult, BridgeConversionPathQuote,
-    BridgeConversionPathRequest, BridgeConversionPathsResult, BridgeExecutionHint,
-    BridgeTransferPreflightParams, BridgeTransferPreflightResult, BridgeTransferRoute,
+    BridgeCapabilitiesRequest, BridgeCapabilitiesResult, BridgeConversionEstimateRequest,
+    BridgeConversionEstimateResult, BridgeConversionPathQuote, BridgeConversionPathRequest,
+    BridgeConversionPathsResult, BridgeExecutionHint, BridgeTransferPreflightParams,
+    BridgeTransferPreflightResult, BridgeTransferRoute,
 };
 pub use errors::WalletError;
 pub use guard::{

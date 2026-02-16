@@ -16,6 +16,7 @@
   import { balanceStore } from '$lib/stores/balances.js';
   import { ratesStore } from '$lib/stores/rates.js';
   import { transactionStore } from '$lib/stores/transactions.js';
+  import { walletBootstrapStore } from '$lib/stores/walletBootstrap.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { buildWalletChannels, resetWalletChannels, walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { filterVisibleAssets } from '$lib/stores/assetVisibility.js';
@@ -31,6 +32,7 @@
   const i18n = $derived($i18nStore);
 
   onMount(async () => {
+    walletBootstrapStore.set(true);
     clearWalletErrors();
     balanceStore.set({});
     ratesStore.set({});
@@ -38,6 +40,7 @@
     try {
       const unlocked = await walletService.isUnlocked();
       if (!unlocked) {
+        walletBootstrapStore.set(false);
         await goto('/');
         return;
       }
@@ -85,6 +88,7 @@
 
       teardownEventBridge = await setupWalletEventBridge().catch((error) => {
         console.error('[WALLET_ROUTE] Failed to setup wallet event bridge', error);
+        walletBootstrapStore.set(false);
         pushWalletError(error instanceof Error ? error.message : i18n.t('common.unknownError'));
         return null;
       });
@@ -95,10 +99,12 @@
         priorityChannelIds: channels.channels
       }).catch((error) => {
         console.error('[WALLET_ROUTE] Failed to start update engine', error);
+        walletBootstrapStore.set(false);
         pushWalletError(error instanceof Error ? error.message : i18n.t('common.unknownError'));
       });
     } catch (error) {
       console.error('[WALLET_ROUTE] Startup failed', error);
+      walletBootstrapStore.set(false);
       const message = error instanceof Error ? error.message : i18n.t('common.unknownError');
       pushWalletError(message);
       if (!walletData) {
@@ -116,6 +122,7 @@
 
   onDestroy(() => {
     teardownEventBridge?.();
+    walletBootstrapStore.set(false);
     balanceStore.set({});
     ratesStore.set({});
     transactionStore.set({});

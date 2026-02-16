@@ -75,6 +75,21 @@ pub enum WalletError {
     #[error("Bridge transfer is not implemented for this channel")]
     BridgeNotImplemented,
 
+    #[error("Bridge route is invalid for this transfer")]
+    BridgeRouteInvalid,
+
+    #[error("Bridge destination and route combination is unsupported")]
+    BridgeUnsupportedDestinationCombination,
+
+    #[error("Bridge transfer approval failed")]
+    BridgeApprovalFailed,
+
+    #[error("Insufficient ETH to cover bridge fee envelope")]
+    BridgeInsufficientEthFeeEnvelope,
+
+    #[error("Bridge gas drift exceeded preflight fee envelope")]
+    BridgeGasDriftExceeded,
+
     #[error("Identity not found")]
     IdentityNotFound,
 

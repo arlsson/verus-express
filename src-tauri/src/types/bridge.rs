@@ -9,6 +9,21 @@ use crate::types::transaction::PreflightWarning;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BridgeCapabilitiesRequest {
+    pub coin_id: String,
+    pub channel_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeCapabilitiesResult {
+    pub conversion_supported: bool,
+    pub execution_engine: String,
+    pub reason_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BridgeConversionPathRequest {
     pub coin_id: String,
     pub channel_id: String,

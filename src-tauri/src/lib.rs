@@ -162,6 +162,7 @@ pub fn run() {
             transaction::get_balances,
             transaction::get_transaction_history,
             vrpc_transfer::preflight_vrpc_transfer,
+            bridge_transfer::get_bridge_capabilities,
             bridge_transfer::get_bridge_conversion_paths,
             bridge_transfer::estimate_bridge_conversion,
             bridge_transfer::preflight_bridge_transfer,

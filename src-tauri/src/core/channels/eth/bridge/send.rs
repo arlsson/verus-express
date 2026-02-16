@@ -1,6 +1,6 @@
 //
 // ETH/ERC20 bridge send path.
-// Phase-1 scaffold: deterministic not-implemented to preserve explicit behavior.
+// Bridge preflights are executed through the unified ETH send dispatcher.
 
 use std::sync::Arc;
 
@@ -13,10 +13,16 @@ use crate::types::transaction::SendResult;
 use crate::types::WalletError;
 
 pub async fn send(
-    _preflight_id: &str,
-    _preflight_store: &PreflightStore,
-    _session_manager: &Arc<Mutex<SessionManager>>,
-    _provider_pool: &EthProviderPool,
+    preflight_id: &str,
+    preflight_store: &PreflightStore,
+    session_manager: &Arc<Mutex<SessionManager>>,
+    provider_pool: &EthProviderPool,
 ) -> Result<SendResult, WalletError> {
-    Err(WalletError::BridgeNotImplemented)
+    crate::core::channels::eth::send(
+        preflight_id,
+        preflight_store,
+        session_manager,
+        provider_pool,
+    )
+    .await
 }
