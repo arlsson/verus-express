@@ -5,7 +5,7 @@
   import CopyIcon from '@lucide/svelte/icons/copy';
   import PencilIcon from '@lucide/svelte/icons/pencil';
   import Trash2Icon from '@lucide/svelte/icons/trash-2';
-  import SearchIcon from '@lucide/svelte/icons/search';
+  import SearchInput from '$lib/components/common/SearchInput.svelte';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as ScrollArea from '$lib/components/ui/scroll-area';
   import { Button } from '$lib/components/ui/button';
@@ -35,8 +35,11 @@
   let formDisplayName = $state('');
   let formNote = $state('');
   let formEndpoints = $state<EndpointDraft[]>([]);
+  let nameError = $state('');
+  let endpointsError = $state('');
   let formError = $state('');
   let saving = $state(false);
+  let nameInputEl = $state<HTMLInputElement | null>(null);
 
   let showDeleteDialog = $state(false);
   let deleting = $state(false);
@@ -120,6 +123,8 @@
     formDisplayName = '';
     formNote = '';
     formEndpoints = [newEndpointDraft()];
+    nameError = '';
+    endpointsError = '';
     formError = '';
   }
 
@@ -133,6 +138,8 @@
       address: endpoint.address,
       kind: endpoint.kind
     }));
+    nameError = '';
+    endpointsError = '';
     formError = '';
   }
 
@@ -142,17 +149,23 @@
     formDisplayName = '';
     formNote = '';
     formEndpoints = [];
+    nameError = '';
+    endpointsError = '';
     formError = '';
     saving = false;
   }
 
   function addEndpointDraft() {
     formEndpoints = [...formEndpoints, newEndpointDraft()];
+    endpointsError = '';
+    formError = '';
   }
 
   function removeEndpointDraft(index: number) {
     if (formEndpoints.length <= 1) return;
     formEndpoints = formEndpoints.filter((_, current) => current !== index);
+    endpointsError = '';
+    formError = '';
   }
 
   function updateEndpointDraft(index: number, updates: Partial<EndpointDraft>) {
@@ -166,6 +179,18 @@
       address: value,
       kind: inferEndpointKind(value)
     });
+    endpointsError = '';
+    formError = '';
+  }
+
+  function updateDisplayName(value: string) {
+    formDisplayName = value;
+    if (nameError && value.trim()) {
+      nameError = '';
+    }
+    if (formError) {
+      formError = '';
+    }
   }
 
   function extractWalletErrorType(error: unknown): string | null {
@@ -206,16 +231,19 @@
 
   async function submitContactForm() {
     if (saving) return;
+    nameError = '';
+    endpointsError = '';
     formError = '';
 
     const displayName = formDisplayName.trim();
     if (!displayName) {
-      formError = i18n.t('wallet.addressBook.error.nameRequired');
+      nameError = i18n.t('wallet.addressBook.error.nameRequired');
+      nameInputEl?.focus();
       return;
     }
 
     if (formEndpoints.length === 0) {
-      formError = i18n.t('wallet.addressBook.error.endpointRequired');
+      endpointsError = i18n.t('wallet.addressBook.error.endpointRequired');
       return;
     }
 
@@ -226,7 +254,7 @@
       for (const endpoint of formEndpoints) {
         const trimmedAddress = endpoint.address.trim();
         if (!trimmedAddress) {
-          formError = i18n.t('wallet.addressBook.error.endpointFieldsRequired');
+          endpointsError = i18n.t('wallet.addressBook.error.endpointFieldsRequired');
           saving = false;
           return;
         }
@@ -234,7 +262,7 @@
         const inferredKind = endpoint.kind ?? inferEndpointKind(trimmedAddress);
         const resolvedKind = await resolveEndpointKind(trimmedAddress, inferredKind);
         if (!resolvedKind) {
-          formError = i18n.t('wallet.addressBook.error.invalidEndpoint');
+          endpointsError = i18n.t('wallet.addressBook.error.invalidEndpoint');
           saving = false;
           return;
         }
@@ -299,23 +327,18 @@
       <h2 class="text-2xl font-semibold">{i18n.t('wallet.addressBook.title')}</h2>
       <p class="text-muted-foreground mt-1 text-sm">{i18n.t('wallet.addressBook.description')}</p>
     </div>
-    <Button class="gap-1.5" onclick={startCreateContact}>
-      <CirclePlusIcon class="size-4" />
-      {i18n.t('wallet.addressBook.addContact')}
-    </Button>
+    {#if !formMode}
+      <Button class="gap-1.5" onclick={startCreateContact}>
+        <CirclePlusIcon class="size-4" />
+        {i18n.t('wallet.addressBook.addContact')}
+      </Button>
+    {/if}
   </header>
 
   <div class="flex min-h-0 flex-1">
     <aside class="border-border/70 w-[256px] shrink-0 border-r">
       <div class="p-4">
-        <div class="relative">
-          <SearchIcon class="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-          <Input
-            bind:value={searchTerm}
-            class="pl-9"
-            placeholder={i18n.t('wallet.addressBook.searchPlaceholder')}
-          />
-        </div>
+        <SearchInput bind:value={searchTerm} placeholder={i18n.t('wallet.addressBook.searchPlaceholder')} />
       </div>
 
       <ScrollArea.Root class="min-h-0 flex-1">
@@ -356,10 +379,16 @@
           <div class="space-y-2">
             <Label for="address-book-name">{i18n.t('wallet.addressBook.form.nameLabel')}</Label>
             <Input
+              bind:ref={nameInputEl}
               id="address-book-name"
-              bind:value={formDisplayName}
+              value={formDisplayName}
+              oninput={(event) => updateDisplayName((event.currentTarget as HTMLInputElement).value)}
+              class={nameError ? 'border-destructive focus-visible:ring-destructive/40' : ''}
+              aria-invalid={nameError ? 'true' : 'false'}
+              aria-describedby="address-book-name-error"
               placeholder={i18n.t('wallet.addressBook.form.namePlaceholder')}
             />
+            <p id="address-book-name-error" class="text-destructive min-h-5 text-sm">{nameError}</p>
           </div>
 
           <div class="space-y-2">
@@ -410,9 +439,7 @@
             {/each}
           </div>
 
-          {#if formError}
-            <p class="text-destructive text-sm">{formError}</p>
-          {/if}
+          <p class="text-destructive min-h-5 text-sm">{endpointsError || formError}</p>
 
           <div class="flex justify-end gap-2">
             <Button variant="secondary" onclick={cancelForm} disabled={saving}>
@@ -461,7 +488,7 @@
                   <p class="min-w-0 flex-1 break-all text-sm leading-6">{endpoint.address}</p>
                   <button
                     type="button"
-                    class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 -mr-1 h-8 w-8 shrink-0 rounded-sm p-0 transition-colors focus-visible:outline-none focus-visible:ring-2"
+                    class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 -mr-3 pl-1 h-8 w-8 shrink-0 rounded-sm p-0 transition-colors focus-visible:outline-none focus-visible:ring-2"
                     onclick={() => copyAddress(endpoint.address, endpoint.id)}
                     title={i18n.t('wallet.receive.copy')}
                     aria-label={i18n.t('wallet.receive.copy')}

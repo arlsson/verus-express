@@ -356,6 +356,7 @@ export const nl: Record<string, string> = {
   'wallet.transfer.recipientHintEth': 'Gebruik een geldig Ethereum-adres voor deze transfer.',
   'wallet.transfer.recipientHintBtc': 'Gebruik een geldig Bitcoin-adres voor deze transfer.',
   'wallet.transfer.recipientInvalid': 'Het bestemmingsadres is ongeldig voor deze route.',
+  'wallet.transfer.recipient.sendToSelf': 'Naar jezelf',
   'wallet.transfer.addressBook.open': 'Adresboek openen',
   'wallet.transfer.addressBook.sheetTitle': 'Adresboek',
   'wallet.transfer.addressBook.searchPlaceholder': 'Zoek op contact of adres',
@@ -436,7 +437,7 @@ export const nl: Record<string, string> = {
   'wallet.identity.title': 'Identiteit',
   'wallet.addressBook.title': 'Adresboek',
   'wallet.addressBook.description':
-    'Sla vertrouwde ontvangers op en gebruik ze veilig opnieuw.',
+    'Sla vertrouwde ontvangers versleuteld op.',
   'wallet.addressBook.addContact': 'Contact toevoegen',
   'wallet.addressBook.searchPlaceholder': 'Zoek contacten',
   'wallet.addressBook.empty': 'Nog geen contacten.',

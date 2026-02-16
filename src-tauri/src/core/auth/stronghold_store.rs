@@ -76,10 +76,12 @@ impl StrongholdStore {
                     WalletError::InvalidPassword
                 })
         } else {
-            stronghold.create_client(account_id.as_bytes()).map_err(|e| {
-                println!("[AUTH] Create client failed: {}", e);
-                WalletError::OperationFailed
-            })
+            stronghold
+                .create_client(account_id.as_bytes())
+                .map_err(|e| {
+                    println!("[AUTH] Create client failed: {}", e);
+                    WalletError::OperationFailed
+                })
         }
     }
 

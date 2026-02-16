@@ -4,6 +4,7 @@
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
   import CheckCircle2Icon from '@lucide/svelte/icons/check-circle-2';
   import BookUserIcon from '@lucide/svelte/icons/book-user';
+  import UserRoundIcon from '@lucide/svelte/icons/user-round';
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Input } from '$lib/components/ui/input';
@@ -11,6 +12,7 @@
   import * as Card from '$lib/components/ui/card';
   import * as ScrollArea from '$lib/components/ui/scroll-area';
   import * as Tabs from '$lib/components/ui/tabs';
+  import SearchInput from '$lib/components/common/SearchInput.svelte';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import WalletTransferStepperShell from '$lib/components/shared/WalletTransferStepperShell.svelte';
   import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
@@ -85,6 +87,13 @@
     via?: string | null;
     mapTo?: string | null;
     price?: string | null;
+  };
+
+  type SummaryRow = {
+    label: string;
+    primary: string;
+    secondary?: string;
+    breakAll?: boolean;
   };
 
   type TransferWizardProps = {
@@ -270,7 +279,9 @@
     selectedReceiveAssetViaOptions.find((option) => option.id === selectedViaOptionId) ?? null
   );
 
-  const activeConvertRoute = $derived(selectedViaOption ?? bestViaOption);
+  const activeConvertRoute = $derived(
+    isPositiveAmount(amount) ? selectedViaOption ?? bestViaOption : null
+  );
   const activeTargetOption = $derived(conversionEnabled ? activeConvertRoute : sameAssetOption);
 
   const convertUnavailableForSource = $derived(
@@ -289,6 +300,16 @@
       : selectedChannelPrefix === 'btc'
         ? 'btc'
         : 'vrpc'
+  );
+
+  const selfDestinationAddress = $derived(
+    !addresses
+      ? ''
+      : destinationAddressKind === 'eth'
+        ? addresses.eth_address
+        : destinationAddressKind === 'btc'
+          ? addresses.btc_address
+          : addresses.vrsc_address
   );
 
   const destinationEndpointKind = $derived<AddressEndpointKind>(
@@ -484,8 +505,12 @@
   );
 
   const amountSummaryValue = $derived(
-    amountValid && selectedCoinPresentation
-      ? `${amount.trim()} ${selectedCoinPresentation.displayTicker}`
+    selectedCoinPresentation
+      ? activePreflight
+        ? `${activePreflight.value} ${selectedCoinPresentation.displayTicker}`
+        : amountValid
+          ? `${amount.trim()} ${selectedCoinPresentation.displayTicker}`
+          : ''
       : ''
   );
 
@@ -506,6 +531,108 @@
   );
 
   const warningsSummary = $derived(activePreflight?.warnings.map((warning) => warning.message) ?? []);
+
+  const summaryRows = $derived<SummaryRow[]>(
+    (() => {
+      const rows: SummaryRow[] = [];
+
+      const sourcePrimary = selectedCoinPresentation?.displayName?.trim() ?? '';
+      const sourceSecondary = normalizeSummarySecondary(
+        sourcePrimary,
+        selectedCoinPresentation?.displayTicker ?? ''
+      );
+      if (sourcePrimary) {
+        rows.push({
+          label: i18n.t('wallet.transfer.summary.from'),
+          primary: sourcePrimary,
+          secondary: sourceSecondary
+        });
+      }
+
+      if (conversionEnabled) {
+        const toPrimary = selectedReceiveAssetOption?.label?.trim() ?? '';
+        const toSecondary = normalizeSummarySecondary(
+          toPrimary,
+          selectedReceiveAssetOption?.ticker ?? ''
+        );
+        if (toPrimary) {
+          rows.push({
+            label: i18n.t('wallet.transfer.summary.to'),
+            primary: toPrimary,
+            secondary: toSecondary
+          });
+        }
+      }
+
+      if (conversionEnabled && amountValid && activeConvertRoute) {
+        const routePrimary = getViaOptionLabel(activeConvertRoute).trim();
+        const routeSecondary = normalizeRouteSummarySecondary(
+          routePrimary,
+          getRouteSubtitle(activeConvertRoute)
+        );
+        if (routePrimary) {
+          rows.push({
+            label: i18n.t('wallet.transfer.summary.route'),
+            primary: routePrimary,
+            secondary: routeSecondary
+          });
+        }
+      }
+
+      if (amountValid) {
+        const amountPrimary = amount.trim();
+        const amountSecondary = normalizeSummarySecondary(
+          amountPrimary,
+          selectedCoinPresentation?.displayTicker ?? ''
+        );
+        if (amountPrimary) {
+          rows.push({
+            label: i18n.t('wallet.transfer.summary.amount'),
+            primary: amountPrimary,
+            secondary: amountSecondary
+          });
+        }
+      }
+
+      const recipientPrimary = destinationAddress.trim();
+      if (recipientPrimary) {
+        rows.push({
+          label: i18n.t('wallet.transfer.summary.recipient'),
+          primary: recipientPrimary,
+          breakAll: true
+        });
+      }
+
+      if (conversionEnabled && estimatedConversionValue && selectedReceiveAssetOption) {
+        const estimatedPrimary = estimatedConversionValue.trim();
+        const estimatedSecondary = normalizeSummarySecondary(
+          estimatedPrimary,
+          selectedReceiveAssetOption.ticker || selectedReceiveAssetOption.label
+        );
+        if (estimatedPrimary) {
+          rows.push({
+            label: i18n.t('wallet.transfer.summary.estimatedReceive'),
+            primary: estimatedPrimary,
+            secondary: estimatedSecondary
+          });
+        }
+      }
+
+      if (activePreflight) {
+        const feePrimary = activePreflight.fee.trim();
+        const feeSecondary = normalizeSummarySecondary(feePrimary, activePreflight.feeCurrency);
+        if (feePrimary) {
+          rows.push({
+            label: i18n.t('wallet.transfer.summary.networkFee'),
+            primary: feePrimary,
+            secondary: feeSecondary
+          });
+        }
+      }
+
+      return rows;
+    })()
+  );
 
   const preflightInputSignature = $derived(
     [
@@ -622,6 +749,11 @@
   $effect(() => {
     if (!conversionEnabled) return;
     if (!selectedReceiveAssetOption) return;
+    if (!amountValid) {
+      selectedViaOptionId = '';
+      manualViaLocked = false;
+      return;
+    }
 
     const selectedStillValid = selectedReceiveAssetViaOptions.some((option) => option.id === selectedViaOptionId);
 
@@ -853,6 +985,12 @@
     saveRecipientName = option.contactName;
   }
 
+  function selectSelfRecipient() {
+    if (!selfDestinationAddress) return;
+    destinationAddress = selfDestinationAddress;
+    transferError = '';
+  }
+
   function mapAddressBookError(error: unknown): string {
     const errorType = extractWalletErrorType(error);
     if (errorType === 'AddressBookDuplicate') return i18n.t('wallet.transfer.saveRecipient.error.duplicate');
@@ -955,9 +1093,13 @@
     selectedExportSystemId = exportSystemId;
     manualViaLocked = false;
 
-    const viaCandidates = filterViaOptionsByExport(option.viaOptions, exportSystemId);
-    const best = sortViaOptionsByScore(viaCandidates, amount, routeEstimateOutputs)[0] ?? null;
-    selectedViaOptionId = best?.id ?? '';
+    if (amountValid) {
+      const viaCandidates = filterViaOptionsByExport(option.viaOptions, exportSystemId);
+      const best = sortViaOptionsByScore(viaCandidates, amount, routeEstimateOutputs)[0] ?? null;
+      selectedViaOptionId = best?.id ?? '';
+    } else {
+      selectedViaOptionId = '';
+    }
 
     pendingGroupedReceiveOption = null;
     pendingTargetOption = null;
@@ -1012,9 +1154,17 @@
       return /^0x[a-fA-F0-9]{40}$/.test(input);
     }
     if (kind === 'btc') {
-      return /^(bc1|tb1|[13mn2])[a-zA-HJ-NP-Z0-9]{20,}$/.test(input);
+      if (/^(bc1|tb1)[ac-hj-np-z02-9]{11,71}$/i.test(input)) {
+        return true;
+      }
+      return /^[13mn2][a-km-zA-HJ-NP-Z1-9]{25,39}$/.test(input);
     }
-    return /(^[Ri][a-km-zA-HJ-NP-Z1-9]{24,60}$)|(^[A-Za-z0-9._-]+@$)/.test(input);
+
+    if (/[A-Za-z0-9._-]+@$/.test(input)) {
+      return true;
+    }
+
+    return /^[Ri][a-km-zA-HJ-NP-Z1-9]{24,60}$/.test(input);
   }
 
   function viaLexicalKey(option: ViaRouteOption): string {
@@ -1118,6 +1268,27 @@
     return i18n.t('common.unknownError');
   }
 
+  function normalizeSummarySecondary(primary: string, secondary: string | null | undefined): string | undefined {
+    const primaryTrimmed = primary.trim();
+    const secondaryTrimmed = (secondary ?? '').trim();
+    if (!secondaryTrimmed) return undefined;
+    if (secondaryTrimmed.toLowerCase() === primaryTrimmed.toLowerCase()) return undefined;
+    return secondaryTrimmed;
+  }
+
+  function normalizeRouteSummarySecondary(
+    primary: string,
+    secondary: string | null | undefined
+  ): string | undefined {
+    const normalized = normalizeSummarySecondary(primary, secondary);
+    if (!normalized) return undefined;
+
+    const viaOnly = i18n.t('wallet.transfer.pathVia', { value: primary }).trim();
+    if (normalized.toLowerCase() === viaOnly.toLowerCase()) return undefined;
+
+    return normalized;
+  }
+
   function goBack() {
     transferError = '';
 
@@ -1161,7 +1332,7 @@
   }
 
   async function runPreflight() {
-    if (!selectedCoin || !selectedChannelId || !activeTargetOption) return;
+    if (!selectedCoin || !selectedChannelId || !activeTargetOption || !recipientValid) return;
 
     preflighting = true;
     transferError = '';
@@ -1305,7 +1476,7 @@
   }
 
   function resetViaToBest() {
-    if (!bestViaOption) return;
+    if (!amountValid || !bestViaOption) return;
     selectedViaOptionId = bestViaOption.id;
     manualViaLocked = false;
   }
@@ -1323,13 +1494,7 @@
 >
   {#snippet aside()}
     <TransferSummaryRail
-      sourceValue={sourceSummaryValue}
-      toValue={toSummaryValue}
-      routeValue={routeSummaryValue}
-      amountValue={amountSummaryValue}
-      recipientValue={recipientSummaryValue}
-      estimatedReceiveValue={estimatedReceiveSummaryValue}
-      networkFeeValue={networkFeeSummaryValue}
+      rows={summaryRows}
       warnings={warningsSummary}
       class="h-full"
     />
@@ -1371,7 +1536,7 @@
   {/snippet}
 
   <div class={currentStep === 'details' ? 'space-y-4' : 'space-y-5'}>
-    {#if currentStep !== 'details'}
+    {#if currentStep === 'review'}
       <div>
         <p class="text-lg font-semibold">{viewTitle}</p>
       </div>
@@ -1583,29 +1748,39 @@
     {/if}
 
     {#if currentStep === 'recipient'}
-      <Card.Root class="border-0 bg-transparent py-0 shadow-none">
-        <Card.Header class="px-0">
-          <Card.Title>{stepCopy.recipient.title}</Card.Title>
-        </Card.Header>
-        <Card.Content class="space-y-3 px-0">
-          <div>
-            <Label for="transfer-recipient">{i18n.t('wallet.transfer.recipientLabel')}</Label>
-            <Input
-              id="transfer-recipient"
-              class="mt-2"
-              bind:value={destinationAddress}
-              placeholder={recipientInputCopy.placeholder}
-            />
-            <p class="text-muted-foreground mt-1 text-xs">{recipientInputCopy.hint}</p>
-            {#if destinationAddress.trim() && !recipientValid}
-              <p class="text-destructive mt-1 text-xs">{i18n.t('wallet.transfer.recipientInvalid')}</p>
-            {/if}
+      <div class="flex min-h-[52vh] items-center justify-center">
+        <Card.Root class="w-full border-0 bg-transparent py-0 shadow-none">
+          <Card.Header class="px-0 text-center">
+            <Card.Title>{stepCopy.recipient.title}</Card.Title>
+          </Card.Header>
+          <Card.Content class="px-0">
+            <div class="mx-auto flex w-full max-w-[560px] flex-col items-center gap-3 text-center">
+              <Label for="transfer-recipient" class="sr-only">{i18n.t('wallet.transfer.recipientLabel')}</Label>
+              <Input
+                id="transfer-recipient"
+                class="h-11 rounded-xl bg-muted/85 px-4 text-center text-base font-medium dark:bg-muted/55 md:text-base"
+                bind:value={destinationAddress}
+                placeholder={recipientInputCopy.placeholder}
+              />
+              {#if destinationAddress.trim() && !recipientValid}
+                <p class="text-destructive text-xs">{i18n.t('wallet.transfer.recipientInvalid')}</p>
+              {/if}
 
-            <div class="mt-3 flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" class="h-8 gap-1.5" onclick={() => (showAddressBookSheet = true)}>
-                <BookUserIcon class="size-3.5" />
-                {i18n.t('wallet.transfer.addressBook.open')}
-              </Button>
+              <div class="mt-1 flex items-center justify-center gap-2">
+                <Button
+                  variant="secondary"
+                  class="h-9 gap-1.5 px-4"
+                  onclick={selectSelfRecipient}
+                  disabled={!selfDestinationAddress}
+                >
+                  <UserRoundIcon class="size-4" />
+                  {i18n.t('wallet.transfer.recipient.sendToSelf')}
+                </Button>
+                <Button variant="secondary" class="h-9 gap-1.5 px-4" onclick={() => (showAddressBookSheet = true)}>
+                  <BookUserIcon class="size-4" />
+                  {i18n.t('wallet.transfer.addressBook.open')}
+                </Button>
+              </div>
 
               {#if matchedSavedRecipient}
                 <p class="text-emerald-700 dark:text-emerald-300 text-xs">
@@ -1620,9 +1795,9 @@
                 </p>
               {/if}
             </div>
-          </div>
-        </Card.Content>
-      </Card.Root>
+          </Card.Content>
+        </Card.Root>
+      </div>
     {/if}
 
     {#if currentStep === 'review'}
@@ -1813,10 +1988,10 @@
 
 <StandardRightSheet bind:isOpen={showAddressBookSheet} title={i18n.t('wallet.transfer.addressBook.sheetTitle')}>
   <div class="flex h-full min-h-0 flex-col gap-3">
-    <Input
+    <SearchInput
       bind:value={addressBookSearchTerm}
       placeholder={i18n.t('wallet.transfer.addressBook.searchPlaceholder')}
-      class="h-10"
+      inputClass="h-10"
     />
 
     {#if addressBookEndpointOptions.length === 0}
@@ -1828,7 +2003,9 @@
             {#each addressBookEndpointOptions as option}
               <button
                 type="button"
-                class="flex w-full items-start justify-between rounded-md border border-border/60 px-3 py-2 text-left transition-colors hover:bg-muted/30"
+                class="flex w-full items-start justify-between rounded-lg bg-muted/65 px-3 py-2 text-left transition-colors
+                  hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60
+                  dark:bg-muted/55 dark:hover:bg-muted/65"
                 onclick={() => selectAddressBookRecipient(option)}
               >
                 <div class="min-w-0">

@@ -38,10 +38,14 @@
     try {
       const unlocked = await walletService.isUnlocked();
       if (!unlocked) {
-        goto('/');
+        await goto('/');
         return;
       }
-      const active = await walletService.getActiveWallet();
+
+      const active = await walletService.getActiveWallet().catch((error) => {
+        console.error('[WALLET_ROUTE] Failed to resolve active wallet', error);
+        return null;
+      });
       const walletNetwork: WalletNetwork = active?.network ?? 'mainnet';
       walletData = active
         ? {
@@ -51,12 +55,19 @@
             network: walletNetwork
           }
         : { name: i18n.t('wallet.overview.mainWallet'), emoji: '💰', color: 'blue', network: walletNetwork };
-      const addresses = await walletService.getAddresses().catch(() => null);
+
+      const addresses = await walletService.getAddresses().catch((error) => {
+        console.error('[WALLET_ROUTE] Failed to load wallet addresses', error);
+        return null;
+      });
       if (!addresses) {
         pushWalletError(i18n.t('wallet.receive.errorLoad'));
       }
 
-      const allCoins = await coinsService.getCoinRegistry();
+      const allCoins = await coinsService.getCoinRegistry().catch((error) => {
+        console.error('[WALLET_ROUTE] Failed to load coin registry', error);
+        return [];
+      });
       const coins = filterVisibleAssets(
         allCoins.filter((coin) => isWalletSupportedAsset(coin, walletNetwork)),
         walletNetwork
@@ -65,21 +76,42 @@
 
       const channels = buildWalletChannels(coins, addresses?.vrsc_address ?? null);
       walletChannelsStore.set(channels);
-      const contacts = await addressBookService.listAddressBookContacts().catch(() => []);
+
+      const contacts = await addressBookService.listAddressBookContacts().catch((error) => {
+        console.error('[WALLET_ROUTE] Failed to load address book contacts', error);
+        return [];
+      });
       setAddressBookContacts(contacts);
-      teardownEventBridge = await setupWalletEventBridge();
+
+      teardownEventBridge = await setupWalletEventBridge().catch((error) => {
+        console.error('[WALLET_ROUTE] Failed to setup wallet event bridge', error);
+        pushWalletError(error instanceof Error ? error.message : i18n.t('common.unknownError'));
+        return null;
+      });
+
       await walletService.startUpdateEngine({
         includeTransactions: false,
         priorityCoinIds: coins.map((coin) => coin.id),
         priorityChannelIds: channels.channels
+      }).catch((error) => {
+        console.error('[WALLET_ROUTE] Failed to start update engine', error);
+        pushWalletError(error instanceof Error ? error.message : i18n.t('common.unknownError'));
       });
     } catch (error) {
+      console.error('[WALLET_ROUTE] Startup failed', error);
       const message = error instanceof Error ? error.message : i18n.t('common.unknownError');
       pushWalletError(message);
-      goto('/');
-      return;
+      if (!walletData) {
+        walletData = {
+          name: i18n.t('wallet.overview.mainWallet'),
+          emoji: '💰',
+          color: 'blue',
+          network: 'mainnet'
+        };
+      }
+    } finally {
+      loading = false;
     }
-    loading = false;
   });
 
   onDestroy(() => {

@@ -407,9 +407,9 @@ mod tests {
 
     #[test]
     fn embedded_catalog_contains_coinpaprika_overrides_for_bridge_assets() {
-        assert!(VALU_CATALOG_JSON.contains("\"coinPaprikaId\": \"usdc-usd-coin\""));
-        assert!(VALU_CATALOG_JSON.contains("\"coinPaprikaId\": \"eurc-eurc\""));
-        assert!(VALU_CATALOG_JSON.contains("\"coinPaprikaId\": \"dai-dai\""));
+        assert!(VERUS_CATALOG_JSON.contains("\"coinPaprikaId\": \"usdc-usd-coin\""));
+        assert!(VERUS_CATALOG_JSON.contains("\"coinPaprikaId\": \"eurc-eurc\""));
+        assert!(VERUS_CATALOG_JSON.contains("\"coinPaprikaId\": \"dai-dai\""));
     }
 
     #[tokio::test]

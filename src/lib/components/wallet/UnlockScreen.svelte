@@ -172,8 +172,8 @@
         account_id: effectiveAccountId,
         password
       });
+      await goto('/wallet');
       password = '';
-      goto('/wallet');
     } catch (error) {
       const errorType = extractWalletErrorType(error);
       if (errorType === 'InvalidPassword') {

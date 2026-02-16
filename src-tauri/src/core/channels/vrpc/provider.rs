@@ -184,6 +184,31 @@ impl VrpcProvider {
         "network"
     }
 
+    fn rpc_error_code(error_obj: &Value) -> Option<i64> {
+        error_obj.get("code").and_then(|value| value.as_i64())
+    }
+
+    fn rpc_error_message(error_obj: &Value) -> String {
+        error_obj
+            .get("message")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+    }
+
+    fn is_insufficient_funds_rpc(method: &str, error_obj: &Value) -> bool {
+        if Self::rpc_error_code(error_obj) == Some(-6) {
+            return true;
+        }
+
+        let message = Self::rpc_error_message(error_obj);
+        if message.contains("insufficient funds") || message.contains("insufficient balance") {
+            return true;
+        }
+
+        method == "fundrawtransaction" && message.contains("utxos provided")
+    }
+
     fn format_network_error_details(err: &reqwest::Error) -> String {
         let mut out = err.to_string();
         let mut source = err.source();
@@ -271,6 +296,9 @@ impl VrpcProvider {
 
             if let Some(error_obj) = json.get("error").filter(|e| !e.is_null()) {
                 println!("[VRPC] {} RPC error response: {}", method, error_obj);
+                if Self::is_insufficient_funds_rpc(method, error_obj) {
+                    return Err(WalletError::InsufficientFunds);
+                }
                 return Err(WalletError::OperationFailed);
             }
 
@@ -345,12 +373,15 @@ impl VrpcProvider {
 
         let json: Value = res.json().await.map_err(|_| WalletError::NetworkError)?;
         if let Some(error_obj) = json.get("error").filter(|e| !e.is_null()) {
-            let code = error_obj.get("code").and_then(|c| c.as_i64());
+            let code = Self::rpc_error_code(error_obj);
             if code == Some(-32601) {
                 return Err(WalletError::UnsupportedChannel);
             }
             if code == Some(-5) {
                 return Err(WalletError::InvalidAddress);
+            }
+            if Self::is_insufficient_funds_rpc(method, error_obj) {
+                return Err(WalletError::InsufficientFunds);
             }
             return Err(WalletError::OperationFailed);
         }
@@ -624,12 +655,19 @@ impl VrpcProvider {
         via: Option<&str>,
         preconvert: Option<bool>,
     ) -> Result<Value, WalletError> {
-        if currency.trim().is_empty() || convert_to.trim().is_empty() || !amount.is_finite() || amount <= 0.0 {
+        if currency.trim().is_empty()
+            || convert_to.trim().is_empty()
+            || !amount.is_finite()
+            || amount <= 0.0
+        {
             return Err(WalletError::OperationFailed);
         }
 
         let mut request = serde_json::Map::new();
-        request.insert("currency".to_string(), Value::String(currency.trim().to_string()));
+        request.insert(
+            "currency".to_string(),
+            Value::String(currency.trim().to_string()),
+        );
         request.insert(
             "convertto".to_string(),
             Value::String(convert_to.trim().to_string()),
@@ -643,8 +681,11 @@ impl VrpcProvider {
             request.insert("preconvert".to_string(), Value::Bool(preconvert_value));
         }
 
-        self.call_without_cache("estimateconversion", Value::Array(vec![Value::Object(request)]))
-            .await
+        self.call_without_cache(
+            "estimateconversion",
+            Value::Array(vec![Value::Object(request)]),
+        )
+        .await
     }
 
     /// sendcurrency: build and optionally return unsigned tx template.

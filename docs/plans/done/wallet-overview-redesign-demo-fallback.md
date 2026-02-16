@@ -1,6 +1,6 @@
 ---
 owner: lite-wallet-team
-last_reviewed: 2026-02-13
+last_reviewed: 2026-02-16
 ---
 
 # Completed plan: Wallet overview redesign with dev demo fallback
@@ -26,7 +26,7 @@ Completed.
 - Added live overview view-model helper:
   - `src/lib/utils/walletOverview.ts`
 - Added dev-only demo snapshot helper for empty wallet states:
-  - `src/lib/utils/walletOverviewDemo.ts`
+  - `src/lib/utils/walletOverviewDemo.ts` (removed on 2026-02-16)
 - Added development-only fallback behavior:
   - use demo data only when no usable live data exists,
   - live-only rendering once balances are present,
@@ -39,9 +39,15 @@ Completed.
 - `src/lib/components/wallet/sections/Overview.svelte`
 - `src/lib/components/wallet/WalletLayout.svelte`
 - `src/lib/utils/walletOverview.ts`
-- `src/lib/utils/walletOverviewDemo.ts`
 - `src/lib/i18n/locales/en.ts`
 - `src/lib/i18n/locales/nl.ts`
+
+## Post-completion updates
+
+- 2026-02-16: Removed the dev-only demo holdings fallback from
+  `src/lib/components/wallet/sections/Overview.svelte` and deleted
+  `src/lib/utils/walletOverviewDemo.ts` so overview holdings only render live data
+  or unavailable placeholders.
 
 ## Validation notes
 

@@ -129,7 +129,7 @@
         password: walletData.password
       });
       clearSensitiveData();
-      goto('/wallet');
+      await goto('/wallet');
     } catch (error) {
       const errorType = extractWalletErrorType(error);
       if (errorType === 'InvalidPassword' || errorType === 'OperationFailed') {

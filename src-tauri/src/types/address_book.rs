@@ -71,4 +71,3 @@ pub struct ValidateDestinationAddressResult {
     pub normalized_address: Option<String>,
     pub reason: Option<String>,
 }
-

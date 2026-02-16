@@ -108,7 +108,10 @@ async fn get_bridge_conversion_paths_vrpc(
     {
         return Err(WalletError::UnsupportedChannel);
     }
-    if source_coin.system_id != resolved.system_id {
+    if coin_registry
+        .find_by_system_id(&resolved.system_id, is_testnet)
+        .is_none()
+    {
         return Err(WalletError::UnsupportedChannel);
     }
 
@@ -142,7 +145,10 @@ async fn estimate_bridge_conversion_vrpc(
     {
         return Err(WalletError::UnsupportedChannel);
     }
-    if source_coin.system_id != resolved.system_id {
+    if coin_registry
+        .find_by_system_id(&resolved.system_id, is_testnet)
+        .is_none()
+    {
         return Err(WalletError::UnsupportedChannel);
     }
 

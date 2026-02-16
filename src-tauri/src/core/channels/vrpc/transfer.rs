@@ -16,8 +16,11 @@ use crate::types::transaction::PreflightWarning;
 use crate::types::{VrpcTransferPreflightParams, VrpcTransferPreflightResult, WalletError};
 
 const SATOSHIS_PER_COIN: i64 = 100_000_000;
-const DEFAULT_PARENT_FEE: f64 = 0.0001;
-const DEFAULT_PARENT_FEE_SAT: i64 = 10_000;
+const DEFAULT_PARENT_FEE_LOW: f64 = 0.0001;
+const DEFAULT_PARENT_FEE_LOW_SAT: i64 = 10_000;
+const DEFAULT_PARENT_FEE_HIGH: f64 = 0.0002;
+const DEFAULT_PARENT_FEE_HIGH_SAT: i64 = 20_000;
+const DEFAULT_NATIVE_CONVERSION_FEE_SAT: i64 = 25_000;
 const TRANSFER_PREFLIGHT_TTL: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Debug, Clone)]
@@ -77,9 +80,7 @@ fn parse_fee_sat(value: Option<&Value>, fallback_sat: i64) -> i64 {
         return normalize(raw_sat);
     }
     if let Some(raw_sat) = v.as_u64() {
-        return i64::try_from(raw_sat)
-            .map(normalize)
-            .unwrap_or(fallback);
+        return i64::try_from(raw_sat).map(normalize).unwrap_or(fallback);
     }
     if let Some(raw_coin) = v.as_f64() {
         let raw_sat = ((raw_coin.max(0.0)) * SATOSHIS_PER_COIN as f64).round() as i64;
@@ -102,10 +103,36 @@ fn parse_fee_sat(value: Option<&Value>, fallback_sat: i64) -> i64 {
     fallback
 }
 
-fn parse_fund_result(raw: Value) -> Result<(String, i64), WalletError> {
+fn parse_fund_result(raw: Value, fallback_fee_sat: i64) -> Result<(String, i64), WalletError> {
     let hex = parse_string(raw.get("hex")).ok_or(WalletError::OperationFailed)?;
-    let fee_sat = parse_fee_sat(raw.get("fee"), DEFAULT_PARENT_FEE_SAT);
+    let fee_sat = parse_fee_sat(raw.get("fee"), fallback_fee_sat);
     Ok((hex, fee_sat))
+}
+
+fn parse_coin_value_sat(value: &Value) -> Option<i64> {
+    if let Some(raw_sat) = value.as_i64() {
+        return Some(raw_sat.max(0));
+    }
+    if let Some(raw_sat) = value.as_u64() {
+        return i64::try_from(raw_sat).ok();
+    }
+    if let Some(raw_coin) = value.as_f64() {
+        let sat = (raw_coin.max(0.0) * SATOSHIS_PER_COIN as f64).round() as i64;
+        return Some(sat);
+    }
+    value.as_str().and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if trimmed.contains('.') || trimmed.contains('e') || trimmed.contains('E') {
+            let coin = trimmed.parse::<f64>().ok()?;
+            let sat = (coin.max(0.0) * SATOSHIS_PER_COIN as f64).round() as i64;
+            Some(sat)
+        } else {
+            trimmed.parse::<i64>().ok().map(|sat| sat.max(0))
+        }
+    })
 }
 
 fn parse_funding_utxos(raw: &Value) -> Vec<FundingUtxo> {
@@ -149,6 +176,185 @@ fn parse_amount_sat(amount: &str) -> Result<i64, WalletError> {
     Ok(sat)
 }
 
+fn parse_system_id_from_channel_id(channel_id: &str) -> Option<String> {
+    let (_, system_id) = channel_id.rsplit_once('.')?;
+    if system_id.trim().is_empty() {
+        return None;
+    }
+    Some(system_id.to_string())
+}
+
+async fn resolve_currency_id(provider: &VrpcProvider, currency: &str) -> Option<String> {
+    let resolved = provider.getcurrency(currency).await.ok()?;
+    parse_string(resolved.get("currencyid").or(resolved.get("currencyId")))
+}
+
+fn is_known_native_symbol(currency: &str) -> bool {
+    matches!(
+        currency.trim().to_ascii_uppercase().as_str(),
+        "VRSC" | "VRSCTEST"
+    )
+}
+
+fn total_available_satoshis(utxos: &[FundingUtxo]) -> i64 {
+    utxos
+        .iter()
+        .fold(0i64, |acc, utxo| acc.saturating_add(utxo.satoshis))
+}
+
+fn resolve_send_value_for_native_fee(
+    submitted_sat: i64,
+    available_sat: i64,
+    fee_sat: i64,
+) -> Result<(i64, bool), WalletError> {
+    if available_sat <= fee_sat {
+        return Err(WalletError::InsufficientFunds);
+    }
+    let max_sendable = available_sat.saturating_sub(fee_sat);
+    if max_sendable <= 0 {
+        return Err(WalletError::InsufficientFunds);
+    }
+    if submitted_sat <= max_sendable {
+        return Ok((submitted_sat, false));
+    }
+    Ok((max_sendable, true))
+}
+
+fn is_same_currency_ref(left: &str, right: &str) -> bool {
+    left.trim().eq_ignore_ascii_case(right.trim())
+}
+
+fn parent_fee_for_route(is_conversion_or_export: bool, source_is_native: bool) -> (f64, i64) {
+    let use_low_fee = is_conversion_or_export || source_is_native;
+    if use_low_fee {
+        (DEFAULT_PARENT_FEE_LOW, DEFAULT_PARENT_FEE_LOW_SAT)
+    } else {
+        (DEFAULT_PARENT_FEE_HIGH, DEFAULT_PARENT_FEE_HIGH_SAT)
+    }
+}
+
+fn parse_outputtotals_fee_sat(raw: &Value, fee_currency_refs: &[String]) -> Option<i64> {
+    let totals = raw.get("outputtotals")?.as_object()?;
+    for fee_ref in fee_currency_refs {
+        if fee_ref.trim().is_empty() {
+            continue;
+        }
+        if let Some((_, value)) = totals
+            .iter()
+            .find(|(key, _)| key.trim().eq_ignore_ascii_case(fee_ref))
+        {
+            let parsed = parse_coin_value_sat(value)?;
+            if parsed > 0 {
+                return Some(parsed);
+            }
+        }
+    }
+    None
+}
+
+async fn resolve_effective_fee_currency_id(
+    provider: &VrpcProvider,
+    params: &VrpcTransferPreflightParams,
+    system_id: Option<&str>,
+    is_conversion_or_export: bool,
+) -> Option<String> {
+    let user_selected = params
+        .fee_currency
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    if let Some(currency) = user_selected {
+        return resolve_currency_id(provider, currency)
+            .await
+            .or_else(|| Some(currency.to_string()));
+    }
+
+    if is_conversion_or_export {
+        return system_id.map(ToString::to_string);
+    }
+
+    None
+}
+
+async fn estimate_transfer_fee_satoshis(
+    provider: &VrpcProvider,
+    from_address: &str,
+    params: &VrpcTransferPreflightParams,
+    normalized_destination: &str,
+    parent_fee_coin: f64,
+    effective_fee_currency_id: Option<&str>,
+    system_id: Option<&str>,
+    is_conversion_or_export: bool,
+) -> Result<i64, WalletError> {
+    let explicit_fee_satoshis = params
+        .fee_satoshis
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(raw) = explicit_fee_satoshis {
+        let parsed = raw
+            .parse::<i64>()
+            .map_err(|_| WalletError::OperationFailed)?;
+        if parsed <= 0 {
+            return Err(WalletError::OperationFailed);
+        }
+        return Ok(parsed);
+    }
+
+    if !is_conversion_or_export {
+        return Ok(0);
+    }
+
+    let fee_currency_id = effective_fee_currency_id
+        .map(ToString::to_string)
+        .or_else(|| system_id.map(ToString::to_string));
+    let fee_currency_refs = {
+        let mut refs = Vec::new();
+        if let Some(ref_id) = fee_currency_id.as_deref() {
+            refs.push(ref_id.to_string());
+        }
+        if let Some(raw_fee_currency) = params
+            .fee_currency
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            if !refs
+                .iter()
+                .any(|existing| is_same_currency_ref(existing, raw_fee_currency))
+            {
+                refs.push(raw_fee_currency.to_string());
+            }
+        }
+        refs
+    };
+
+    if let (Some(system), Some(fee_currency)) = (system_id, fee_currency_id.as_deref()) {
+        if params.export_to.is_none() && is_same_currency_ref(system, fee_currency) {
+            return Ok(DEFAULT_NATIVE_CONVERSION_FEE_SAT);
+        }
+    }
+
+    let mut probe_output = build_sendcurrency_output(params, normalized_destination, 0.0)?;
+    if let Some(fee_currency) = fee_currency_id {
+        if let Some(output_obj) = probe_output.as_object_mut() {
+            output_obj.insert("feecurrency".to_string(), Value::String(fee_currency));
+        }
+    }
+
+    let sendcurrency_probe = provider
+        .sendcurrency(from_address, &[probe_output], 1, parent_fee_coin, true)
+        .await?;
+
+    if fee_currency_refs.is_empty() {
+        return Ok(0);
+    }
+
+    parse_outputtotals_fee_sat(&sendcurrency_probe, &fee_currency_refs)
+        .ok_or(WalletError::OperationFailed)
+}
+
 async fn normalize_destination(
     provider: &VrpcProvider,
     destination: &str,
@@ -182,22 +388,14 @@ async fn normalize_destination(
 fn build_sendcurrency_output(
     params: &VrpcTransferPreflightParams,
     normalized_destination: &str,
+    send_amount: f64,
 ) -> Result<Value, WalletError> {
     let mut out = Map::<String, Value>::new();
     out.insert(
         "currency".to_string(),
         Value::String(params.coin_id.clone()),
     );
-    out.insert(
-        "amount".to_string(),
-        Value::from(
-            params
-                .amount
-                .trim()
-                .parse::<f64>()
-                .map_err(|_| WalletError::OperationFailed)?,
-        ),
-    );
+    out.insert("amount".to_string(), Value::from(send_amount));
     out.insert(
         "address".to_string(),
         Value::String(normalized_destination.to_string()),
@@ -271,12 +469,6 @@ pub async fn preflight_transfer(
     let submitted_sat = parse_amount_sat(&params.amount)?;
     let (normalized_destination, mut warnings) =
         normalize_destination(provider, &params.destination).await?;
-    let output = build_sendcurrency_output(&params, &normalized_destination)?;
-
-    let sendcurrency_result = provider
-        .sendcurrency(from_address, &[output], 1, DEFAULT_PARENT_FEE, true)
-        .await?;
-    let unfunded_hex = parse_sendcurrency_hex(sendcurrency_result)?;
 
     let available_utxos = parse_funding_utxos(
         &provider
@@ -287,6 +479,74 @@ pub async fn preflight_transfer(
         return Err(WalletError::InsufficientFunds);
     }
 
+    let system_id = parse_system_id_from_channel_id(channel_id);
+    let source_currency_id = resolve_currency_id(provider, &params.coin_id).await;
+    let source_is_native = system_id
+        .as_deref()
+        .map(|system| {
+            source_currency_id
+                .as_deref()
+                .map(|currency_id| currency_id == system)
+                .unwrap_or(false)
+                || (source_currency_id.is_none() && is_known_native_symbol(&params.coin_id))
+        })
+        .unwrap_or(false);
+
+    let is_conversion_or_export = params.convert_to.is_some() || params.export_to.is_some();
+    let (parent_fee_coin, parent_fee_sat) =
+        parent_fee_for_route(is_conversion_or_export, source_is_native);
+    let effective_fee_currency_id = resolve_effective_fee_currency_id(
+        provider,
+        &params,
+        system_id.as_deref(),
+        is_conversion_or_export,
+    )
+    .await;
+    let transfer_fee_sat = estimate_transfer_fee_satoshis(
+        provider,
+        from_address,
+        &params,
+        &normalized_destination,
+        parent_fee_coin,
+        effective_fee_currency_id.as_deref(),
+        system_id.as_deref(),
+        is_conversion_or_export,
+    )
+    .await?;
+    let native_required_fee_sat = if source_is_native
+        && system_id.is_some()
+        && effective_fee_currency_id
+            .as_deref()
+            .zip(system_id.as_deref())
+            .map(|(fee_currency, system)| is_same_currency_ref(fee_currency, system))
+            .unwrap_or(false)
+    {
+        parent_fee_sat.saturating_add(transfer_fee_sat)
+    } else {
+        parent_fee_sat
+    };
+
+    let available_sat = total_available_satoshis(&available_utxos);
+    let (send_value_sat, amount_was_adjusted) = if source_is_native {
+        resolve_send_value_for_native_fee(submitted_sat, available_sat, native_required_fee_sat)?
+    } else {
+        (submitted_sat, false)
+    };
+    let send_amount = send_value_sat as f64 / SATOSHIS_PER_COIN as f64;
+    let amount_adjusted = amount_was_adjusted.then(|| sat_to_decimal_string(send_value_sat));
+
+    let mut output = build_sendcurrency_output(&params, &normalized_destination, send_amount)?;
+    if let Some(fee_currency) = effective_fee_currency_id {
+        if let Some(output_obj) = output.as_object_mut() {
+            output_obj.insert("feecurrency".to_string(), Value::String(fee_currency));
+        }
+    }
+
+    let sendcurrency_result = provider
+        .sendcurrency(from_address, &[output], 1, parent_fee_coin, true)
+        .await?;
+    let unfunded_hex = parse_sendcurrency_hex(sendcurrency_result)?;
+
     let funding_utxos: Vec<Value> = available_utxos
         .iter()
         .map(|utxo| serde_json::json!({"txid": utxo.txid, "voutnum": utxo.vout}))
@@ -296,10 +556,10 @@ pub async fn preflight_transfer(
             &unfunded_hex,
             Some(&funding_utxos),
             Some(from_address),
-            Some(DEFAULT_PARENT_FEE),
+            Some(parent_fee_coin),
         )
         .await?;
-    let (funded_hex, fee_sat) = parse_fund_result(funded_raw)?;
+    let (funded_hex, fee_sat) = parse_fund_result(funded_raw, parent_fee_sat)?;
     let payload_inputs = collect_payload_inputs(&funded_hex, &available_utxos)?;
     if payload_inputs.is_empty() {
         return Err(WalletError::OperationFailed);
@@ -318,7 +578,7 @@ pub async fn preflight_transfer(
         inputs: payload_inputs,
         to_address: normalized_destination.clone(),
         from_address: from_address.to_string(),
-        value: sat_to_decimal_string(submitted_sat),
+        value: sat_to_decimal_string(send_value_sat),
         fee: sat_to_decimal_string(fee_sat),
     };
     let payload_value = serde_json::to_value(&payload).map_err(|_| WalletError::OperationFailed)?;
@@ -337,9 +597,9 @@ pub async fn preflight_transfer(
         preflight_id,
         fee: sat_to_decimal_string(fee_sat),
         fee_currency: params.coin_id.clone(),
-        value: sat_to_decimal_string(submitted_sat),
+        value: sat_to_decimal_string(send_value_sat),
         amount_submitted: params.amount,
-        amount_adjusted: None,
+        amount_adjusted,
         to_address: normalized_destination,
         from_address: from_address.to_string(),
         warnings,
@@ -383,7 +643,7 @@ mod tests {
         params.map_to = Some("Bridge.vETH".to_string());
         params.vdxf_tag = Some("iTag".to_string());
 
-        let output = build_sendcurrency_output(&params, "Rdest").expect("output");
+        let output = build_sendcurrency_output(&params, "Rdest", 1.0).expect("output");
         assert_eq!(
             output,
             json!({
@@ -420,15 +680,45 @@ mod tests {
 
     #[test]
     fn parse_fund_result_uses_default_fee_when_non_positive_reported() {
-        let (hex, fee_sat) = parse_fund_result(json!({"hex": "deadbeef", "fee": 0})).expect("parse");
+        let (hex, fee_sat) = parse_fund_result(
+            json!({"hex": "deadbeef", "fee": 0}),
+            DEFAULT_PARENT_FEE_LOW_SAT,
+        )
+        .expect("parse");
         assert_eq!(hex, "deadbeef");
-        assert_eq!(fee_sat, DEFAULT_PARENT_FEE_SAT);
+        assert_eq!(fee_sat, DEFAULT_PARENT_FEE_LOW_SAT);
     }
 
     #[test]
     fn parse_fund_result_parses_decimal_coin_fee() {
-        let (_, fee_sat) =
-            parse_fund_result(json!({"hex": "deadbeef", "fee": 0.0001})).expect("parse");
-        assert_eq!(fee_sat, DEFAULT_PARENT_FEE_SAT);
+        let (_, fee_sat) = parse_fund_result(
+            json!({"hex": "deadbeef", "fee": 0.0001}),
+            DEFAULT_PARENT_FEE_LOW_SAT,
+        )
+        .expect("parse");
+        assert_eq!(fee_sat, DEFAULT_PARENT_FEE_LOW_SAT);
+    }
+
+    #[test]
+    fn resolve_send_value_for_native_fee_keeps_submitted_when_fee_headroom_exists() {
+        let (value, adjusted) =
+            resolve_send_value_for_native_fee(100_000, 150_000, DEFAULT_PARENT_FEE_LOW_SAT)
+                .expect("resolve");
+        assert_eq!(value, 100_000);
+        assert!(!adjusted);
+    }
+
+    #[test]
+    fn resolve_send_value_for_native_fee_adjusts_when_submitted_equals_available() {
+        let (value, adjusted) =
+            resolve_send_value_for_native_fee(100_000, 100_000, 10_000).expect("resolve");
+        assert_eq!(value, 90_000);
+        assert!(adjusted);
+    }
+
+    #[test]
+    fn resolve_send_value_for_native_fee_returns_insufficient_when_fee_unfundable() {
+        let result = resolve_send_value_for_native_fee(100_000, 10_000, 10_000);
+        assert!(matches!(result, Err(WalletError::InsufficientFunds)));
     }
 }

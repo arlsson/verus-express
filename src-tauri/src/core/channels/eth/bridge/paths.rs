@@ -258,21 +258,6 @@ async fn derive_paths_from_listcurrencies(
         list_payloads.push(vrpc_provider.listcurrencies().await?);
     }
 
-    let chain_definition = if let Some(chain_id) = chain_currency_id {
-        match vrpc_provider.getcurrency(chain_id).await {
-            Ok(definition) => Some(definition),
-            Err(err) => {
-                println!(
-                    "[BRIDGE] chain currency lookup failed for {} during fallback: {:?}",
-                    chain_id, err
-                );
-                None
-            }
-        }
-    } else {
-        None
-    };
-
     let chain_info = match vrpc_provider.getinfo().await {
         Ok(info) => Some(info),
         Err(err) => {
@@ -293,15 +278,77 @@ async fn derive_paths_from_listcurrencies(
         .or_else(|| chain_currency_id.map(ToString::to_string));
 
     let payload_refs = list_payloads.iter().collect::<Vec<_>>();
-    derive_paths_from_list_payloads(
-        &payload_refs,
-        source_definition,
-        destination_currency_filter,
+    let source_system_id = source_definition
+        .get("systemid")
+        .and_then(extract_stringish);
+    let mut candidate_chain_ids: Vec<String> = Vec::new();
+
+    for candidate in [
         chain_currency_id,
-        chain_definition.as_ref(),
-        longest_chain,
         chain_info_chain_id.as_deref(),
-    )
+        source_system_id.as_deref(),
+    ] {
+        let Some(candidate_value) = candidate.map(str::trim).filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        if candidate_chain_ids
+            .iter()
+            .any(|existing| equals_ignore_case(existing, candidate_value))
+        {
+            continue;
+        }
+        candidate_chain_ids.push(candidate_value.to_string());
+    }
+
+    if candidate_chain_ids.is_empty() {
+        return derive_paths_from_list_payloads(
+            &payload_refs,
+            source_definition,
+            destination_currency_filter,
+            chain_currency_id,
+            None,
+            longest_chain,
+            chain_info_chain_id.as_deref(),
+        );
+    }
+
+    let mut last_empty_paths: Option<HashMap<String, Vec<BridgeConversionPathQuote>>> = None;
+    for candidate_chain_id in candidate_chain_ids {
+        let chain_definition = match vrpc_provider.getcurrency(&candidate_chain_id).await {
+            Ok(definition) => Some(definition),
+            Err(err) => {
+                println!(
+                    "[BRIDGE] chain currency lookup failed for {} during fallback: {:?}",
+                    candidate_chain_id, err
+                );
+                None
+            }
+        };
+
+        let derived_paths = derive_paths_from_list_payloads(
+            &payload_refs,
+            source_definition,
+            destination_currency_filter,
+            Some(candidate_chain_id.as_str()),
+            chain_definition.as_ref(),
+            longest_chain,
+            chain_info_chain_id.as_deref(),
+        )?;
+        let route_count = count_quote_rows(&derived_paths);
+        if parity_debug_enabled() {
+            println!(
+                "[BRIDGE][PARITY] fallback_chain={} routes={}",
+                candidate_chain_id, route_count
+            );
+        }
+        if route_count > 0 {
+            return Ok(derived_paths);
+        }
+        last_empty_paths = Some(derived_paths);
+    }
+
+    Ok(last_empty_paths.unwrap_or_default())
 }
 
 fn derive_paths_from_list_payloads(
@@ -1293,7 +1340,13 @@ fn insert_currency_display_lookup_entry(lookup: &mut HashMap<String, String>, de
         return;
     };
 
-    for key in ["currencyid", "address", "fullyqualifiedname", "name", "symbol"] {
+    for key in [
+        "currencyid",
+        "address",
+        "fullyqualifiedname",
+        "name",
+        "symbol",
+    ] {
         let Some(value) = definition.get(key).and_then(extract_stringish) else {
             continue;
         };
@@ -1517,8 +1570,8 @@ fn extract_bool(value: Option<&Value>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_currency_display_lookup, derive_paths_from_list_payloads, enrich_quote_display_names,
-        parse_conversion_paths,
+        collect_currency_display_lookup, derive_paths_from_list_payloads,
+        enrich_quote_display_names, parse_conversion_paths,
     };
     use serde_json::json;
 

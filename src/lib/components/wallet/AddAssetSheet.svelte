@@ -1,7 +1,7 @@
 <script lang="ts">
   import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
-  import SearchIcon from '@lucide/svelte/icons/search';
   import AlertCircleIcon from '@lucide/svelte/icons/alert-circle';
+  import SearchInput from '$lib/components/common/SearchInput.svelte';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import AddAssetRow from '$lib/components/wallet/AddAssetRow.svelte';
   import { Input } from '$lib/components/ui/input';
@@ -327,18 +327,11 @@
     {#if view === 'catalog'}
       <div class="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
         <div class="sticky top-0 z-10 bg-background pb-3">
-          <div class="relative">
-            <SearchIcon
-              class="text-foreground/60 pointer-events-none absolute top-1/2 left-3.5 h-[17px] w-[17px] -translate-y-1/2"
-              absoluteStrokeWidth
-            />
-            <Input
-              type="text"
-              bind:value={searchInput}
-              placeholder={i18n.t('wallet.addAsset.searchPlaceholder')}
-              class="pl-10 focus-visible:ring-0 focus-visible:ring-transparent"
-            />
-          </div>
+          <SearchInput
+            bind:value={searchInput}
+            placeholder={i18n.t('wallet.addAsset.searchPlaceholder')}
+            inputClass="focus-visible:ring-0 focus-visible:ring-transparent"
+          />
 
           {#if actionError}
             <div class="mt-2 flex items-start gap-2 rounded-md bg-destructive/12 px-2.5 py-2 text-xs text-destructive">

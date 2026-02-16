@@ -1,7 +1,7 @@
 <!--
   Component: Overview
   Purpose: Wallet overview with hero balances, quick actions, and currency list
-  Last Updated: Wallet overview redesign with dev-only demo fallback
+  Last Updated: Wallet overview redesign live-data only
   Security: No sensitive operations - display only
 -->
 
@@ -22,7 +22,6 @@
   import { walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { i18nStore } from '$lib/i18n';
   import { buildWalletOverviewViewModel } from '$lib/utils/walletOverview.js';
-  import { getWalletOverviewDemoSnapshot } from '$lib/utils/walletOverviewDemo.js';
   import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
   import AddAssetSheet from '$lib/components/wallet/AddAssetSheet.svelte';
 
@@ -122,12 +121,7 @@
       network: walletData.network
     })
   );
-  const shouldUseDemoData = $derived(import.meta.env.DEV && !liveOverview.hasUsableLiveData);
-  const overview = $derived(
-    shouldUseDemoData
-      ? getWalletOverviewDemoSnapshot(walletData.network, i18n.intlLocale)
-      : liveOverview
-  );
+  const overview = $derived(liveOverview);
   const visibleRows = $derived(overview.rows);
   const rowIconSize = 34;
 </script>

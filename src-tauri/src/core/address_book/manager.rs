@@ -35,9 +35,11 @@ pub fn now_unix() -> u64 {
 pub fn sorted_contacts(snapshot: &AddressBookSnapshot) -> Vec<AddressBookContact> {
     let mut contacts = snapshot.contacts.clone();
     contacts.sort_by(|a, b| {
-        b.updated_at
-            .cmp(&a.updated_at)
-            .then(a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()))
+        b.updated_at.cmp(&a.updated_at).then(
+            a.display_name
+                .to_lowercase()
+                .cmp(&b.display_name.to_lowercase()),
+        )
     });
     contacts
 }
@@ -70,10 +72,12 @@ pub fn upsert_contact(
         return Err(WalletError::AddressBookInvalidInput);
     }
 
-    let existing_index = request
-        .id
-        .as_ref()
-        .and_then(|id| snapshot.contacts.iter().position(|contact| &contact.id == id));
+    let existing_index = request.id.as_ref().and_then(|id| {
+        snapshot
+            .contacts
+            .iter()
+            .position(|contact| &contact.id == id)
+    });
 
     if request.id.is_some() && existing_index.is_none() {
         return Err(WalletError::AddressBookContactNotFound);
@@ -113,7 +117,8 @@ pub fn upsert_contact(
             return Err(WalletError::AddressBookInvalidInput);
         }
 
-        let normalized_address = normalize_destination_address(input.kind.clone(), &input.address, network)?;
+        let normalized_address =
+            normalize_destination_address(input.kind.clone(), &input.address, network)?;
         let unique_key = endpoint_unique_key(input.kind.clone(), &normalized_address);
         if !unique_keys.insert(unique_key) {
             return Err(WalletError::AddressBookDuplicate);
@@ -121,7 +126,9 @@ pub fn upsert_contact(
 
         let endpoint_id = input.id.unwrap_or_else(|| Uuid::new_v4().to_string());
         let existing_endpoint = existing_endpoint_map.get(&endpoint_id);
-        let created_at = existing_endpoint.map(|endpoint| endpoint.created_at).unwrap_or(timestamp);
+        let created_at = existing_endpoint
+            .map(|endpoint| endpoint.created_at)
+            .unwrap_or(timestamp);
         let last_used_at = existing_endpoint.and_then(|endpoint| endpoint.last_used_at);
 
         endpoints.push(AddressBookEndpoint {
@@ -320,4 +327,3 @@ mod tests {
         assert!(matches!(result, Err(WalletError::AddressBookDuplicate)));
     }
 }
-

@@ -65,7 +65,11 @@ async fn store_snapshot(
     let payload = serde_json::to_vec(snapshot).map_err(|_| WalletError::OperationFailed)?;
     context
         .stronghold_store
-        .store_address_book(&context.account_id, context.password_hash.as_ref(), &payload)
+        .store_address_book(
+            &context.account_id,
+            context.password_hash.as_ref(),
+            &payload,
+        )
         .await
 }
 

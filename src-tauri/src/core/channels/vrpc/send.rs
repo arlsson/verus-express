@@ -197,5 +197,7 @@ fn find_payload_input<'a>(
     txid: &str,
     vout: u32,
 ) -> Option<&'a crate::core::channels::vrpc::preflight::VrpcInputRef> {
-    inputs.iter().find(|input| input.txid == txid && input.vout == vout)
+    inputs
+        .iter()
+        .find(|input| input.txid == txid && input.vout == vout)
 }

@@ -1,12 +1,12 @@
 //
 // Module 5: VRPC preflight — validate address, build/fund tx, store record (incl. to/from/value/fee for send), return PreflightResult.
 
+use bitcoin::consensus::Decodable;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use uuid::Uuid;
-use bitcoin::consensus::Decodable;
 use std::collections::HashSet;
 use std::io::Cursor;
+use uuid::Uuid;
 
 use crate::core::channels::store::{PreflightRecord, PreflightStore};
 use crate::core::channels::vrpc::provider::VrpcProvider;
@@ -84,9 +84,7 @@ fn parse_fee_sat(value: Option<&Value>, fallback_sat: i64) -> i64 {
         return normalize(raw_sat);
     }
     if let Some(raw_sat) = v.as_u64() {
-        return i64::try_from(raw_sat)
-            .map(normalize)
-            .unwrap_or(fallback);
+        return i64::try_from(raw_sat).map(normalize).unwrap_or(fallback);
     }
     if let Some(raw_coin) = v.as_f64() {
         let raw_sat = ((raw_coin.max(0.0)) * SATOSHIS_PER_COIN as f64).round() as i64;
@@ -166,8 +164,9 @@ fn collect_payload_inputs_from_funded_tx(
         if !seen.insert((txid.clone(), vout)) {
             return Err(WalletError::OperationFailed);
         }
-        let Some((_, _, satoshis, script_pub_key)) =
-            candidates.iter().find(|(c_txid, c_vout, _, _)| c_txid == &txid && *c_vout == vout)
+        let Some((_, _, satoshis, script_pub_key)) = candidates
+            .iter()
+            .find(|(c_txid, c_vout, _, _)| c_txid == &txid && *c_vout == vout)
         else {
             return Err(WalletError::OperationFailed);
         };

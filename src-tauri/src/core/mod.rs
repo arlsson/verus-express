@@ -2,8 +2,8 @@
 // Core business logic modules
 // Last Updated: Module 7 update engine; polling and Tauri events for balances/transactions
 
-pub mod auth;
 pub mod address_book;
+pub mod auth;
 pub mod channels;
 pub mod coins;
 pub mod crypto;

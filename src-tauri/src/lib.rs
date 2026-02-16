@@ -7,7 +7,9 @@ mod commands;
 mod core;
 mod types;
 
-use commands::{address_book, bridge_transfer, coins, guard, identity, transaction, vrpc_transfer, wallet};
+use commands::{
+    address_book, bridge_transfer, coins, guard, identity, transaction, vrpc_transfer, wallet,
+};
 use core::channels::btc::BtcProviderPool;
 use core::channels::eth::EthProviderPool;
 use core::channels::vrpc::VrpcProviderPool;

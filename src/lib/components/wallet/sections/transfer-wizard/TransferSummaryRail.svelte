@@ -3,27 +3,22 @@
   import { cn } from '$lib/utils.js';
   import { getTransferSummaryLabels } from '$lib/transfer/transferWizardCopy';
 
+  type SummaryRow = {
+    label: string;
+    primary: string;
+    secondary?: string;
+    breakAll?: boolean;
+  };
+
   type TransferSummaryRailProps = {
-    sourceValue: string;
-    toValue: string;
-    routeValue: string;
-    amountValue: string;
-    recipientValue: string;
-    estimatedReceiveValue: string;
-    networkFeeValue: string;
+    rows: SummaryRow[];
     warnings?: string[];
     class?: string;
   };
 
   /* eslint-disable prefer-const */
   let {
-    sourceValue,
-    toValue,
-    routeValue,
-    amountValue,
-    recipientValue,
-    estimatedReceiveValue,
-    networkFeeValue,
+    rows,
     warnings = [],
     class: className = ''
   }: TransferSummaryRailProps = $props();
@@ -31,11 +26,6 @@
 
   const i18n = $derived($i18nStore);
   const labels = $derived(getTransferSummaryLabels(i18n.t));
-
-  function formatValue(value: string): string {
-    const trimmed = value.trim();
-    return trimmed ? trimmed : labels.notSet;
-  }
 </script>
 
 <section class={cn('bg-[#EDEDED] dark:bg-[#28282B] h-full p-2', className)}>
@@ -43,36 +33,21 @@
     <h3 class="text-sm font-semibold">{labels.title}</h3>
   </div>
 
-  <dl class="mt-3 space-y-2.5">
-    <div>
-      <dt class="text-muted-foreground text-xs">{labels.from}</dt>
-      <dd class="mt-1 text-sm">{formatValue(sourceValue)}</dd>
-    </div>
-    <div>
-      <dt class="text-muted-foreground text-xs">{labels.to}</dt>
-      <dd class="mt-1 text-sm">{formatValue(toValue)}</dd>
-    </div>
-    <div>
-      <dt class="text-muted-foreground text-xs">{labels.route}</dt>
-      <dd class="mt-1 text-sm">{formatValue(routeValue)}</dd>
-    </div>
-    <div>
-      <dt class="text-muted-foreground text-xs">{labels.amount}</dt>
-      <dd class="mt-1 text-sm">{formatValue(amountValue)}</dd>
-    </div>
-    <div>
-      <dt class="text-muted-foreground text-xs">{labels.recipient}</dt>
-      <dd class="mt-1 break-all text-sm">{formatValue(recipientValue)}</dd>
-    </div>
-    <div>
-      <dt class="text-muted-foreground text-xs">{labels.estimatedReceive}</dt>
-      <dd class="mt-1 text-sm">{formatValue(estimatedReceiveValue)}</dd>
-    </div>
-    <div>
-      <dt class="text-muted-foreground text-xs">{labels.networkFee}</dt>
-      <dd class="mt-1 text-sm">{formatValue(networkFeeValue)}</dd>
-    </div>
-  </dl>
+  {#if rows.length > 0}
+    <dl class="mt-3 space-y-2.5">
+      {#each rows as row}
+        <div>
+          <dt class="text-muted-foreground text-xs">{row.label}</dt>
+          <dd class={cn('mt-1 text-sm', row.breakAll ? 'break-all' : '')}>
+            <p>{row.primary}</p>
+            {#if row.secondary}
+              <p class="text-muted-foreground mt-0.5 text-[10px]">{row.secondary}</p>
+            {/if}
+          </dd>
+        </div>
+      {/each}
+    </dl>
+  {/if}
 
   {#if warnings.length > 0}
     <div class="mt-3 space-y-1">
