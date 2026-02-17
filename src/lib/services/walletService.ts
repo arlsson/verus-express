@@ -68,6 +68,10 @@ export async function getAddresses(): Promise<AddressResponse> {
   return invoke<AddressResponse>('get_addresses');
 }
 
+export async function readClipboardText(): Promise<string> {
+  return invoke<string>('read_clipboard_text');
+}
+
 export async function getBalances(channelId: string, coinId?: string): Promise<BalanceResult> {
   return invoke<BalanceResult>('get_balances', {
     channel_id: channelId,

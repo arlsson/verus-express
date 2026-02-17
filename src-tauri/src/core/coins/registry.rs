@@ -150,9 +150,22 @@ impl CoinRegistry {
             .map_err(|_| WalletError::OperationFailed)?;
 
         let duplicate_static = static_coins.iter().any(|c| Self::has_duplicate(c, &def));
-        let duplicate_dynamic = dynamic.iter().any(|c| Self::has_duplicate(c, &def));
-        if duplicate_static || duplicate_dynamic {
+        if duplicate_static {
             return Err(WalletError::AssetAlreadyExists);
+        }
+
+        if let Some(existing_index) = dynamic.iter().position(|c| Self::has_duplicate(c, &def)) {
+            if dynamic[existing_index] == def {
+                return Err(WalletError::AssetAlreadyExists);
+            }
+
+            let previous = dynamic[existing_index].clone();
+            dynamic[existing_index] = def.clone();
+            if let Err(err) = self.persist_dynamic_coins(&dynamic) {
+                dynamic[existing_index] = previous;
+                return Err(err);
+            }
+            return Ok(def);
         }
 
         dynamic.push(def.clone());
@@ -381,6 +394,71 @@ mod tests {
         };
 
         let result = registry.add_coin(duplicate);
+        assert!(matches!(result, Err(WalletError::AssetAlreadyExists)));
+    }
+
+    #[test]
+    fn add_coin_updates_existing_dynamic_duplicate_with_new_metadata() {
+        let registry = CoinRegistry::new();
+        let stale = CoinDefinition {
+            id: "i3d4vSCbXYEC3u6TzwohMvdghHkhBrXWpE".to_string(),
+            currency_id: "i3d4vSCbXYEC3u6TzwohMvdghHkhBrXWpE".to_string(),
+            system_id: "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV".to_string(),
+            display_ticker: "VRSC".to_string(),
+            display_name: "Verus".to_string(),
+            coin_paprika_id: Some("vrsc-verus-coin".to_string()),
+            proto: Protocol::Vrsc,
+            compatible_channels: vec![Channel::Vrpc],
+            decimals: 8,
+            vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+            electrum_endpoints: None,
+            seconds_per_block: 60,
+            mapped_to: None,
+            is_testnet: false,
+        };
+        registry.add_coin(stale).expect("add stale dynamic coin");
+
+        let corrected = CoinDefinition {
+            id: "i3d4vSCbXYEC3u6TzwohMvdghHkhBrXWpE".to_string(),
+            currency_id: "i3d4vSCbXYEC3u6TzwohMvdghHkhBrXWpE".to_string(),
+            system_id: "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV".to_string(),
+            display_ticker: "Floralis".to_string(),
+            display_name: "Floralis".to_string(),
+            coin_paprika_id: None,
+            proto: Protocol::Vrsc,
+            compatible_channels: vec![Channel::Vrpc],
+            decimals: 8,
+            vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+            electrum_endpoints: None,
+            seconds_per_block: 60,
+            mapped_to: None,
+            is_testnet: false,
+        };
+        let updated = registry
+            .add_coin(corrected.clone())
+            .expect("update stale duplicate coin");
+
+        assert_eq!(updated.display_ticker, "Floralis");
+        assert_eq!(updated.display_name, "Floralis");
+        assert_eq!(updated.coin_paprika_id, None);
+
+        let found = registry
+            .find_by_id("i3d4vSCbXYEC3u6TzwohMvdghHkhBrXWpE", false)
+            .expect("updated dynamic coin");
+        assert_eq!(found.display_ticker, "Floralis");
+        assert_eq!(found.display_name, "Floralis");
+        assert_eq!(found, corrected);
+    }
+
+    #[test]
+    fn add_coin_rejects_identical_dynamic_duplicate() {
+        let registry = CoinRegistry::new();
+        let sample = sample_dynamic_coin();
+        registry
+            .add_coin(sample.clone())
+            .expect("add first dynamic coin");
+
+        let result = registry.add_coin(sample);
         assert!(matches!(result, Err(WalletError::AssetAlreadyExists)));
     }
 

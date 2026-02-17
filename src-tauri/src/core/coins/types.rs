@@ -25,7 +25,7 @@ pub enum Channel {
 }
 
 /// Definition of a supported coin. All fields are safe for IPC/frontend.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoinDefinition {
     pub id: String,

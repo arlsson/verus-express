@@ -8,7 +8,8 @@ mod core;
 mod types;
 
 use commands::{
-    address_book, bridge_transfer, coins, guard, identity, transaction, vrpc_transfer, wallet,
+    address_book, bridge_transfer, clipboard, coins, guard, identity, transaction, vrpc_transfer,
+    wallet,
 };
 use core::channels::btc::BtcProviderPool;
 use core::channels::eth::EthProviderPool;
@@ -150,6 +151,7 @@ pub fn run() {
             wallet::lock_wallet,
             wallet::get_addresses,
             wallet::is_unlocked,
+            clipboard::read_clipboard_text,
             // Coin registry commands (Module 3)
             coins::get_coin_registry,
             coins::add_coin_definition,

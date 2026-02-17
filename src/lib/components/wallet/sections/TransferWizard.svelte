@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
   import CheckCircle2Icon from '@lucide/svelte/icons/check-circle-2';
@@ -7,6 +7,7 @@
   import InfoIcon from '@lucide/svelte/icons/info';
   import PencilIcon from '@lucide/svelte/icons/pencil';
   import UserRoundIcon from '@lucide/svelte/icons/user-round';
+  import XIcon from '@lucide/svelte/icons/x';
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Input } from '$lib/components/ui/input';
@@ -171,6 +172,7 @@
   let selectedCoinId = $state('');
   let currentStep = $state<TransferStepId>('details');
   let amount = $state('');
+  let amountInputEl = $state<HTMLInputElement | null>(null);
   let destinationAddress = $state('');
   let conversionEnabled = $state(false);
   let conversionInitialized = $state(false);
@@ -1116,6 +1118,11 @@
     saveRecipientError = '';
   });
 
+  $effect(() => {
+    if (currentStep !== 'details') return;
+    void tick().then(() => amountInputEl?.focus());
+  });
+
   function clearPreflightState() {
     simplePreflightResult = null;
     bridgePreflightResult = null;
@@ -1145,6 +1152,17 @@
     if (!selfDestinationAddress) return;
     destinationAddress = selfDestinationAddress;
     transferError = '';
+  }
+
+  async function pasteRecipientAddress() {
+    try {
+      const pastedAddress = (await walletService.readClipboardText()).trim();
+      if (!pastedAddress) return;
+      destinationAddress = pastedAddress;
+      transferError = '';
+    } catch {
+      // Ignore clipboard read errors and keep manual entry available.
+    }
   }
 
   function mapAddressBookError(error: unknown): string {
@@ -1726,6 +1744,11 @@
     amount = selectedBalance;
   }
 
+  function clearAmount() {
+    amount = '';
+    transferError = '';
+  }
+
   function setTransferMode(mode: 'send' | 'convert') {
     if (mode === 'convert') {
       if (selectedCoin && !sourceSupportsConversion) return;
@@ -1901,14 +1924,28 @@
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0 flex-1">
                     <Label for="transfer-amount" class="sr-only">{i18n.t('wallet.transfer.amountLabel')}</Label>
-                    <Input
-                      id="transfer-amount"
-                      type="text"
-                      inputmode="decimal"
-                      placeholder={i18n.t('wallet.transfer.amountPlaceholder')}
-                      bind:value={amount}
-                      class="h-auto min-h-0 border-0 !bg-transparent dark:!bg-transparent px-0 py-0 text-foreground placeholder:text-foreground dark:placeholder:text-foreground text-[2.5rem] md:text-[2.5rem] font-semibold leading-none tracking-tight focus-visible:ring-0"
-                    />
+                    <div class="relative">
+                      <Input
+                        bind:ref={amountInputEl}
+                        id="transfer-amount"
+                        type="text"
+                        inputmode="decimal"
+                        placeholder={i18n.t('wallet.transfer.amountPlaceholder')}
+                        bind:value={amount}
+                        class="h-auto min-h-0 border-0 !bg-transparent dark:!bg-transparent px-0 py-0 pr-8 text-foreground placeholder:text-foreground dark:placeholder:text-foreground text-[2.5rem] md:text-[2.5rem] font-semibold leading-none tracking-tight focus-visible:ring-0"
+                      />
+                      {#if amount.trim()}
+                        <button
+                          type="button"
+                          class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-0 -translate-y-1/2 rounded-sm p-1 transition-colors focus-visible:outline-none focus-visible:ring-2"
+                          onclick={clearAmount}
+                          aria-label={i18n.t('wallet.transfer.amountClear')}
+                          title={i18n.t('wallet.transfer.amountClear')}
+                        >
+                          <XIcon class="size-3.5" />
+                        </button>
+                      {/if}
+                    </div>
                     <p class="text-muted-foreground mt-1 px-0.5 text-xs tabular-nums">{sourceAmountFiatDisplay}</p>
                   </div>
 
@@ -1948,18 +1985,22 @@
                   </div>
                 </div>
 
-                <div class="mt-2 min-h-6 flex flex-wrap items-center justify-end gap-2">
+                <div class="mt-2 min-h-6 flex items-center justify-between gap-2">
+                  <div class="min-w-0 flex-1">
+                    {#if !amountValid && amount.trim()}
+                      <p class="text-destructive truncate text-xs">{i18n.t('wallet.transfer.amountInvalid')}</p>
+                    {/if}
+                  </div>
+
                   {#if selectedCoinOption}
-                    <p class="text-muted-foreground truncate text-xs">{formatSheetBalance(selectedBalance)}</p>
-                    <Button variant="secondary" size="sm" class="h-6 rounded-full px-2.5 text-[11px]" onclick={setMaxAmount}>
-                      {i18n.t('wallet.transfer.max')}
-                    </Button>
+                    <div class="flex shrink-0 items-center gap-2">
+                      <p class="text-muted-foreground truncate text-xs">{formatSheetBalance(selectedBalance)}</p>
+                      <Button variant="secondary" size="sm" class="h-6 rounded-full px-2.5 text-[11px]" onclick={setMaxAmount}>
+                        {i18n.t('wallet.transfer.max')}
+                      </Button>
+                    </div>
                   {/if}
                 </div>
-
-                {#if !amountValid && amount.trim()}
-                  <p class="text-destructive mt-2 text-xs">{i18n.t('wallet.transfer.amountInvalid')}</p>
-                {/if}
               </section>
             </div>
 
@@ -2018,7 +2059,7 @@
                   </div>
 
                   {#if selectedReceiveAssetOption && amountValid}
-                    <div class="mt-4 ml-auto w-full max-w-[22rem] rounded-xl bg-muted/25 p-2.5">
+                    <div class="mt-8 mx-auto w-full max-w-[22rem] rounded-xl bg-muted/25 p-2.5">
                       <button
                         type="button"
                         class="focus-visible:ring-ring/60 hover:bg-muted/50 dark:hover:bg-muted/60 flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left outline-none focus-visible:ring-2"
@@ -2074,12 +2115,23 @@
           <Card.Content class="px-0">
             <div class="mx-auto flex w-full max-w-[560px] flex-col items-center gap-3 text-center">
               <Label for="transfer-recipient" class="sr-only">{i18n.t('wallet.transfer.recipientLabel')}</Label>
-              <Input
-                id="transfer-recipient"
-                class="h-11 rounded-xl bg-muted/85 px-4 text-center text-base font-medium dark:bg-muted/55 md:text-base"
-                bind:value={destinationAddress}
-                placeholder={recipientInputCopy.placeholder}
-              />
+              <div class="relative w-full">
+                <Input
+                  id="transfer-recipient"
+                  class="h-11 rounded-xl bg-muted/85 px-4 pr-14 text-center text-base font-medium dark:bg-muted/55 md:text-base"
+                  bind:value={destinationAddress}
+                  placeholder={recipientInputCopy.placeholder}
+                />
+                <button
+                  type="button"
+                  class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none transition-colors focus-visible:outline-none focus-visible:ring-2"
+                  onclick={pasteRecipientAddress}
+                  aria-label={i18n.t('wallet.transfer.recipient.paste')}
+                  title={i18n.t('wallet.transfer.recipient.paste')}
+                >
+                  {i18n.t('wallet.transfer.recipient.paste')}
+                </button>
+              </div>
               {#if destinationAddress.trim() && !recipientValid}
                 <p class="text-destructive text-xs">{i18n.t('wallet.transfer.recipientInvalid')}</p>
               {/if}

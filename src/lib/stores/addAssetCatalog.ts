@@ -65,32 +65,24 @@ function catalogLookupKey(value: string, isTestnet: boolean): string {
 
 const catalogById = new Map<string, CatalogCoin>();
 const catalogByCurrencyId = new Map<string, CatalogCoin>();
-const catalogBySystemId = new Map<string, CatalogCoin>();
 
 for (const coin of catalogCoins) {
   catalogById.set(catalogLookupKey(coin.id, coin.isTestnet), coin);
   if (coin.currencyId.trim().length > 0) {
     catalogByCurrencyId.set(catalogLookupKey(coin.currencyId, coin.isTestnet), coin);
   }
-  if (coin.systemId.trim().length > 0) {
-    catalogBySystemId.set(catalogLookupKey(coin.systemId, coin.isTestnet), coin);
-  }
 }
 
 function findCatalogCoinForDefinition(definition: CoinDefinition): CatalogCoin | null {
   const isTestnet = Boolean(definition.isTestnet);
-  const keys = [definition.id, definition.currencyId, definition.systemId]
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
+  const idKey = catalogLookupKey(definition.id, isTestnet);
+  const idMatch = catalogById.get(idKey);
+  if (idMatch) return idMatch;
 
-  for (const value of keys) {
-    const key = catalogLookupKey(value, isTestnet);
-    const hit =
-      catalogById.get(key) ?? catalogByCurrencyId.get(key) ?? catalogBySystemId.get(key);
-    if (hit) return hit;
-  }
-
-  return null;
+  const currencyId = definition.currencyId.trim();
+  if (currencyId.length === 0) return null;
+  const currencyKey = catalogLookupKey(currencyId, isTestnet);
+  return catalogByCurrencyId.get(currencyKey) ?? null;
 }
 
 export function applyCatalogMetadataToCoinDefinition(definition: CoinDefinition): CoinDefinition {

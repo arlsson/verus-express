@@ -4,6 +4,7 @@
 
 pub mod address_book;
 pub mod bridge_transfer;
+pub mod clipboard;
 pub mod coins;
 pub mod guard;
 pub mod identity;

@@ -1,6 +1,8 @@
 <script lang="ts">
   import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
   import AlertCircleIcon from '@lucide/svelte/icons/alert-circle';
+  import CheckIcon from '@lucide/svelte/icons/check';
+  import PlusIcon from '@lucide/svelte/icons/plus';
   import SearchInput from '$lib/components/common/SearchInput.svelte';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import AddAssetRow from '$lib/components/wallet/AddAssetRow.svelte';
@@ -43,11 +45,14 @@
 
   let actionError = $state('');
   let actionSuccess = $state('');
+  let actionSuccessTone = $state<'success' | 'destructive'>('success');
+  let actionSuccessTimer = $state<ReturnType<typeof setTimeout> | null>(null);
   let activeRowKey = $state<string | null>(null);
 
   let manualInput = $state('');
   let manualResolving = $state(false);
   let manualAdding = $state(false);
+  let manualAdded = $state(false);
   let manualError = $state('');
   let manualResolvedCoin = $state<CoinDefinition | null>(null);
   let manualCandidates = $state<PbaasCandidate[]>([]);
@@ -73,8 +78,44 @@
     resetSheetState();
   });
 
+  $effect(() => {
+    return () => {
+      if (actionSuccessTimer) {
+        clearTimeout(actionSuccessTimer);
+      }
+    };
+  });
+
   function handleOpenAutoFocus(event: Event) {
     event.preventDefault();
+  }
+
+  function clearActionSuccessTimer() {
+    if (!actionSuccessTimer) return;
+    clearTimeout(actionSuccessTimer);
+    actionSuccessTimer = null;
+  }
+
+  function clearActionSuccess() {
+    clearActionSuccessTimer();
+    actionSuccess = '';
+    actionSuccessTone = 'success';
+  }
+
+  function setActionSuccess(
+    message: string,
+    tone: 'success' | 'destructive' = 'success',
+    autoClearMs?: number
+  ) {
+    clearActionSuccessTimer();
+    actionSuccess = message;
+    actionSuccessTone = tone;
+    if (!autoClearMs || autoClearMs <= 0 || !message) return;
+    actionSuccessTimer = setTimeout(() => {
+      actionSuccess = '';
+      actionSuccessTone = 'success';
+      actionSuccessTimer = null;
+    }, autoClearMs);
   }
 
   function resetSheetState() {
@@ -82,12 +123,13 @@
     searchInput = '';
     debouncedSearch = '';
     actionError = '';
-    actionSuccess = '';
+    clearActionSuccess();
     activeRowKey = null;
 
     manualInput = '';
     manualResolving = false;
     manualAdding = false;
+    manualAdded = false;
     manualError = '';
     manualResolvedCoin = null;
     manualCandidates = [];
@@ -167,21 +209,36 @@
     walletChannelsStore.set(buildWalletChannels(networkCoins, walletChannels.vrpcAddress));
   }
 
-  async function addCoinToRegistry(definition: CoinDefinition, successMessageKey: string) {
+  async function addCoinToRegistry(
+    definition: CoinDefinition,
+    successMessageKey: string,
+    options?: { showSuccessNotice?: boolean; successTone?: 'success' | 'destructive'; autoClearMs?: number }
+  ) {
+    const showSuccessNotice = options?.showSuccessNotice ?? true;
+    const successTone = options?.successTone ?? 'success';
+    const autoClearMs = options?.autoClearMs;
     const visibilityKey = assetVisibilityKey(definition.id, definition.proto);
     try {
       await coinsService.addCoinDefinition(definition);
       showAssetByKey(visibilityKey, network);
       await refreshRegistryState();
       actionError = '';
-      actionSuccess = i18n.t(successMessageKey, { ticker: definition.displayTicker });
+      if (showSuccessNotice) {
+        setActionSuccess(i18n.t(successMessageKey, { ticker: definition.displayTicker }), successTone, autoClearMs);
+      } else {
+        clearActionSuccess();
+      }
     } catch (error) {
       const errorType = extractWalletErrorType(error);
       if (errorType === 'AssetAlreadyExists' && isAssetHiddenByKey(visibilityKey, network)) {
         showAssetByKey(visibilityKey, network);
         await refreshRegistryState();
         actionError = '';
-        actionSuccess = i18n.t('wallet.addAsset.toast.enabled', { ticker: definition.displayTicker });
+        if (showSuccessNotice) {
+          setActionSuccess(i18n.t('wallet.addAsset.toast.enabled', { ticker: definition.displayTicker }), successTone, autoClearMs);
+        } else {
+          clearActionSuccess();
+        }
         return;
       }
 
@@ -190,7 +247,7 @@
   }
 
   async function handleCatalogAction(entry: AddAssetEntry) {
-    actionSuccess = '';
+    clearActionSuccess();
     actionError = '';
     activeRowKey = entry.key;
 
@@ -198,14 +255,14 @@
       if (entry.status === 'added') {
         hideAssetByKey(entry.key, network);
         await refreshRegistryState();
-        actionSuccess = i18n.t('wallet.addAsset.toast.disabled', { ticker: entry.displayTicker });
+        setActionSuccess(i18n.t('wallet.addAsset.toast.disabled', { ticker: entry.displayTicker }), 'destructive', 2000);
         return;
       }
 
       if (isAssetHiddenByKey(entry.key, network)) {
         showAssetByKey(entry.key, network);
         await refreshRegistryState();
-        actionSuccess = i18n.t('wallet.addAsset.toast.enabled', { ticker: entry.displayTicker });
+        setActionSuccess(i18n.t('wallet.addAsset.toast.enabled', { ticker: entry.displayTicker }));
         return;
       }
 
@@ -243,9 +300,10 @@
 
   async function resolveManualAsset() {
     manualError = '';
+    manualAdded = false;
     manualCandidates = [];
     manualResolvedCoin = null;
-    actionSuccess = '';
+    clearActionSuccess();
 
     const input = manualInput.trim();
     if (!input) {
@@ -281,21 +339,26 @@
   }
 
   async function addResolvedManualAsset() {
-    if (!manualResolvedCoin) return;
+    if (!manualResolvedCoin || manualAdded) return;
     manualAdding = true;
     manualError = '';
 
     try {
       const hydratedCoin = applyCatalogMetadataToCoinDefinition(manualResolvedCoin);
-      await addCoinToRegistry(hydratedCoin, 'wallet.addAsset.toast.added');
-      manualInput = '';
-      manualResolvedCoin = null;
-      manualCandidates = [];
+      await addCoinToRegistry(hydratedCoin, 'wallet.addAsset.toast.added', { showSuccessNotice: false });
+      manualAdded = true;
     } catch (error) {
       manualError = translateAssetError(error, 'wallet.addAsset.error.addFailed');
     } finally {
       manualAdding = false;
     }
+  }
+
+  function shouldShowResolvedTicker(coin: CoinDefinition): boolean {
+    const ticker = coin.displayTicker.trim();
+    const name = coin.displayName.trim();
+    if (!ticker || !name) return Boolean(ticker);
+    return ticker.toLowerCase() !== name.toLowerCase();
   }
 </script>
 
@@ -341,7 +404,13 @@
           {/if}
 
           {#if actionSuccess}
-            <div class="mt-2 rounded-md bg-emerald-500/12 px-2.5 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+            <div
+              class={`mt-2 rounded-md px-2.5 py-2 text-xs ${
+                actionSuccessTone === 'destructive'
+                  ? 'bg-destructive/12 text-destructive'
+                  : 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+              }`}
+            >
               {actionSuccess}
             </div>
           {/if}
@@ -405,41 +474,93 @@
         <div class="min-h-0 flex-1 overflow-y-auto pr-1">
           <section class="mt-3 space-y-4 pb-1">
             {#if actionSuccess}
-              <div class="rounded-md bg-emerald-500/12 px-2.5 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+              <div
+                class={`rounded-md px-2.5 py-2 text-xs ${
+                  actionSuccessTone === 'destructive'
+                    ? 'bg-destructive/12 text-destructive'
+                    : 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+                }`}
+              >
                 {actionSuccess}
               </div>
             {/if}
 
-            <Input
-              type="text"
-              bind:value={manualInput}
-              placeholder={i18n.t('wallet.addAsset.manualPlaceholder')}
-              class="h-10"
-            />
+            <form
+              class="space-y-4"
+              onsubmit={(event) => {
+                event.preventDefault();
+                if (manualResolving || manualAdding) return;
+                resolveManualAsset();
+              }}
+            >
+              <Input
+                type="text"
+                bind:value={manualInput}
+                placeholder={i18n.t('wallet.addAsset.manualPlaceholder')}
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck={false}
+                class="h-10 focus-visible:ring-0 focus-visible:ring-transparent focus-visible:border-transparent"
+              />
 
-            <div class="flex gap-2">
-              <Button
-                variant="secondary"
-                class="h-8"
-                onclick={resolveManualAsset}
-                disabled={manualResolving || manualAdding}
-              >
-                {manualResolving ? i18n.t('wallet.addAsset.resolving') : i18n.t('wallet.addAsset.resolve')}
-              </Button>
-
-              {#if manualResolvedCoin}
-                <Button class="h-8" onclick={addResolvedManualAsset} disabled={manualAdding || manualResolving}>
-                  {manualAdding ? i18n.t('wallet.addAsset.adding') : i18n.t('wallet.addAsset.add')}
+              <div class="flex gap-2">
+                <Button variant="secondary" type="submit" class="h-8" disabled={manualResolving || manualAdding}>
+                  {manualResolving ? i18n.t('wallet.addAsset.resolving') : i18n.t('wallet.addAsset.resolve')}
                 </Button>
-              {/if}
-            </div>
+              </div>
+            </form>
 
             {#if manualResolvedCoin}
-              <div class="flex items-center gap-2 px-0.5 py-1">
+              <div class="flex items-center gap-3 rounded-lg bg-muted/65 px-3.5 py-3 dark:bg-muted/55">
                 <CoinIcon coinId={manualResolvedCoin.id} coinName={manualResolvedCoin.displayName} size={20} decorative />
-                <p class="text-xs text-foreground">
-                  {manualResolvedCoin.displayTicker} - {manualResolvedCoin.displayName}
-                </p>
+
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-semibold text-foreground">
+                    {manualResolvedCoin.displayName}
+                  </p>
+                  {#if shouldShowResolvedTicker(manualResolvedCoin)}
+                    <p class="truncate text-xs text-muted-foreground">{manualResolvedCoin.displayTicker}</p>
+                  {/if}
+                </div>
+
+                <div class="flex shrink-0 items-center gap-2">
+                  <span
+                    class="bg-background/60 text-muted-foreground inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide dark:bg-background/45"
+                  >
+                    {manualResolvedCoin.proto.toUpperCase()}
+                  </span>
+                  <button
+                    type="button"
+                    class={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors focus-visible:ring-ring focus-visible:ring-[2px] focus-visible:outline-none disabled:opacity-45 ${
+                      manualAdded
+                        ? 'text-emerald-700 bg-emerald-500/15 dark:text-emerald-300 dark:bg-emerald-500/20'
+                        : 'text-primary bg-primary/12 hover:bg-primary/20 dark:bg-primary/20 dark:hover:bg-primary/30'
+                    }`}
+                    onclick={addResolvedManualAsset}
+                    disabled={manualAdding || manualResolving || manualAdded}
+                    aria-label={
+                      manualAdded
+                        ? i18n.t('wallet.addAsset.stateAdded')
+                        : manualAdding
+                          ? i18n.t('wallet.addAsset.adding')
+                          : i18n.t('wallet.addAsset.add')
+                    }
+                    title={
+                      manualAdded
+                        ? i18n.t('wallet.addAsset.stateAdded')
+                        : manualAdding
+                          ? i18n.t('wallet.addAsset.adding')
+                          : i18n.t('wallet.addAsset.add')
+                    }
+                  >
+                    {#if manualAdded}
+                      <CheckIcon class="h-4 w-4" absoluteStrokeWidth />
+                    {:else}
+                      <PlusIcon class="h-4 w-4" absoluteStrokeWidth />
+                    {/if}
+                  </button>
+                </div>
               </div>
             {/if}
 
