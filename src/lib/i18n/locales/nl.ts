@@ -214,6 +214,8 @@ export const nl: Record<string, string> = {
   'wallet.assetDetails.addressSearchPlaceholder': 'Zoek adressen',
   'wallet.assetDetails.noAddresses': 'Geen adressen gevonden voor je zoekopdracht.',
   'wallet.assetDetails.pendingLabel': 'In behandeling',
+  'wallet.assetDetails.receivedFallback': 'Ontvangen',
+  'wallet.assetDetails.sentFallback': 'Verzonden',
   'wallet.assetDetails.unknownCounterparty': 'Onbekende tegenpartij',
   'wallet.addAsset.open': 'Asset toevoegen',
   'wallet.addAsset.title': 'Asset toevoegen',

@@ -201,30 +201,30 @@ fn collect_vrpc_system_descriptors(
                 .map(|coin| coin.system_id.clone())
                 .unwrap_or_else(|| requested_system_id.clone());
 
-            let (system_ticker, system_display_name) =
-                if let Some((ticker, display_name)) = canonical_network_label_for_system(&system_id)
-                {
-                    (ticker, display_name)
-                } else if let Some(system_coin) = native_system_definition {
-                    let ticker = system_coin.display_ticker.trim();
-                    let display_name = system_coin.display_name.trim();
+            let (system_ticker, system_display_name) = if let Some((ticker, display_name)) =
+                canonical_network_label_for_system(&system_id)
+            {
+                (ticker, display_name)
+            } else if let Some(system_coin) = native_system_definition {
+                let ticker = system_coin.display_ticker.trim();
+                let display_name = system_coin.display_name.trim();
 
-                    (
-                        if ticker.is_empty() {
-                            system_id.clone()
-                        } else {
-                            ticker.to_string()
-                        },
-                        if display_name.is_empty() {
-                            system_id.clone()
-                        } else {
-                            display_name.to_string()
-                        },
-                    )
-                } else {
-                    // Never fall back to arbitrary token labels for network names.
-                    (system_id.clone(), system_id.clone())
-                };
+                (
+                    if ticker.is_empty() {
+                        system_id.clone()
+                    } else {
+                        ticker.to_string()
+                    },
+                    if display_name.is_empty() {
+                        system_id.clone()
+                    } else {
+                        display_name.to_string()
+                    },
+                )
+            } else {
+                // Never fall back to arbitrary token labels for network names.
+                (system_id.clone(), system_id.clone())
+            };
 
             VrpcSystemDescriptor {
                 system_id: system_id.clone(),

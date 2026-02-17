@@ -31,6 +31,7 @@
     setSelectedScopeSystem
   } from '$lib/stores/coinScopes.js';
   import { formatUsdAmount } from '$lib/utils/walletOverview.js';
+  import { extractWalletErrorMessage, extractWalletErrorType } from '$lib/utils/walletErrors.js';
   import * as walletService from '$lib/services/walletService.js';
   import type { CoinScope, Transaction } from '$lib/types/wallet.js';
   import type { TransferEntryContext } from './transfer-wizard/types';
@@ -501,7 +502,9 @@
     const counterparty =
       direction === 'in' ? transaction.fromAddress.trim() : transaction.toAddress.trim();
     if (!counterparty) {
-      return i18n.t('wallet.assetDetails.unknownCounterparty');
+      return direction === 'in'
+        ? i18n.t('wallet.assetDetails.receivedFallback')
+        : i18n.t('wallet.assetDetails.sentFallback');
     }
 
     return truncateMiddle(counterparty, 10, 10);
@@ -512,8 +515,12 @@
     return `${value.slice(0, start)}...${value.slice(-end)}`;
   }
 
-  function formatTimestamp(timestamp?: number): string {
-    if (!timestamp || timestamp <= 0) return i18n.t('wallet.assetDetails.pendingLabel');
+  function formatTimestamp(transaction: Transaction): string {
+    if (transaction.pending) return i18n.t('wallet.assetDetails.pendingLabel');
+
+    const timestamp = transaction.timestamp;
+    if (!timestamp || timestamp <= 0) return '—';
+
     return i18n.formatDate(timestamp * 1000, {
       day: '2-digit',
       month: 'short',
@@ -523,20 +530,14 @@
   }
 
   function mapWalletError(error: unknown): string {
-    if (typeof error === 'string') {
-      try {
-        const parsed = JSON.parse(error) as { message?: string };
-        if (typeof parsed?.message === 'string' && parsed.message.trim().length > 0) {
-          return parsed.message;
-        }
-      } catch {
-        // Continue to fallback.
-      }
+    const errorType = extractWalletErrorType(error);
+    const rawMessage = extractWalletErrorMessage(error);
+
+    if (errorType === 'OperationFailed') {
+      if (rawMessage && rawMessage.toLowerCase() !== 'operation failed') return rawMessage;
     }
 
-    if (error instanceof Error && error.message.trim().length > 0) {
-      return error.message;
-    }
+    if (rawMessage) return rawMessage;
 
     return i18n.t('common.unknownError');
   }
@@ -751,7 +752,7 @@
                       <div class="min-w-0">
                         <p class="truncate text-sm font-medium">{transactionCounterparty(transaction)}</p>
                         <p class="text-muted-foreground mt-0.5 text-xs">
-                          {formatTimestamp(transaction.timestamp)}
+                          {formatTimestamp(transaction)}
                         </p>
                       </div>
                       <div class="text-right">

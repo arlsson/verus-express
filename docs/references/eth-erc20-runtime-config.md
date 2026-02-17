@@ -26,8 +26,13 @@ Default behavior without overrides:
 
 - Mainnet RPC: `https://mainnet.infura.io/v3/{INFURA_PROJECT_ID}`
 - Testnet RPC: `https://goerli.infura.io/v3/{INFURA_PROJECT_ID}`
-- Etherscan mainnet: `https://api.etherscan.io/api`
-- Etherscan testnet: `https://api-goerli.etherscan.io/api`
+- Etherscan mainnet: `https://api.etherscan.io/v2/api`
+- Etherscan testnet: `https://api.etherscan.io/v2/api`
+
+History requests include explicit Etherscan chain IDs:
+
+- Mainnet: `chainid=1`
+- Testnet (Goerli parity): `chainid=5`
 
 ## Startup validation behavior
 
@@ -51,3 +56,11 @@ The following mobile behaviors are intentionally out of scope for desktop core p
 - Add-token ERC20 UX and persisted custom contract definitions.
 
 These are tracked as phase-2 work once ETH/ERC20 core stability is validated.
+
+## Groundbase parity reference
+
+Desktop ETH/ERC20 history behavior is intentionally aligned to valu-mobile:
+
+- `src/utils/web3/etherscan.js`
+- `src/utils/api/channels/eth/requests/getEthTransactions.js`
+- `src/utils/api/channels/erc20/requests/getErc20Transactions.js`

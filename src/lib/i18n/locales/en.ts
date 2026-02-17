@@ -210,6 +210,8 @@ export const en: Record<string, string> = {
   'wallet.assetDetails.addressSearchPlaceholder': 'Search addresses',
   'wallet.assetDetails.noAddresses': 'No addresses match your search.',
   'wallet.assetDetails.pendingLabel': 'Pending',
+  'wallet.assetDetails.receivedFallback': 'Received',
+  'wallet.assetDetails.sentFallback': 'Sent',
   'wallet.assetDetails.unknownCounterparty': 'Unknown counterparty',
   'wallet.addAsset.open': 'Add asset',
   'wallet.addAsset.title': 'Add asset',

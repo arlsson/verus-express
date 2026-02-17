@@ -118,17 +118,17 @@ pub struct EtherscanHistoryClient {
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct EtherscanTxRecord {
-    #[serde(default)]
+    #[serde(default, alias = "blockNumber")]
     pub block_number: String,
-    #[serde(default)]
+    #[serde(default, alias = "timeStamp", alias = "timestamp")]
     pub time_stamp: String,
     #[serde(default)]
     pub hash: String,
     #[serde(default)]
     pub nonce: String,
-    #[serde(default)]
+    #[serde(default, alias = "blockHash")]
     pub block_hash: String,
-    #[serde(default)]
+    #[serde(default, alias = "transactionIndex")]
     pub transaction_index: String,
     #[serde(default)]
     pub from: String,
@@ -138,13 +138,13 @@ pub struct EtherscanTxRecord {
     pub value: String,
     #[serde(default)]
     pub gas: String,
-    #[serde(default)]
+    #[serde(default, alias = "gasPrice")]
     pub gas_price: String,
-    #[serde(default)]
+    #[serde(default, alias = "gasUsed")]
     pub gas_used: String,
-    #[serde(default)]
+    #[serde(default, alias = "cumulativeGasUsed")]
     pub cumulative_gas_used: String,
-    #[serde(default)]
+    #[serde(default, alias = "contractAddress", alias = "contractaddress")]
     pub contract_address: String,
     #[serde(default)]
     pub confirmations: String,
@@ -194,19 +194,7 @@ impl EtherscanHistoryClient {
             WalletNetwork::Testnet => &self.testnet_url,
         };
 
-        let mut query: Vec<(&str, String)> = vec![
-            ("module", "account".to_string()),
-            ("action", action.to_string()),
-            ("address", address.to_string()),
-            ("startblock", "0".to_string()),
-            ("endblock", "99999999".to_string()),
-            ("sort", "asc".to_string()),
-            ("apikey", self.api_key.clone()),
-        ];
-
-        if let Some(contract) = contract_address {
-            query.push(("contractaddress", contract.to_string()));
-        }
+        let query = self.build_history_query(network, action, address, contract_address);
 
         let response = self
             .client
@@ -224,7 +212,43 @@ impl EtherscanHistoryClient {
             .json()
             .await
             .map_err(|_| WalletError::OperationFailed)?;
+        Self::parse_history_payload(network, action, payload)
+    }
 
+    fn build_history_query(
+        &self,
+        network: WalletNetwork,
+        action: &str,
+        address: &str,
+        contract_address: Option<&str>,
+    ) -> Vec<(String, String)> {
+        let mut query = vec![
+            (
+                "chainid".to_string(),
+                chain_id_for_network(network).to_string(),
+            ),
+            ("module".to_string(), "account".to_string()),
+            ("action".to_string(), action.to_string()),
+            ("address".to_string(), address.to_string()),
+            ("startblock".to_string(), "0".to_string()),
+            ("endblock".to_string(), "99999999".to_string()),
+            ("sort".to_string(), "asc".to_string()),
+            ("apikey".to_string(), self.api_key.clone()),
+        ];
+
+        if let Some(contract) = contract_address {
+            // Match valu-mobile's ethers provider parameter naming.
+            query.push(("contractAddress".to_string(), contract.to_string()));
+        }
+
+        query
+    }
+
+    fn parse_history_payload(
+        network: WalletNetwork,
+        action: &str,
+        payload: Value,
+    ) -> Result<Vec<EtherscanTxRecord>, WalletError> {
         let status = payload
             .get("status")
             .and_then(|s| s.as_str())
@@ -233,16 +257,24 @@ impl EtherscanHistoryClient {
             .get("message")
             .and_then(|s| s.as_str())
             .unwrap_or_default();
+        let result = payload.get("result").cloned().unwrap_or(Value::Null);
 
-        if status == "0" && message.eq_ignore_ascii_case("No transactions found") {
+        if status == "0"
+            && (message.eq_ignore_ascii_case("No transactions found")
+                || message.eq_ignore_ascii_case("No records found"))
+        {
             return Ok(vec![]);
         }
 
-        let records = payload
-            .get("result")
-            .and_then(|v| v.as_array())
-            .ok_or(WalletError::OperationFailed)?;
+        if status != "1" || !message.to_ascii_uppercase().starts_with("OK") {
+            log_history_api_error(network, action, status, message, &result);
+            if is_rate_limited_result(&result) {
+                return Err(WalletError::NetworkError);
+            }
+            return Err(WalletError::OperationFailed);
+        }
 
+        let records = result.as_array().ok_or(WalletError::OperationFailed)?;
         let mut out = Vec::with_capacity(records.len());
         for entry in records {
             let tx: EtherscanTxRecord =
@@ -251,5 +283,227 @@ impl EtherscanHistoryClient {
         }
 
         Ok(out)
+    }
+}
+
+fn chain_id_for_network(network: WalletNetwork) -> u64 {
+    match network {
+        WalletNetwork::Mainnet => 1,
+        WalletNetwork::Testnet => 5,
+    }
+}
+
+fn is_rate_limited_result(result: &Value) -> bool {
+    result
+        .as_str()
+        .map(|value| value.to_ascii_lowercase().contains("rate limit"))
+        .unwrap_or(false)
+}
+
+fn log_history_api_error(
+    network: WalletNetwork,
+    action: &str,
+    status: &str,
+    message: &str,
+    result: &Value,
+) {
+    let result_summary = match result {
+        Value::String(value) => value.to_string(),
+        Value::Array(value) => format!("array({})", value.len()),
+        Value::Object(_) => "object".to_string(),
+        Value::Null => "null".to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+    };
+
+    println!(
+        "[ETH][HISTORY] Etherscan API response not usable network={:?} action={} status={} message={} result={}",
+        network, action, status, message, result_summary
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EtherscanHistoryClient;
+    use crate::types::wallet::WalletNetwork;
+    use crate::types::WalletError;
+    use serde_json::json;
+
+    fn query_value(query: &[(String, String)], key: &str) -> Option<String> {
+        query
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, value)| value.clone())
+    }
+
+    #[test]
+    fn build_history_query_sets_mainnet_chain_id_for_eth_txlist() {
+        let client = EtherscanHistoryClient::new(
+            "api-key".to_string(),
+            "https://api.etherscan.io/v2/api".to_string(),
+            "https://api.etherscan.io/v2/api".to_string(),
+        );
+        let query = client.build_history_query(WalletNetwork::Mainnet, "txlist", "0xabc", None);
+
+        assert_eq!(query_value(&query, "chainid").as_deref(), Some("1"));
+        assert_eq!(query_value(&query, "module").as_deref(), Some("account"));
+        assert_eq!(query_value(&query, "action").as_deref(), Some("txlist"));
+        assert_eq!(query_value(&query, "address").as_deref(), Some("0xabc"));
+        assert_eq!(query_value(&query, "startblock").as_deref(), Some("0"));
+        assert_eq!(query_value(&query, "endblock").as_deref(), Some("99999999"));
+        assert_eq!(query_value(&query, "sort").as_deref(), Some("asc"));
+        assert_eq!(query_value(&query, "apikey").as_deref(), Some("api-key"));
+    }
+
+    #[test]
+    fn build_history_query_sets_testnet_chain_id_and_contract_for_erc20() {
+        let client = EtherscanHistoryClient::new(
+            "api-key".to_string(),
+            "https://api.etherscan.io/v2/api".to_string(),
+            "https://api.etherscan.io/v2/api".to_string(),
+        );
+        let query = client.build_history_query(
+            WalletNetwork::Testnet,
+            "tokentx",
+            "0xowner",
+            Some("0xtoken"),
+        );
+
+        assert_eq!(query_value(&query, "chainid").as_deref(), Some("5"));
+        assert_eq!(query_value(&query, "action").as_deref(), Some("tokentx"));
+        assert_eq!(
+            query_value(&query, "contractAddress").as_deref(),
+            Some("0xtoken")
+        );
+    }
+
+    #[test]
+    fn parse_history_payload_returns_empty_for_no_transactions_found() {
+        let payload = json!({
+            "status": "0",
+            "message": "No transactions found",
+            "result": []
+        });
+
+        let parsed = EtherscanHistoryClient::parse_history_payload(
+            WalletNetwork::Mainnet,
+            "txlist",
+            payload,
+        )
+        .expect("parse");
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn parse_history_payload_returns_empty_for_no_records_found() {
+        let payload = json!({
+            "status": "0",
+            "message": "No records found",
+            "result": []
+        });
+
+        let parsed = EtherscanHistoryClient::parse_history_payload(
+            WalletNetwork::Mainnet,
+            "txlist",
+            payload,
+        )
+        .expect("parse");
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn parse_history_payload_maps_rate_limit_to_network_error() {
+        let payload = json!({
+            "status": "0",
+            "message": "NOTOK",
+            "result": "Max rate limit reached, please use API Key for higher rate limit"
+        });
+
+        let err = EtherscanHistoryClient::parse_history_payload(
+            WalletNetwork::Mainnet,
+            "txlist",
+            payload,
+        )
+        .expect_err("rate-limit error");
+        assert!(matches!(err, WalletError::NetworkError));
+    }
+
+    #[test]
+    fn parse_history_payload_maps_notok_to_operation_failed() {
+        let payload = json!({
+            "status": "0",
+            "message": "NOTOK",
+            "result": "Free API access is temporarily unavailable"
+        });
+
+        let err = EtherscanHistoryClient::parse_history_payload(
+            WalletNetwork::Mainnet,
+            "txlist",
+            payload,
+        )
+        .expect_err("notok error");
+        assert!(matches!(err, WalletError::OperationFailed));
+    }
+
+    #[test]
+    fn parse_history_payload_rejects_non_array_result_on_success() {
+        let payload = json!({
+            "status": "1",
+            "message": "OK",
+            "result": "unexpected shape"
+        });
+
+        let err = EtherscanHistoryClient::parse_history_payload(
+            WalletNetwork::Mainnet,
+            "txlist",
+            payload,
+        )
+        .expect_err("shape error");
+        assert!(matches!(err, WalletError::OperationFailed));
+    }
+
+    #[test]
+    fn parse_history_payload_deserializes_camel_case_record_fields() {
+        let payload = json!({
+            "status": "1",
+            "message": "OK",
+            "result": [
+                {
+                    "blockNumber": "123",
+                    "timeStamp": "1700000000",
+                    "hash": "0xhash",
+                    "nonce": "4",
+                    "blockHash": "0xblock",
+                    "transactionIndex": "9",
+                    "from": "0xfrom",
+                    "to": "0xto",
+                    "value": "1000000",
+                    "gas": "21000",
+                    "gasPrice": "1000000000",
+                    "gasUsed": "21000",
+                    "cumulativeGasUsed": "22000",
+                    "contractAddress": "0xtoken",
+                    "confirmations": "42"
+                }
+            ]
+        });
+
+        let parsed = EtherscanHistoryClient::parse_history_payload(
+            WalletNetwork::Mainnet,
+            "tokentx",
+            payload,
+        )
+        .expect("parse");
+        assert_eq!(parsed.len(), 1);
+        let first = &parsed[0];
+        assert_eq!(first.block_number, "123");
+        assert_eq!(first.time_stamp, "1700000000");
+        assert_eq!(first.block_hash, "0xblock");
+        assert_eq!(first.transaction_index, "9");
+        assert_eq!(first.gas_price, "1000000000");
+        assert_eq!(first.gas_used, "21000");
+        assert_eq!(first.cumulative_gas_used, "22000");
+        assert_eq!(first.contract_address, "0xtoken");
+        assert_eq!(first.confirmations, "42");
     }
 }

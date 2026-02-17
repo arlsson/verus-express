@@ -1,7 +1,7 @@
 //
 // Module 5: VRPC HTTP JSON-RPC client. Allowlist-only endpoints; TTL cache; no sensitive data in logs.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error as _;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -839,6 +839,13 @@ impl VrpcProviderPool {
         system_id.trim().to_ascii_lowercase()
     }
 
+    fn providers_by_system(&self, network: WalletNetwork) -> &HashMap<String, VrpcProvider> {
+        match network {
+            WalletNetwork::Mainnet => &self.mainnet_by_system,
+            WalletNetwork::Testnet => &self.testnet_by_system,
+        }
+    }
+
     pub fn new() -> Self {
         let mut mainnet_by_system = HashMap::<String, VrpcProvider>::new();
         mainnet_by_system.insert(
@@ -900,6 +907,34 @@ impl VrpcProviderPool {
             WalletNetwork::Testnet => self.testnet_by_system.contains_key(&normalized),
         }
     }
+
+    /// Returns provider candidates for reads that may target a specific system.
+    /// Order: preferred hint (if any), network default, then remaining system providers.
+    pub fn provider_candidates(
+        &self,
+        network: WalletNetwork,
+        preferred_system_hint: Option<&str>,
+    ) -> Vec<&VrpcProvider> {
+        let mut candidates = Vec::<&VrpcProvider>::new();
+        if let Some(system_hint) = preferred_system_hint
+            .map(str::trim)
+            .filter(|system_hint| !system_hint.is_empty())
+        {
+            candidates.push(self.for_system(network, system_hint));
+        }
+        candidates.push(self.for_network(network));
+        candidates.extend(self.providers_by_system(network).values());
+
+        let mut seen_base_urls = HashSet::<String>::new();
+        candidates
+            .into_iter()
+            .filter(|provider| seen_base_urls.insert(provider.base_url.to_ascii_lowercase()))
+            .collect()
+    }
+
+    pub fn endpoint_url_for_system(&self, network: WalletNetwork, system_id: &str) -> String {
+        self.for_system(network, system_id).base_url.clone()
+    }
 }
 
 impl Default for VrpcProviderPool {
@@ -959,5 +994,39 @@ mod tests {
         let fallback = pool.for_system(WalletNetwork::Mainnet, "iUnknownSystemAddress1234567890");
         let default = pool.for_network(WalletNetwork::Mainnet);
         assert_eq!(fallback.base_url, default.base_url);
+    }
+
+    #[test]
+    fn provider_candidates_prioritize_preferred_hint_and_deduplicate_urls() {
+        let pool = VrpcProviderPool::new();
+        let candidates = pool.provider_candidates(WalletNetwork::Mainnet, Some(VDEX_SYSTEM_ID));
+
+        assert!(!candidates.is_empty());
+        assert_eq!(candidates[0].base_url, VRPC_VDEX_MAINNET);
+
+        let urls = candidates
+            .iter()
+            .map(|provider| provider.base_url.clone())
+            .collect::<Vec<_>>();
+        let unique = urls.iter().cloned().collect::<HashSet<_>>();
+
+        assert_eq!(urls.len(), unique.len());
+        assert!(urls.iter().any(|url| url == VRPC_MAINNET));
+        assert!(urls.iter().any(|url| url == VRPC_VARRR_MAINNET));
+        assert!(urls.iter().any(|url| url == VRPC_VDEX_MAINNET));
+        assert!(urls.iter().any(|url| url == VRPC_CHIPS_MAINNET));
+    }
+
+    #[test]
+    fn endpoint_url_for_system_uses_system_provider_when_available() {
+        let pool = VrpcProviderPool::new();
+        assert_eq!(
+            pool.endpoint_url_for_system(WalletNetwork::Mainnet, VDEX_SYSTEM_ID),
+            VRPC_VDEX_MAINNET
+        );
+        assert_eq!(
+            pool.endpoint_url_for_system(WalletNetwork::Mainnet, "iUnknownSystemAddress1234567890"),
+            VRPC_MAINNET
+        );
     }
 }

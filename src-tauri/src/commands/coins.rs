@@ -22,8 +22,6 @@ use crate::core::{Channel, CoinDefinition, CoinRegistry, Protocol, SessionManage
 use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
 
-const VRPC_MAINNET: &str = "https://api.verus.services/";
-const VRPC_TESTNET: &str = "https://api.verustest.net/";
 const ERC20_METADATA_ABI: &str = r#"[
   {
     \"constant\": true,
@@ -166,16 +164,10 @@ fn candidate_matches_query(candidate: &PbaasCandidate, query_normalized: &str) -
     .any(|value| value.to_ascii_lowercase() == query_normalized)
 }
 
-fn vrpc_endpoint_for_network(network: WalletNetwork) -> &'static str {
-    match network {
-        WalletNetwork::Mainnet => VRPC_MAINNET,
-        WalletNetwork::Testnet => VRPC_TESTNET,
-    }
-}
-
 fn build_pbaas_coin_definition(
     candidate: &PbaasCandidate,
     network: WalletNetwork,
+    vrpc_endpoint: String,
 ) -> CoinDefinition {
     CoinDefinition {
         id: candidate.currency_id.clone(),
@@ -187,7 +179,7 @@ fn build_pbaas_coin_definition(
         proto: Protocol::Vrsc,
         compatible_channels: vec![Channel::Vrpc],
         decimals: 8,
-        vrpc_endpoints: vec![vrpc_endpoint_for_network(network).to_string()],
+        vrpc_endpoints: vec![vrpc_endpoint],
         electrum_endpoints: None,
         seconds_per_block: 60,
         mapped_to: None,
@@ -308,23 +300,47 @@ pub async fn resolve_pbaas_currency(
     }
 
     let network = require_active_network(session_manager.inner()).await?;
-    let provider = vrpc_provider_pool.for_network(network);
+    let query_trimmed = query.trim();
+    let provider_candidates = vrpc_provider_pool.provider_candidates(network, Some(query_trimmed));
 
-    if let Ok(payload) = provider.getcurrency(query.trim()).await {
-        if let Some(candidate) = pbaas_candidate_from_value(as_result_payload(&payload)) {
-            return Ok(PbaasResolveResult::Resolved {
-                coin: build_pbaas_coin_definition(&candidate, network),
-            });
+    for provider in &provider_candidates {
+        if let Ok(payload) = provider.getcurrency(query_trimmed).await {
+            if let Some(candidate) = pbaas_candidate_from_value(as_result_payload(&payload)) {
+                let endpoint =
+                    vrpc_provider_pool.endpoint_url_for_system(network, &candidate.system_id);
+                return Ok(PbaasResolveResult::Resolved {
+                    coin: build_pbaas_coin_definition(&candidate, network, endpoint),
+                });
+            }
         }
     }
 
-    let payload = provider.listcurrencies().await?;
-    let mut matches = collect_pbaas_candidates(&payload)
-        .into_iter()
-        .filter(|candidate| candidate_matches_query(candidate, &normalized_query))
-        .collect::<Vec<_>>();
+    let mut listcurrencies_success = false;
+    let mut last_listcurrencies_error: Option<WalletError> = None;
+    let mut matches = Vec::<PbaasCandidate>::new();
+    for provider in &provider_candidates {
+        match provider.listcurrencies().await {
+            Ok(payload) => {
+                listcurrencies_success = true;
+                matches.extend(
+                    collect_pbaas_candidates(&payload)
+                        .into_iter()
+                        .filter(|candidate| candidate_matches_query(candidate, &normalized_query)),
+                );
+            }
+            Err(err) => {
+                last_listcurrencies_error = Some(err);
+            }
+        }
+    }
+    let mut seen_currency_ids = HashSet::<String>::new();
+    matches
+        .retain(|candidate| seen_currency_ids.insert(candidate.currency_id.to_ascii_lowercase()));
 
     if matches.is_empty() {
+        if !listcurrencies_success {
+            return Err(last_listcurrencies_error.unwrap_or(WalletError::NetworkError));
+        }
         return Err(WalletError::PbaasNotFound);
     }
 
@@ -349,8 +365,9 @@ pub async fn resolve_pbaas_currency(
         .into_iter()
         .next()
         .ok_or(WalletError::PbaasNotFound)?;
+    let endpoint = vrpc_provider_pool.endpoint_url_for_system(network, &candidate.system_id);
     Ok(PbaasResolveResult::Resolved {
-        coin: build_pbaas_coin_definition(&candidate, network),
+        coin: build_pbaas_coin_definition(&candidate, network, endpoint),
     })
 }
 
