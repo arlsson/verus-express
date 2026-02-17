@@ -343,6 +343,16 @@ export const en: Record<string, string> = {
   'wallet.transfer.summary.conversionFee': 'Conversion fee',
   'wallet.transfer.summary.conversionFeeWithRate': 'Conversion fee ({rate})',
   'wallet.transfer.summary.destinationNetwork': 'Destination network',
+  'wallet.transfer.summary.estimatedTime': 'Estimated time',
+  'wallet.transfer.summary.estimatedTimeSimple': '1-5 minutes',
+  'wallet.transfer.summary.estimatedTimePbaas': '2-10 minutes',
+  'wallet.transfer.summary.estimatedTimeBridge': '1-3 hours',
+  'wallet.transfer.summary.estimatedTimeTooltipSimple':
+    'Most standard sends confirm in about 1-5 minutes, depending on network conditions.',
+  'wallet.transfer.summary.estimatedTimeTooltipPbaas':
+    'PBaaS conversions complete in about 2-10 blocks (roughly 2-10 minutes) and are bundled together for fair pricing.',
+  'wallet.transfer.summary.estimatedTimeTooltipBridge':
+    'Bridge and cross-chain transfers typically take 1-3 hours due to additional decentralized verification.',
   'wallet.transfer.summary.route': 'Route',
   'wallet.transfer.summary.notSet': 'Not set',
   'wallet.transfer.viewSummary': 'View summary',
@@ -388,6 +398,9 @@ export const en: Record<string, string> = {
     'Verify this address carefully. Consider adding it to your address book after sending.',
   'wallet.transfer.review.unsavedConfirm':
     'I verified this recipient address and want to continue.',
+  'wallet.transfer.review.unsavedConfirmShort': 'Recipient verified',
+  'wallet.transfer.review.unsavedSettingHint':
+    'You can change this security setting in Settings.',
   'wallet.transfer.review.refresh': 'Refresh review',
   'wallet.transfer.reviewUnavailable': 'Review data is unavailable. Try preflight again.',
   'wallet.transfer.saveRecipient.title': 'Save recipient',

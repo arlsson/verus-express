@@ -349,6 +349,16 @@ export const nl: Record<string, string> = {
   'wallet.transfer.summary.conversionFee': 'Omwisselkosten',
   'wallet.transfer.summary.conversionFeeWithRate': 'Omwisselkosten ({rate})',
   'wallet.transfer.summary.destinationNetwork': 'Bestemmingsnetwerk',
+  'wallet.transfer.summary.estimatedTime': 'Geschatte duur',
+  'wallet.transfer.summary.estimatedTimeSimple': '1-5 minuten',
+  'wallet.transfer.summary.estimatedTimePbaas': '2-10 minuten',
+  'wallet.transfer.summary.estimatedTimeBridge': '1-3 uur',
+  'wallet.transfer.summary.estimatedTimeTooltipSimple':
+    'De meeste standaardtransacties worden binnen 1-5 minuten bevestigd, afhankelijk van de netwerkomstandigheden.',
+  'wallet.transfer.summary.estimatedTimeTooltipPbaas':
+    'PBaaS-conversies worden in ongeveer 2-10 blokken afgerond (ongeveer 2-10 minuten) en gebundeld voor eerlijke prijsbepaling.',
+  'wallet.transfer.summary.estimatedTimeTooltipBridge':
+    'Bridge- en cross-chaintransacties duren meestal 1-3 uur door extra gedecentraliseerde verificatie.',
   'wallet.transfer.summary.route': 'Route',
   'wallet.transfer.summary.notSet': 'Niet ingesteld',
   'wallet.transfer.viewSummary': 'Overzicht bekijken',
@@ -397,6 +407,9 @@ export const nl: Record<string, string> = {
     'Controleer dit adres zorgvuldig. Overweeg om het na verzending op te slaan in je adresboek.',
   'wallet.transfer.review.unsavedConfirm':
     'Ik heb dit ontvangersadres gecontroleerd en wil doorgaan.',
+  'wallet.transfer.review.unsavedConfirmShort': 'Ontvanger geverifieerd',
+  'wallet.transfer.review.unsavedSettingHint':
+    'Je kunt deze beveiligingsinstelling wijzigen in Instellingen.',
   'wallet.transfer.review.refresh': 'Controle vernieuwen',
   'wallet.transfer.reviewUnavailable':
     'Reviewgegevens zijn niet beschikbaar. Voer preflight opnieuw uit.',

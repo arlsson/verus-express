@@ -4,6 +4,8 @@
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
   import CheckCircle2Icon from '@lucide/svelte/icons/check-circle-2';
   import BookUserIcon from '@lucide/svelte/icons/book-user';
+  import InfoIcon from '@lucide/svelte/icons/info';
+  import PencilIcon from '@lucide/svelte/icons/pencil';
   import UserRoundIcon from '@lucide/svelte/icons/user-round';
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
@@ -12,6 +14,7 @@
   import * as Card from '$lib/components/ui/card';
   import * as ScrollArea from '$lib/components/ui/scroll-area';
   import * as Tabs from '$lib/components/ui/tabs';
+  import * as Tooltip from '$lib/components/ui/tooltip/index.js';
   import SearchInput from '$lib/components/common/SearchInput.svelte';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import WalletTransferStepperShell from '$lib/components/shared/WalletTransferStepperShell.svelte';
@@ -514,6 +517,54 @@
 
   const reviewNetworkFeeValue = $derived(
     activePreflight ? `${activePreflight.fee} ${activePreflight.feeCurrency}` : ''
+  );
+  const reviewTotalFeesFiat = $derived(
+    (() => {
+      if (!activePreflight) return '≈ —';
+
+      let totalFiat = 0;
+
+      const networkFeeAmount = parseNonNegativeAmount(activePreflight.fee);
+      const networkFeeRate = getUsdRateForCurrencyLabel(activePreflight.feeCurrency) ?? sourceUsdRate;
+      if (networkFeeAmount !== null && networkFeeRate !== null) {
+        totalFiat += networkFeeAmount * networkFeeRate;
+      }
+
+      if (conversionEnabled && conversionFeeInfo) {
+        const conversionAmount = parseNonNegativeAmount(conversionFeeInfo.amount);
+        const conversionRate = getUsdRateForCurrencyLabel(conversionFeeInfo.currency) ?? sourceUsdRate;
+        if (conversionAmount !== null && conversionRate !== null) {
+          totalFiat += conversionAmount * conversionRate;
+        }
+      }
+
+      if (!Number.isFinite(totalFiat) || totalFiat <= 0) return '≈ —';
+      return `≈ ${formatUsdAmountDynamic(totalFiat)}`;
+    })()
+  );
+  const estimatedArrivalInfo = $derived(
+    (() => {
+      if (!activePreflight) return null;
+
+      if (!conversionEnabled) {
+        return {
+          value: i18n.t('wallet.transfer.summary.estimatedTimeSimple'),
+          tooltip: i18n.t('wallet.transfer.summary.estimatedTimeTooltipSimple')
+        };
+      }
+
+      if (activeConvertRoute?.exportTo || selectedChannelPrefix === 'eth' || selectedChannelPrefix === 'erc20') {
+        return {
+          value: i18n.t('wallet.transfer.summary.estimatedTimeBridge'),
+          tooltip: i18n.t('wallet.transfer.summary.estimatedTimeTooltipBridge')
+        };
+      }
+
+      return {
+        value: i18n.t('wallet.transfer.summary.estimatedTimePbaas'),
+        tooltip: i18n.t('wallet.transfer.summary.estimatedTimeTooltipPbaas')
+      };
+    })()
   );
 
   const reviewRecipientName = $derived(matchedSavedRecipient?.contact.displayName?.trim() ?? '');
@@ -1341,10 +1392,43 @@
     return null;
   }
 
+  function getUsdRateForCurrencyLabel(label?: string | null): number | null {
+    if (typeof label !== 'string') return null;
+    const normalizedLabel = label.trim().toLowerCase();
+    if (!normalizedLabel) return null;
+
+    for (const coin of coins) {
+      const presentation = resolveCoinPresentation(coin);
+      if (
+        coin.id.toLowerCase() === normalizedLabel ||
+        coin.currencyId.toLowerCase() === normalizedLabel ||
+        presentation.displayTicker.toLowerCase() === normalizedLabel ||
+        presentation.displayName.toLowerCase() === normalizedLabel
+      ) {
+        return getUsdRateForCoinIds([coin.id, coin.currencyId, coin.mappedTo]);
+      }
+    }
+
+    return null;
+  }
+
   function formatFiatEstimate(amountValue: string | null | undefined, usdRate: number | null): string {
     const numericAmount = parseNonNegativeAmount(amountValue);
     if (numericAmount === null || usdRate === null) return '≈ —';
     return `≈ ${formatUsdAmount(numericAmount * usdRate, i18n.intlLocale)}`;
+  }
+
+  function formatUsdAmountDynamic(value: number): string {
+    const absoluteValue = Math.abs(value);
+    const maximumFractionDigits =
+      absoluteValue < 0.0001 ? 8 : absoluteValue < 0.001 ? 7 : absoluteValue < 0.01 ? 6 : absoluteValue < 0.1 ? 4 : 2;
+
+    return new Intl.NumberFormat(i18n.intlLocale, {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits
+    }).format(value);
   }
 
   function parsePrice(value?: string | null): number | null {
@@ -1737,9 +1821,19 @@
           {currentStep === 'details' ? i18n.t('common.cancel') : i18n.t('common.back')}
         </Button>
         {#if currentStep === 'review'}
-          <Button onclick={continueFlow} disabled={primaryDisabled}>
-            {primaryLabel}
-          </Button>
+          <div class="flex items-center gap-3">
+            {#if requiresUnsavedRecipientAck}
+              <div class="flex items-center gap-1.5">
+                <Checkbox id="review-unsaved-recipient-footer" bind:checked={unsavedRecipientConfirmed} />
+                <Label for="review-unsaved-recipient-footer" class="text-muted-foreground text-[11px] whitespace-nowrap">
+                  {i18n.t('wallet.transfer.review.unsavedConfirmShort')}
+                </Label>
+              </div>
+            {/if}
+            <Button onclick={continueFlow} disabled={primaryDisabled}>
+              {primaryLabel}
+            </Button>
+          </div>
         {:else}
           <Button class="md:hidden" onclick={continueFlow} disabled={primaryDisabled}>
             {primaryLabel}
@@ -2030,135 +2124,179 @@
       <Card.Root class="border-0 bg-transparent py-0 shadow-none">
         <Card.Content class="space-y-3 px-0 pt-0">
           {#if activePreflight}
-            <div class="space-y-2.5">
-              <div class="rounded-md border border-border/70 p-3">
-                <div
-                  class={conversionEnabled
-                    ? 'grid gap-2.5 md:grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1fr)] md:items-center'
-                    : 'space-y-1'}
-                >
-                  <div class="space-y-1">
-                    <p class="text-muted-foreground text-[11px] font-medium tracking-[0.05em] uppercase">
-                      {i18n.t('wallet.transfer.review.sending')}
-                    </p>
-                    <p class="text-[1.1rem] font-semibold tabular-nums">
+            <div class="mx-auto w-full max-w-[430px] space-y-2">
+              <div class="space-y-2">
+                <div class="relative min-h-7 space-y-0.5 text-center">
+                  <button
+                    type="button"
+                    class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-0 right-0 h-7 w-7 rounded-sm p-0 transition-colors focus-visible:outline-none focus-visible:ring-2"
+                    onclick={() => jumpToStep('details')}
+                    title={i18n.t('wallet.transfer.review.changeDetails')}
+                    aria-label={i18n.t('wallet.transfer.review.changeDetails')}
+                  >
+                    <PencilIcon class="size-3.5" />
+                  </button>
+                  <p class="text-muted-foreground text-[10px] font-medium tracking-[0.05em] uppercase">
+                    {i18n.t('wallet.transfer.review.sending')}
+                  </p>
+                  <div class="flex items-center justify-center gap-2">
+                    {#if selectedCoin}
+                      <CoinIcon
+                        coinId={selectedCoin.id}
+                        coinName={selectedCoinPresentation?.displayName}
+                        size={20}
+                        decorative={true}
+                      />
+                    {/if}
+                    <p class="min-w-0 truncate text-[1.35rem] font-semibold tabular-nums">
                       {reviewSendingValue || i18n.t('wallet.transfer.summary.notSet')}
                     </p>
-                    {#if sourceAmountFiatDisplay && sourceAmountFiatDisplay !== '≈ —'}
-                      <p class="text-muted-foreground text-xs tabular-nums">{sourceAmountFiatDisplay}</p>
-                    {/if}
                   </div>
-
-                  {#if conversionEnabled}
-                    <div class="text-muted-foreground/70 flex items-center justify-center">
-                      <ArrowDownIcon class="size-4 md:-rotate-90" />
-                    </div>
-                    <div class="space-y-1 md:text-right">
-                      <p class="text-muted-foreground text-[11px] font-medium tracking-[0.05em] uppercase">
-                        {i18n.t('wallet.transfer.review.receiving')}
-                      </p>
-                      <p class="text-[1.1rem] font-semibold tabular-nums">
-                        {reviewReceivingValue || i18n.t('wallet.transfer.summary.notSet')}
-                      </p>
-                      {#if receiveAmountFiatDisplay && receiveAmountFiatDisplay !== '≈ —'}
-                        <p class="text-muted-foreground text-xs tabular-nums">{receiveAmountFiatDisplay}</p>
-                      {/if}
-                    </div>
+                  {#if sourceAmountFiatDisplay && sourceAmountFiatDisplay !== '≈ —'}
+                    <p class="text-muted-foreground text-[11px] tabular-nums">{sourceAmountFiatDisplay}</p>
                   {/if}
                 </div>
+
+                {#if conversionEnabled}
+                  <div class="text-muted-foreground/70 flex items-center justify-center">
+                    <ArrowDownIcon class="size-3.5" />
+                  </div>
+                  <div class="space-y-0.5 text-center">
+                    <p class="text-muted-foreground text-[10px] font-medium tracking-[0.05em] uppercase">
+                      {i18n.t('wallet.transfer.review.receiving')}
+                    </p>
+                    <div class="flex items-center justify-center gap-2">
+                      {#if selectedReceiveAssetOption?.destinationId}
+                        <CoinIcon
+                          coinId={selectedReceiveAssetOption.destinationId}
+                          coinName={selectedReceiveAssetOption.label}
+                          size={20}
+                          decorative={true}
+                        />
+                      {/if}
+                      <p class="min-w-0 truncate text-[1.35rem] font-semibold tabular-nums">
+                        {reviewReceivingValue || i18n.t('wallet.transfer.summary.notSet')}
+                      </p>
+                    </div>
+                    {#if receiveAmountFiatDisplay && receiveAmountFiatDisplay !== '≈ —'}
+                      <p class="text-muted-foreground text-[11px] tabular-nums">{receiveAmountFiatDisplay}</p>
+                    {/if}
+                  </div>
+                {/if}
               </div>
 
-              <div class="overflow-hidden rounded-md border border-border/70">
-                <div class="flex items-center justify-end gap-1 border-b border-border/60 px-2 py-1.5">
-                  <Button variant="ghost" size="sm" class="h-7 px-2.5" onclick={() => jumpToStep('details')}>
-                    {i18n.t('wallet.transfer.review.changeDetails')}
-                  </Button>
-                  <Button variant="ghost" size="sm" class="h-7 px-2.5" onclick={() => jumpToStep('recipient')}>
-                    {i18n.t('wallet.transfer.review.changeRecipient')}
-                  </Button>
-                </div>
+              <div class="space-y-1">
+                <div class="space-y-1 rounded-lg bg-muted/35 px-2.5 py-2 dark:bg-muted/40">
+                  <div class="flex items-start justify-between gap-3">
+                    <p class="text-muted-foreground mt-0.5 text-[11px]">{i18n.t('wallet.transfer.summary.recipient')}</p>
+                    <div class="flex min-w-0 items-start gap-1.5">
+                      <div class="min-w-0 text-right">
+                        <p class="truncate text-[13px] font-medium">
+                          {reviewRecipientName || reviewRecipientAddress || i18n.t('wallet.transfer.summary.notSet')}
+                        </p>
+                        {#if reviewRecipientName && reviewRecipientAddress}
+                          <p class="text-muted-foreground mt-0.5 font-mono text-[10px]">{reviewRecipientAddress}</p>
+                        {/if}
+                      </div>
+                      <button
+                        type="button"
+                        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 h-7 w-7 shrink-0 rounded-sm p-0 transition-colors focus-visible:outline-none focus-visible:ring-2"
+                        onclick={() => jumpToStep('recipient')}
+                        title={i18n.t('wallet.transfer.review.changeRecipient')}
+                        aria-label={i18n.t('wallet.transfer.review.changeRecipient')}
+                      >
+                        <PencilIcon class="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
 
-                <div class="flex items-start justify-between gap-4 px-3.5 py-2.5">
-                  <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.summary.recipient')}</p>
-                  <div class="text-right">
-                    <p class="text-sm font-medium">
-                      {reviewRecipientName || reviewRecipientAddress || i18n.t('wallet.transfer.summary.notSet')}
-                    </p>
-                    {#if reviewRecipientName && reviewRecipientAddress}
-                      <p class="text-muted-foreground mt-0.5 font-mono text-xs">{reviewRecipientAddress}</p>
+                  <div class="mt-1 min-h-4">
+                    {#if matchedSavedRecipient}
+                      <p class="text-emerald-700 dark:text-emerald-300 text-[11px]">
+                        {i18n.t('wallet.transfer.review.savedRecipient', {
+                          contact: matchedSavedRecipient.contact.displayName,
+                          endpoint: matchedSavedRecipient.endpoint.label
+                        })}
+                      </p>
+                    {:else}
+                      <div class="space-y-0.5">
+                        <p class="text-amber-700 dark:text-amber-300 text-[11px]">
+                          {i18n.t('wallet.transfer.review.unsavedRecipient')}
+                        </p>
+                        <p class="text-muted-foreground text-[11px]">
+                          {i18n.t('wallet.transfer.review.unsavedSettingHint')}
+                        </p>
+                      </div>
                     {/if}
                   </div>
                 </div>
 
                 {#if conversionEnabled}
-                  <div class="flex items-start justify-between gap-4 border-t border-border/60 px-3.5 py-2.5">
-                    <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.summary.route')}</p>
-                    <p class="text-right text-sm font-medium">
-                      {reviewRouteValue || i18n.t('wallet.transfer.viaBest')}
-                    </p>
+                  <div class="rounded-lg bg-muted/35 px-2.5 py-2 dark:bg-muted/40">
+                    <div class="flex items-center justify-between gap-3">
+                      <p class="text-muted-foreground text-[11px]">{i18n.t('wallet.transfer.summary.route')}</p>
+                      <p class="text-right text-[13px] font-medium">
+                        {reviewRouteValue || i18n.t('wallet.transfer.viaBest')}
+                      </p>
+                    </div>
                   </div>
                 {/if}
 
                 {#if reviewDestinationNetworkValue}
-                  <div class="flex items-start justify-between gap-4 border-t border-border/60 px-3.5 py-2.5">
-                    <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.summary.destinationNetwork')}</p>
-                    <p class="text-right text-sm font-medium">{reviewDestinationNetworkValue}</p>
+                  <div class="rounded-lg bg-muted/35 px-2.5 py-2 dark:bg-muted/40">
+                    <div class="flex items-center justify-between gap-3">
+                      <p class="text-muted-foreground text-[11px]">{i18n.t('wallet.transfer.summary.destinationNetwork')}</p>
+                      <p class="text-right text-[13px] font-medium">{reviewDestinationNetworkValue}</p>
+                    </div>
                   </div>
                 {/if}
 
-                <div class="flex items-start justify-between gap-4 border-t border-border/60 px-3.5 py-2.5">
-                  <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.summary.networkFee')}</p>
-                  <p class="text-right text-sm font-medium">
-                    {reviewNetworkFeeValue || i18n.t('wallet.transfer.summary.notSet')}
-                  </p>
+                <div class="space-y-1 rounded-lg bg-muted/35 px-2.5 py-2 dark:bg-muted/40">
+                  <div class="flex items-start justify-between gap-3">
+                    <p class="text-muted-foreground text-[11px]">{i18n.t('wallet.transfer.summary.networkFee')}</p>
+                    <p class="text-[13px] font-medium tabular-nums">
+                      {reviewNetworkFeeValue || i18n.t('wallet.transfer.summary.notSet')}
+                    </p>
+                  </div>
+
+                  {#if conversionEnabled && conversionFeeInfo}
+                    <div class="flex items-start justify-between gap-3">
+                      <p class="text-muted-foreground text-[11px]">
+                        {i18n.t('wallet.transfer.summary.conversionFeeWithRate', { rate: conversionFeeInfo.percentage })}
+                      </p>
+                      <p class="text-[13px] font-medium tabular-nums">
+                        {conversionFeeInfo.amount} {conversionFeeInfo.currency}
+                      </p>
+                    </div>
+                  {/if}
+
+                  {#if reviewTotalFeesFiat !== '≈ —'}
+                    <p class="text-muted-foreground text-right text-[11px] tabular-nums">{reviewTotalFeesFiat}</p>
+                  {/if}
                 </div>
 
-                {#if conversionEnabled && conversionFeeInfo}
-                  <div class="flex items-start justify-between gap-4 border-t border-border/60 px-3.5 py-2.5">
-                    <p class="text-muted-foreground text-sm">
-                      {i18n.t('wallet.transfer.summary.conversionFeeWithRate', { rate: conversionFeeInfo.percentage })}
-                    </p>
-                    <p class="text-right text-sm font-medium">
-                      {conversionFeeInfo.amount} {conversionFeeInfo.currency}
-                    </p>
+                {#if estimatedArrivalInfo}
+                  <div class="rounded-lg bg-muted/35 px-2.5 py-2 dark:bg-muted/40">
+                    <div class="flex items-center justify-between gap-3">
+                      <p class="text-muted-foreground text-[11px]">{i18n.t('wallet.transfer.summary.estimatedTime')}</p>
+                      <div class="flex items-center gap-1.5">
+                        <p class="text-[13px] font-medium">{estimatedArrivalInfo.value}</p>
+                        <Tooltip.Root>
+                          <Tooltip.Trigger
+                            class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex h-7 w-7 items-center justify-center rounded-sm p-0 transition-colors focus-visible:outline-none focus-visible:ring-2"
+                            aria-label={i18n.t('wallet.transfer.summary.estimatedTime')}
+                          >
+                            <InfoIcon class="size-3.5" />
+                          </Tooltip.Trigger>
+                          <Tooltip.Content side="top" align="end" class="max-w-72 text-xs leading-5">
+                            {estimatedArrivalInfo.tooltip}
+                          </Tooltip.Content>
+                        </Tooltip.Root>
+                      </div>
+                    </div>
                   </div>
                 {/if}
               </div>
-
-              {#if matchedSavedRecipient}
-                <p class="text-emerald-700 dark:text-emerald-300 text-xs">
-                  {i18n.t('wallet.transfer.review.savedRecipient', {
-                    contact: matchedSavedRecipient.contact.displayName,
-                    endpoint: matchedSavedRecipient.endpoint.label
-                  })}
-                </p>
-              {:else}
-                <p class="text-amber-700 dark:text-amber-300 text-xs">
-                  {i18n.t('wallet.transfer.review.unsavedRecipient')}
-                </p>
-                {/if}
-
-              {#if requiresUnsavedRecipientAck}
-                <div class="space-y-1.5 rounded-md border border-amber-500/40 bg-amber-500/7 p-2.5">
-                  <p class="text-sm font-medium">{i18n.t('wallet.transfer.review.unsavedWarningTitle')}</p>
-                  <p class="text-muted-foreground text-xs">{i18n.t('wallet.transfer.review.unsavedWarningBody')}</p>
-                  <div class="flex items-start gap-2">
-                    <Checkbox id="review-unsaved-recipient" bind:checked={unsavedRecipientConfirmed} class="mt-0.5" />
-                    <Label for="review-unsaved-recipient" class="text-xs leading-5">
-                      {i18n.t('wallet.transfer.review.unsavedConfirm')}
-                    </Label>
-                  </div>
-                </div>
-              {/if}
-
-              {#if activePreflight.warnings.length > 0}
-                <div class="space-y-1 rounded-md border border-border/70 p-2.5">
-                  <p class="text-sm font-medium">{i18n.t('wallet.transfer.warningsTitle')}</p>
-                  {#each activePreflight.warnings as warning}
-                    <p class="text-amber-600 dark:text-amber-400 text-xs">{warning.message}</p>
-                  {/each}
-                </div>
-              {/if}
             </div>
           {:else}
             <div class="space-y-3">
