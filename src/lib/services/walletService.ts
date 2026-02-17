@@ -4,7 +4,13 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { BalanceResult, Transaction, WalletNetwork } from '$lib/types/wallet.js';
+import type {
+  ActiveAssetsState,
+  BalanceResult,
+  CoinScopesResult,
+  Transaction,
+  WalletNetwork
+} from '$lib/types/wallet.js';
 
 export interface UnlockWalletPayload {
   account_id: string;
@@ -66,6 +72,26 @@ export async function getActiveWallet(): Promise<ActiveWalletResponse | null> {
 
 export async function getAddresses(): Promise<AddressResponse> {
   return invoke<AddressResponse>('get_addresses');
+}
+
+export async function getCoinScopes(coinId: string): Promise<CoinScopesResult> {
+  return invoke<CoinScopesResult>('get_coin_scopes', { coin_id: coinId });
+}
+
+export async function getWatchedVrpcAddresses(): Promise<string[]> {
+  return invoke<string[]>('get_watched_vrpc_addresses');
+}
+
+export async function setWatchedVrpcAddresses(addresses: string[]): Promise<string[]> {
+  return invoke<string[]>('set_watched_vrpc_addresses', { addresses });
+}
+
+export async function getActiveAssets(): Promise<ActiveAssetsState> {
+  return invoke<ActiveAssetsState>('get_active_assets');
+}
+
+export async function setActiveAssets(coinIds: string[]): Promise<ActiveAssetsState> {
+  return invoke<ActiveAssetsState>('set_active_assets', { coin_ids: coinIds });
 }
 
 export async function readClipboardText(): Promise<string> {

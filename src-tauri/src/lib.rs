@@ -150,6 +150,11 @@ pub fn run() {
             wallet::start_update_engine,
             wallet::lock_wallet,
             wallet::get_addresses,
+            wallet::get_coin_scopes,
+            wallet::get_active_assets,
+            wallet::set_active_assets,
+            wallet::get_watched_vrpc_addresses,
+            wallet::set_watched_vrpc_addresses,
             wallet::is_unlocked,
             clipboard::read_clipboard_text,
             // Coin registry commands (Module 3)

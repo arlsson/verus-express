@@ -67,6 +67,7 @@
   import type { AddressBookContact, AddressEndpointKind } from '$lib/types/addressBook';
   import type {
     DestinationAddressKind,
+    TransferEntryContext,
     TransferStepId,
     TransferStepperStep,
     WizardOperationalStepId
@@ -115,6 +116,7 @@
 
   type TransferWizardProps = {
     entryIntent: EntryIntent;
+    entryContext?: TransferEntryContext | null;
     onClose?: () => void;
   };
 
@@ -122,7 +124,7 @@
   const OPERATIONAL_STEPS: WizardOperationalStepId[] = ['details', 'recipient', 'review'];
 
   /* eslint-disable prefer-const */
-  let { entryIntent, onClose = defaultClose }: TransferWizardProps = $props();
+  let { entryIntent, entryContext = null, onClose = defaultClose }: TransferWizardProps = $props();
   /* eslint-enable prefer-const */
 
   const i18n = $derived($i18nStore);
@@ -146,9 +148,17 @@
 
   const sendableCoinOptions = $derived(
     sendableCoins.map((coin) => {
+      const contextChannelId =
+        entryContext &&
+        !entryContext.readOnly &&
+        entryContext.coinId === coin.id
+          ? entryContext.channelId
+          : null;
       const presentation = resolveCoinPresentation(coin);
       const channelId =
-        walletChannels.byCoinId[coin.id] ?? channelIdForCoin(coin, walletChannels.vrpcAddress ?? undefined);
+        contextChannelId ??
+        walletChannels.byCoinId[coin.id] ??
+        channelIdForCoin(coin, walletChannels.vrpcAddress ?? undefined);
       const balanceTotal = channelId ? getBalance(channelId, coin.id, balances)?.total ?? '0' : '0';
       return {
         coin,
@@ -187,7 +197,6 @@
   let pendingTargetOption = $state<ReceiveAssetOption | null>(null);
   let routeEstimateOutputs = $state<Record<string, string>>({});
   let bridgeCapabilities = $state<BridgeCapabilitiesResult | null>(null);
-  let bridgeCapabilitiesLoading = $state(false);
 
   let loadingTargets = $state(false);
   let preflighting = $state(false);
@@ -773,15 +782,12 @@
     let cancelled = false;
 
     bridgeCapabilities = null;
-    bridgeCapabilitiesLoading = false;
 
     if (!coin || !channelId) {
       return () => {
         cancelled = true;
       };
     }
-
-    bridgeCapabilitiesLoading = true;
 
     void (async () => {
       try {
@@ -798,8 +804,6 @@
           executionEngine: 'unknown',
           reasonCode: extractWalletErrorType(error)
         };
-      } finally {
-        if (!cancelled) bridgeCapabilitiesLoading = false;
       }
     })();
 
@@ -823,6 +827,17 @@
       selectedCoinId = '';
       sourceCoinManuallyChosen = false;
     }
+  });
+
+  $effect(() => {
+    const context = entryContext;
+    if (!context || context.readOnly) return;
+
+    const hasContextCoin = sendableCoinOptions.some((option) => option.coin.id === context.coinId);
+    if (!hasContextCoin) return;
+
+    selectedCoinId = context.coinId;
+    sourceCoinManuallyChosen = true;
   });
 
   $effect(() => {

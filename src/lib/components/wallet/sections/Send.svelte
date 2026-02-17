@@ -5,16 +5,18 @@
 
 <script lang="ts">
   import TransferWizard from './TransferWizard.svelte';
+  import type { TransferEntryContext } from './transfer-wizard/types';
 
   type SendProps = {
+    entryContext?: TransferEntryContext | null;
     onClose?: () => void;
   };
 
   const defaultCloseHandler = () => {};
 
   /* eslint-disable prefer-const */
-  let { onClose = defaultCloseHandler }: SendProps = $props();
+  let { entryContext = null, onClose = defaultCloseHandler }: SendProps = $props();
   /* eslint-enable prefer-const */
 </script>
 
-<TransferWizard entryIntent="send" {onClose} />
+<TransferWizard entryIntent="send" {entryContext} {onClose} />

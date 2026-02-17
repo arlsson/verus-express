@@ -16,6 +16,15 @@ use crate::types::WalletError;
 /// Trusted VRPC allowlist (per backend architecture plan).
 const VRPC_MAINNET: &str = "https://api.verus.services/";
 const VRPC_TESTNET: &str = "https://api.verustest.net/";
+const VRPC_VARRR_MAINNET: &str = "https://vapi.piratechain.com/";
+const VRPC_VDEX_MAINNET: &str = "https://api.vdex.to/";
+const VRPC_CHIPS_MAINNET: &str = "https://api.chips.cash/";
+
+const VRSC_MAINNET_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
+const VRSCTEST_SYSTEM_ID: &str = "iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq";
+const VARRR_SYSTEM_ID: &str = "iExBJfZYK7KREDpuhj6PzZBzqMAKaFg7d2";
+const VDEX_SYSTEM_ID: &str = "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N";
+const CHIPS_SYSTEM_ID: &str = "iJ3WZocnjG9ufv7GKUA4LijQno5gTMb7tP";
 
 /// TTL for cached responses (seconds).
 const TTL_BALANCE: u64 = 5;
@@ -82,22 +91,21 @@ impl VrpcProvider {
             .unwrap_or_else(|_| Client::new())
     }
 
-    pub fn new_mainnet() -> Self {
+    pub fn new_with_base_url(base_url: &str) -> Self {
         Self {
             client: Self::build_http_client(),
-            base_url: VRPC_MAINNET.to_string(),
+            base_url: base_url.to_string(),
             cache: Mutex::new(HashMap::new()),
             in_flight: AsyncMutex::new(HashMap::new()),
         }
     }
 
+    pub fn new_mainnet() -> Self {
+        Self::new_with_base_url(VRPC_MAINNET)
+    }
+
     pub fn new_testnet() -> Self {
-        Self {
-            client: Self::build_http_client(),
-            base_url: VRPC_TESTNET.to_string(),
-            cache: Mutex::new(HashMap::new()),
-            in_flight: AsyncMutex::new(HashMap::new()),
-        }
+        Self::new_with_base_url(VRPC_TESTNET)
     }
 
     /// Default: mainnet.
@@ -822,13 +830,45 @@ impl Default for VrpcProvider {
 pub struct VrpcProviderPool {
     mainnet: VrpcProvider,
     testnet: VrpcProvider,
+    mainnet_by_system: HashMap<String, VrpcProvider>,
+    testnet_by_system: HashMap<String, VrpcProvider>,
 }
 
 impl VrpcProviderPool {
+    fn normalize_system_id(system_id: &str) -> String {
+        system_id.trim().to_ascii_lowercase()
+    }
+
     pub fn new() -> Self {
+        let mut mainnet_by_system = HashMap::<String, VrpcProvider>::new();
+        mainnet_by_system.insert(
+            Self::normalize_system_id(VRSC_MAINNET_SYSTEM_ID),
+            VrpcProvider::new_with_base_url(VRPC_MAINNET),
+        );
+        mainnet_by_system.insert(
+            Self::normalize_system_id(VARRR_SYSTEM_ID),
+            VrpcProvider::new_with_base_url(VRPC_VARRR_MAINNET),
+        );
+        mainnet_by_system.insert(
+            Self::normalize_system_id(VDEX_SYSTEM_ID),
+            VrpcProvider::new_with_base_url(VRPC_VDEX_MAINNET),
+        );
+        mainnet_by_system.insert(
+            Self::normalize_system_id(CHIPS_SYSTEM_ID),
+            VrpcProvider::new_with_base_url(VRPC_CHIPS_MAINNET),
+        );
+
+        let mut testnet_by_system = HashMap::<String, VrpcProvider>::new();
+        testnet_by_system.insert(
+            Self::normalize_system_id(VRSCTEST_SYSTEM_ID),
+            VrpcProvider::new_with_base_url(VRPC_TESTNET),
+        );
+
         Self {
             mainnet: VrpcProvider::new_mainnet(),
             testnet: VrpcProvider::new_testnet(),
+            mainnet_by_system,
+            testnet_by_system,
         }
     }
 
@@ -836,6 +876,28 @@ impl VrpcProviderPool {
         match network {
             WalletNetwork::Mainnet => &self.mainnet,
             WalletNetwork::Testnet => &self.testnet,
+        }
+    }
+
+    pub fn for_system(&self, network: WalletNetwork, system_id: &str) -> &VrpcProvider {
+        let normalized = Self::normalize_system_id(system_id);
+        match network {
+            WalletNetwork::Mainnet => self
+                .mainnet_by_system
+                .get(&normalized)
+                .unwrap_or(&self.mainnet),
+            WalletNetwork::Testnet => self
+                .testnet_by_system
+                .get(&normalized)
+                .unwrap_or(&self.testnet),
+        }
+    }
+
+    pub fn has_system_provider(&self, network: WalletNetwork, system_id: &str) -> bool {
+        let normalized = Self::normalize_system_id(system_id);
+        match network {
+            WalletNetwork::Mainnet => self.mainnet_by_system.contains_key(&normalized),
+            WalletNetwork::Testnet => self.testnet_by_system.contains_key(&normalized),
         }
     }
 }
@@ -849,6 +911,7 @@ impl Default for VrpcProviderPool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::wallet::WalletNetwork;
 
     #[test]
     fn getaddressbalance_params_are_object_form() {
@@ -868,5 +931,33 @@ mod tests {
         let expected = serde_json::json!([{"addresses": ["RExampleAddress"], "friendlynames": true, "verbosity": 1}]);
         assert_eq!(deltas, expected);
         assert_eq!(mempool, expected);
+    }
+
+    #[test]
+    fn has_mainnet_system_providers_for_known_chains() {
+        let pool = VrpcProviderPool::new();
+        assert!(
+            pool.has_system_provider(WalletNetwork::Mainnet, "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV")
+        );
+        assert!(
+            pool.has_system_provider(WalletNetwork::Mainnet, "iExBJfZYK7KREDpuhj6PzZBzqMAKaFg7d2")
+        );
+        assert!(
+            pool.has_system_provider(WalletNetwork::Mainnet, "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N")
+        );
+        assert!(
+            pool.has_system_provider(WalletNetwork::Mainnet, "iJ3WZocnjG9ufv7GKUA4LijQno5gTMb7tP")
+        );
+    }
+
+    #[test]
+    fn unknown_system_falls_back_to_network_provider() {
+        let pool = VrpcProviderPool::new();
+        assert!(
+            !pool.has_system_provider(WalletNetwork::Mainnet, "iUnknownSystemAddress1234567890")
+        );
+        let fallback = pool.for_system(WalletNetwork::Mainnet, "iUnknownSystemAddress1234567890");
+        let default = pool.for_network(WalletNetwork::Mainnet);
+        assert_eq!(fallback.base_url, default.base_url);
     }
 }

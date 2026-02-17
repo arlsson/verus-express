@@ -36,11 +36,14 @@
 
   const {
     walletData,
+    onOpenAssetDetails = () => {},
     onNavigateToSend = () => {},
     onNavigateToReceive = () => {},
     onNavigateToConvert = () => {}
   }: {
     walletData: WalletData;
+    // eslint-disable-next-line no-unused-vars
+    onOpenAssetDetails?: (_coinId: string) => void;
     onNavigateToSend?: () => void;
     onNavigateToReceive?: () => void;
     onNavigateToConvert?: () => void;
@@ -255,48 +258,52 @@
           {:else}
             <ul class="space-y-1 pb-3">
               {#each visibleRows as row (row.key)}
-                <li
-                  class="grid grid-cols-[minmax(0,1fr)_11rem_10.25rem_auto] items-center gap-3.5 rounded-md px-3.5 py-3 transition-colors hover:bg-muted/40"
-                >
-                  <div class="min-w-0 flex items-center gap-3.5">
-                    <CoinIcon
-                      coinId={row.coinId}
-                      coinName={row.name}
-                      proto={row.proto}
-                      size={rowIconSize}
-                      showBadge
-                      decorative
-                    />
-                    <div class="min-w-0 flex min-h-8 items-center">
-                      <p class="text-foreground truncate text-base leading-tight font-medium">{row.name}</p>
+                <li>
+                  <button
+                    type="button"
+                    class="hover:bg-muted/40 focus-visible:ring-ring/55 grid w-full grid-cols-[minmax(0,1fr)_11rem_10.25rem_auto] items-center gap-3.5 rounded-md px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2"
+                    onclick={() => onOpenAssetDetails(row.coinId)}
+                  >
+                    <div class="min-w-0 flex items-center gap-3.5">
+                      <CoinIcon
+                        coinId={row.coinId}
+                        coinName={row.name}
+                        proto={row.proto}
+                        size={rowIconSize}
+                        showBadge
+                        decorative
+                      />
+                      <div class="min-w-0 flex min-h-8 items-center">
+                        <p class="text-foreground truncate text-base leading-tight font-medium">{row.name}</p>
+                      </div>
                     </div>
-                  </div>
 
-                  <div class="justify-self-end pr-4 text-right tabular-nums">
-                    <p class="text-foreground/75 text-xs font-medium">{row.marketPriceDisplay}</p>
-                    <div
-                      class={`mt-0.5 flex items-center justify-end text-xs ${
-                        row.change24hDirection === 'up'
-                          ? 'text-emerald-700 dark:text-emerald-300'
-                          : row.change24hDirection === 'down'
-                            ? 'text-destructive'
-                            : 'text-muted-foreground'
-                      }`}
-                    >
-                      <span>{row.change24hDisplay}</span>
+                    <div class="justify-self-end pr-4 text-right tabular-nums">
+                      <p class="text-foreground/75 text-xs font-medium">{row.marketPriceDisplay}</p>
+                      <div
+                        class={`mt-0.5 flex items-center justify-end text-xs ${
+                          row.change24hDirection === 'up'
+                            ? 'text-emerald-700 dark:text-emerald-300'
+                            : row.change24hDirection === 'down'
+                              ? 'text-destructive'
+                              : 'text-muted-foreground'
+                        }`}
+                      >
+                        <span>{row.change24hDisplay}</span>
+                      </div>
                     </div>
-                  </div>
 
-                  <div class="text-right tabular-nums">
-                    <p class={`text-foreground text-base font-semibold ${hideHoldings ? 'holdings-obscured' : ''}`}>
-                      {row.fiatValueDisplay}
-                    </p>
-                    <p class={`text-muted-foreground mt-0.5 text-[13px] ${hideHoldings ? 'holdings-obscured' : ''}`}>
-                      {row.cryptoAmountDisplay}
-                    </p>
-                  </div>
+                    <div class="text-right tabular-nums">
+                      <p class={`text-foreground text-base font-semibold ${hideHoldings ? 'holdings-obscured' : ''}`}>
+                        {row.fiatValueDisplay}
+                      </p>
+                      <p class={`text-muted-foreground mt-0.5 text-[13px] ${hideHoldings ? 'holdings-obscured' : ''}`}>
+                        {row.cryptoAmountDisplay}
+                      </p>
+                    </div>
 
-                  <ChevronRightIcon class="text-muted-foreground/70 h-[18px] w-[18px] justify-self-end" aria-hidden="true" />
+                    <ChevronRightIcon class="text-muted-foreground/70 h-[18px] w-[18px] justify-self-end" aria-hidden="true" />
+                  </button>
                 </li>
               {/each}
             </ul>

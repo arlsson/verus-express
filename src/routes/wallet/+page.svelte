@@ -7,6 +7,7 @@
 
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { goto } from '$app/navigation';
   import WalletLayout from '$lib/components/wallet/WalletLayout.svelte';
   import * as walletService from '$lib/services/walletService.js';
@@ -19,12 +20,34 @@
   import { walletBootstrapStore } from '$lib/stores/walletBootstrap.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { buildWalletChannels, resetWalletChannels, walletChannelsStore } from '$lib/stores/walletChannels.js';
+  import { clearCoinScopes } from '$lib/stores/coinScopes.js';
   import { filterVisibleAssets } from '$lib/stores/assetVisibility.js';
   import { clearWalletErrors, pushWalletError } from '$lib/stores/walletErrors.js';
   import { setAddressBookContacts } from '$lib/stores/addressBook.js';
   import { isWalletSupportedAsset } from '$lib/coins/supportedAssets.js';
   import { i18nStore } from '$lib/i18n';
-  import type { WalletNetwork } from '$lib/types/wallet.js';
+  import type { CoinDefinition, WalletNetwork } from '$lib/types/wallet.js';
+
+  const sessionCoinsByWallet = new Map<string, CoinDefinition[]>();
+
+  function activeAssetsCacheKey(walletName: string, network: WalletNetwork): string {
+    return `${walletName.trim().toLowerCase()}::${network}`;
+  }
+
+  function normalizeCoinId(value: string): string {
+    return value.trim().toLowerCase();
+  }
+
+  function filterCoinsByActiveIds(coins: CoinDefinition[], activeCoinIds: string[]): CoinDefinition[] {
+    const activeSet = new Set(
+      activeCoinIds
+        .map((coinId) => normalizeCoinId(coinId))
+        .filter((coinId) => coinId.length > 0)
+    );
+    if (activeSet.size === 0) return [];
+
+    return coins.filter((coin) => activeSet.has(normalizeCoinId(coin.id)));
+  }
 
   let loading = $state(true);
   let walletData = $state<{ name: string; emoji: string; color: string; network: WalletNetwork } | null>(null);
@@ -37,6 +60,7 @@
     balanceStore.set({});
     ratesStore.set({});
     transactionStore.set({});
+    clearCoinScopes();
     try {
       const unlocked = await walletService.isUnlocked();
       if (!unlocked) {
@@ -58,6 +82,7 @@
             network: walletNetwork
           }
         : { name: i18n.t('wallet.overview.mainWallet'), emoji: '💰', color: 'blue', network: walletNetwork };
+      const cacheKey = activeAssetsCacheKey(walletData.name, walletNetwork);
 
       const addresses = await walletService.getAddresses().catch((error) => {
         console.error('[WALLET_ROUTE] Failed to load wallet addresses', error);
@@ -71,10 +96,27 @@
         console.error('[WALLET_ROUTE] Failed to load coin registry', error);
         return [];
       });
-      const coins = filterVisibleAssets(
-        allCoins.filter((coin) => isWalletSupportedAsset(coin, walletNetwork)),
-        walletNetwork
-      );
+      const supportedCoins = allCoins.filter((coin) => isWalletSupportedAsset(coin, walletNetwork));
+      const legacyVisibleCoins = filterVisibleAssets(supportedCoins, walletNetwork);
+
+      let coins: CoinDefinition[] = [];
+      try {
+        let activeAssets = await walletService.getActiveAssets();
+        if (!activeAssets.initialized) {
+          const migrationIds = legacyVisibleCoins.map((coin) => coin.id);
+          activeAssets = await walletService.setActiveAssets(migrationIds);
+        }
+        coins = filterCoinsByActiveIds(supportedCoins, activeAssets.coinIds);
+        sessionCoinsByWallet.set(cacheKey, coins);
+      } catch (error) {
+        console.error('[WALLET_ROUTE] Failed to load active assets state', error);
+        const previousSessionCoins = sessionCoinsByWallet.get(cacheKey) ?? get(coinsStore);
+        const fallbackCoins = previousSessionCoins.length > 0 ? previousSessionCoins : legacyVisibleCoins;
+        coins = fallbackCoins;
+        sessionCoinsByWallet.set(cacheKey, fallbackCoins);
+        pushWalletError(i18n.t('wallet.overview.errorActiveAssetsFallback'));
+      }
+
       coinsStore.set(coins);
 
       const channels = buildWalletChannels(coins, addresses?.vrsc_address ?? null);
@@ -126,6 +168,7 @@
     balanceStore.set({});
     ratesStore.set({});
     transactionStore.set({});
+    clearCoinScopes();
     resetWalletChannels();
     setAddressBookContacts([]);
   });

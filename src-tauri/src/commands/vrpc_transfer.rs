@@ -57,6 +57,12 @@ pub async fn preflight_vrpc_transfer(
 
     let canonical_channel_id =
         vrpc::canonical_vrpc_channel_id(&resolved.address, &resolved.system_id);
+    if !vrpc_provider_pool.has_system_provider(network, &resolved.system_id) {
+        println!(
+            "[VRPC] Missing system-specific endpoint for {}. Falling back to network default.",
+            resolved.system_id
+        );
+    }
 
     vrpc::preflight_transfer(
         params,
@@ -64,7 +70,7 @@ pub async fn preflight_vrpc_transfer(
         &account_id,
         &effective_source,
         &canonical_channel_id,
-        vrpc_provider_pool.for_network(network),
+        vrpc_provider_pool.for_system(network, &resolved.system_id),
     )
     .await
 }

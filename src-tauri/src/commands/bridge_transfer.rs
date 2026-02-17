@@ -194,10 +194,16 @@ async fn get_bridge_conversion_paths_vrpc(
     {
         return Err(WalletError::UnsupportedChannel);
     }
+    if !vrpc_provider_pool.has_system_provider(network, &resolved.system_id) {
+        println!(
+            "[VRPC] Missing system-specific endpoint for {}. Falling back to network default.",
+            resolved.system_id
+        );
+    }
 
     crate::core::channels::eth::bridge::get_conversion_paths(
         &request,
-        vrpc_provider_pool.for_network(network),
+        vrpc_provider_pool.for_system(network, &resolved.system_id),
         eth_provider_pool.for_network(network).ok(),
     )
     .await
@@ -233,10 +239,16 @@ async fn estimate_bridge_conversion_vrpc(
     {
         return Err(WalletError::UnsupportedChannel);
     }
+    if !vrpc_provider_pool.has_system_provider(network, &resolved.system_id) {
+        println!(
+            "[VRPC] Missing system-specific endpoint for {}. Falling back to network default.",
+            resolved.system_id
+        );
+    }
 
     crate::core::channels::eth::bridge::estimate_conversion(
         &request,
-        vrpc_provider_pool.for_network(network),
+        vrpc_provider_pool.for_system(network, &resolved.system_id),
         eth_provider_pool.for_network(network).ok(),
     )
     .await
@@ -410,6 +422,12 @@ async fn preflight_bridge_vrpc(
     {
         return Err(WalletError::UnsupportedChannel);
     }
+    if !vrpc_provider_pool.has_system_provider(network, &resolved.system_id) {
+        println!(
+            "[VRPC] Missing system-specific endpoint for {}. Falling back to network default.",
+            resolved.system_id
+        );
+    }
 
     let mut vrpc_params = to_vrpc_bridge_params(&params);
     vrpc_params.channel_id =
@@ -421,7 +439,7 @@ async fn preflight_bridge_vrpc(
         &account_id,
         &effective_source,
         &vrpc::canonical_vrpc_channel_id(&resolved.address, &resolved.system_id),
-        vrpc_provider_pool.for_network(network),
+        vrpc_provider_pool.for_system(network, &resolved.system_id),
     )
     .await?;
 

@@ -11,3 +11,9 @@ export type TransferStepperStep = {
 };
 
 export type DestinationAddressKind = 'vrpc' | 'btc' | 'eth';
+
+export type TransferEntryContext = {
+  coinId: string;
+  channelId: string;
+  readOnly: boolean;
+};

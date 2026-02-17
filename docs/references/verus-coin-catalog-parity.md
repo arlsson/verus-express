@@ -52,6 +52,17 @@ Desktop runtime resolver (`src/lib/coins/presentation.ts`) applies these rules:
      except when `displayTicker` contains `Bridge.vETH` -> badge `VRSC`.
    - `displayName` contains `on Ethereum` -> badge `ETH`.
 
+## Chain scope parity
+
+Chain options in desktop asset details now follow wallet-scoped activated assets
+for the active account + network:
+
+1. Additional chains appear only when an asset on that chain is activated.
+2. The selected coin's root system is always included.
+3. Chain labels prefer native system definitions (`currency_id == system_id`) when
+   present, avoiding token-derived labels (for example, no `DAI` label for the
+   `vETH` system).
+
 ## Expected parity invariants
 
 Current baseline (from `valu-mobile` `newsend2`):

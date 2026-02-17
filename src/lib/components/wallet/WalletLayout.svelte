@@ -9,6 +9,7 @@
   import * as Sidebar from '$lib/components/ui/sidebar';
   import AppSidebar from './AppSidebar.svelte';
   import Overview from './sections/Overview.svelte';
+  import AssetDetails from './sections/AssetDetails.svelte';
   import Send from './sections/Send.svelte';
   import Receive from './sections/Receive.svelte';
   import Conversions from './sections/Conversions.svelte';
@@ -18,6 +19,7 @@
   import AddressBook from './sections/AddressBook.svelte';
   import { dismissWalletError, walletErrorsStore } from '$lib/stores/walletErrors.js';
   import { i18nStore } from '$lib/i18n';
+  import type { TransferEntryContext } from './sections/transfer-wizard/types';
 
   interface WalletData {
     name: string;
@@ -38,10 +40,17 @@
 
   const { walletData }: { walletData: WalletData } = $props();
   let activeSection = $state<SectionId>('overview');
+  let activeAssetDetailsCoinId = $state<string | null>(null);
+  let transferEntryContext = $state<TransferEntryContext | null>(null);
   const walletErrors = $derived($walletErrorsStore);
   const latestError = $derived(walletErrors.latest);
   const i18n = $derived($i18nStore);
   const isTransferFocusMode = $derived(activeSection === 'send' || activeSection === 'conversions');
+
+  $effect(() => {
+    if (activeSection === 'send' || activeSection === 'conversions') return;
+    transferEntryContext = null;
+  });
 </script>
 
 <div class="relative h-screen overflow-hidden">
@@ -72,18 +81,61 @@
           : 'flex-1 min-h-0 overflow-auto'}
       >
         {#if activeSection === 'overview'}
-          <Overview
-            {walletData}
-            onNavigateToSend={() => (activeSection = 'send')}
-            onNavigateToReceive={() => (activeSection = 'receive')}
-            onNavigateToConvert={() => (activeSection = 'conversions')}
-          />
+          {#if activeAssetDetailsCoinId}
+            <AssetDetails
+              coinId={activeAssetDetailsCoinId}
+              onBack={() => {
+                activeAssetDetailsCoinId = null;
+              }}
+              onNavigateToReceive={() => {
+                activeSection = 'receive';
+              }}
+              onNavigateToSend={(context) => {
+                transferEntryContext = context;
+                activeSection = 'send';
+              }}
+              onNavigateToConvert={(context) => {
+                transferEntryContext = context;
+                activeSection = 'conversions';
+              }}
+            />
+          {:else}
+            <Overview
+              {walletData}
+              onOpenAssetDetails={(coinId) => {
+                activeAssetDetailsCoinId = coinId;
+              }}
+              onNavigateToSend={() => {
+                transferEntryContext = null;
+                activeSection = 'send';
+              }}
+              onNavigateToReceive={() => {
+                activeSection = 'receive';
+              }}
+              onNavigateToConvert={() => {
+                transferEntryContext = null;
+                activeSection = 'conversions';
+              }}
+            />
+          {/if}
         {:else if activeSection === 'send'}
-          <Send onClose={() => (activeSection = 'overview')} />
+          <Send
+            entryContext={transferEntryContext}
+            onClose={() => {
+              activeSection = 'overview';
+              transferEntryContext = null;
+            }}
+          />
         {:else if activeSection === 'receive'}
           <Receive />
         {:else if activeSection === 'conversions'}
-          <Conversions onClose={() => (activeSection = 'overview')} />
+          <Conversions
+            entryContext={transferEntryContext}
+            onClose={() => {
+              activeSection = 'overview';
+              transferEntryContext = null;
+            }}
+          />
         {:else if activeSection === 'identity'}
           <Identity />
         {:else if activeSection === 'apps'}

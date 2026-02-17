@@ -162,6 +162,35 @@ pub struct ActiveWalletResponse {
     pub color: String,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CoinScope {
+    pub channel_id: String,
+    pub coin_id: String,
+    pub address: String,
+    pub address_label: String,
+    pub system_id: String,
+    pub system_ticker: String,
+    pub system_display_name: String,
+    pub is_primary_address: bool,
+    pub is_read_only: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CoinScopesResult {
+    pub coin_id: String,
+    pub scopes: Vec<CoinScope>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveAssetsState {
+    pub network: WalletNetwork,
+    pub initialized: bool,
+    pub coin_ids: Vec<String>,
+}
+
 impl WalletMetadata {
     pub fn new(name: String) -> Self {
         Self {

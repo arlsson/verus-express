@@ -16,9 +16,7 @@ use crate::core::channels::store::PreflightStore;
 use crate::core::channels::vrpc::identity::verus_tx::codec::{
     decode_hex as decode_verus_tx, encode_hex as encode_verus_tx_hex,
 };
-use crate::core::channels::vrpc::identity::verus_tx::model::{
-    txid_le_bytes_to_hex, InputSignMode,
-};
+use crate::core::channels::vrpc::identity::verus_tx::model::{txid_le_bytes_to_hex, InputSignMode};
 use crate::core::channels::vrpc::identity::verus_tx::script::{
     build_p2pkh_script_sig, build_single_push_script_sig, classify_prevout_script,
 };
@@ -26,6 +24,7 @@ use crate::core::channels::vrpc::identity::verus_tx::sighash::{
     signature_hash as zcash_signature_hash, SIGHASH_ALL as ZCASH_SIGHASH_ALL,
 };
 use crate::core::channels::vrpc::identity::verus_tx::smart_sig::build_single_signature_chunk;
+use crate::core::channels::vrpc::parse_vrpc_channel_id;
 use crate::core::channels::vrpc::preflight::VrpcPreflightPayload;
 use crate::core::channels::vrpc::provider::VrpcProviderPool;
 use crate::core::crypto::wif_encoding::{decode_wif, Network};
@@ -72,7 +71,8 @@ pub async fn send(
 
     let signed_hex = sign_payload(&payload, &secp, &secret_key, &public_key)?;
 
-    let provider = provider_pool.for_network(wallet_network);
+    let resolved_channel = parse_vrpc_channel_id(&record.channel_id, Some(&payload.from_address))?;
+    let provider = provider_pool.for_system(wallet_network, &resolved_channel.system_id);
     let txid_value = provider.sendrawtransaction(&signed_hex).await?;
     let txid = parse_txid_from_result(&txid_value).unwrap_or_default();
     if txid.is_empty() {
@@ -110,8 +110,8 @@ fn sign_payload_legacy(
         .or_else(|_| hex::decode(&payload.hex))
         .map_err(|_| WalletError::OperationFailed)?;
     let mut cursor = Cursor::new(&tx_bytes[..]);
-    let mut tx: bitcoin::Transaction =
-        bitcoin::Transaction::consensus_decode(&mut cursor).map_err(|_| WalletError::OperationFailed)?;
+    let mut tx: bitcoin::Transaction = bitcoin::Transaction::consensus_decode(&mut cursor)
+        .map_err(|_| WalletError::OperationFailed)?;
 
     let fallback_script_pubkey = p2pkh_script(&public_key.serialize());
     for i in 0..tx.input.len() {
@@ -170,7 +170,8 @@ fn sign_payload_overwinter(
             .as_ref()
             .ok_or(WalletError::OperationFailed)
             .and_then(|raw| hex::decode(raw).map_err(|_| WalletError::OperationFailed))?;
-        let prevout_value = u64::try_from(payload_input.satoshis).map_err(|_| WalletError::OperationFailed)?;
+        let prevout_value =
+            u64::try_from(payload_input.satoshis).map_err(|_| WalletError::OperationFailed)?;
         let sighash = zcash_signature_hash(
             &tx,
             input_index,

@@ -5,7 +5,7 @@ import type { CoinDefinition, WalletNetwork } from '$lib/types/wallet.js';
 
 export type AddAssetProto = CoinDefinition['proto'] | 'fiat';
 export type AddAssetStatus = 'added' | 'available';
-export type AddAssetAddStrategy = 'direct' | 'resolve_pbaas' | 'resolve_erc20';
+export type AddAssetAddStrategy = 'activate' | 'direct' | 'resolve_pbaas' | 'resolve_erc20';
 
 interface CatalogCoin {
   id: string;
@@ -44,6 +44,7 @@ interface BuildAddAssetCatalogInput {
   coins: CoinDefinition[];
   network: WalletNetwork;
   query: string;
+  activeCoinIds: string[];
 }
 
 const catalogCoins = verusCoinCatalog as CatalogCoin[];
@@ -179,9 +180,15 @@ function compareEntries(a: AddAssetEntry, b: AddAssetEntry, query: string): numb
 export function buildAddAssetCatalogView({
   coins,
   network,
-  query
+  query,
+  activeCoinIds
 }: BuildAddAssetCatalogInput): AddAssetCatalogView {
   const isTestnet = network === 'testnet';
+  const activeSet = new Set(
+    activeCoinIds
+      .map((coinId) => coinId.trim().toLowerCase())
+      .filter((coinId) => coinId.length > 0)
+  );
   const entries = new Map<string, AddAssetEntry>();
 
   for (const runtimeCoin of coins) {
@@ -202,8 +209,8 @@ export function buildAddAssetCatalogView({
       mappedTo: runtimeCoin.mappedTo ?? null,
       isTestnet: runtimeCoin.isTestnet,
       source: 'runtime',
-      status: 'added',
-      addStrategy: 'direct'
+      status: activeSet.has(runtimeCoin.id.toLowerCase()) ? 'added' : 'available',
+      addStrategy: 'activate'
     });
   }
 

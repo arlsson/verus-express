@@ -22,6 +22,12 @@ export interface Transaction {
 
 export type WalletNetwork = 'mainnet' | 'testnet';
 
+export interface ActiveAssetsState {
+  network: WalletNetwork;
+  initialized: boolean;
+  coinIds: string[];
+}
+
 export type Protocol = 'vrsc' | 'btc' | 'eth' | 'erc20';
 export type Channel = 'vrpc' | 'btc' | 'eth' | 'erc20';
 
@@ -40,6 +46,23 @@ export interface CoinDefinition {
   secondsPerBlock: number;
   mappedTo?: string | null;
   isTestnet: boolean;
+}
+
+export interface CoinScope {
+  channelId: string;
+  coinId: string;
+  address: string;
+  addressLabel: string;
+  systemId: string;
+  systemTicker: string;
+  systemDisplayName: string;
+  isPrimaryAddress: boolean;
+  isReadOnly: boolean;
+}
+
+export interface CoinScopesResult {
+  coinId: string;
+  scopes: CoinScope[];
 }
 
 export interface PbaasCandidate {

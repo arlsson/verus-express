@@ -11,16 +11,10 @@
   import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
   import { i18nStore } from '$lib/i18n';
   import { isWalletSupportedAsset } from '$lib/coins/supportedAssets.js';
-  import {
-    assetVisibilityKey,
-    filterVisibleAssets,
-    hideAssetByKey,
-    isAssetHiddenByKey,
-    showAssetByKey
-  } from '$lib/stores/assetVisibility.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { buildWalletChannels, walletChannelsStore } from '$lib/stores/walletChannels.js';
   import * as coinsService from '$lib/services/coinsService.js';
+  import * as walletService from '$lib/services/walletService.js';
   import {
     type AddAssetEntry,
     applyCatalogMetadataToCoinDefinition,
@@ -29,15 +23,16 @@
     erc20ContractValue,
     pbaasLookupValue
   } from '$lib/stores/addAssetCatalog.js';
-  import type { CoinDefinition, PbaasCandidate, WalletNetwork } from '$lib/types/wallet.js';
+  import type { ActiveAssetsState, CoinDefinition, PbaasCandidate, WalletNetwork } from '$lib/types/wallet.js';
 
   /* eslint-disable prefer-const */
   let { isOpen = $bindable(false), network }: { isOpen?: boolean; network: WalletNetwork } = $props();
   /* eslint-enable prefer-const */
 
   const i18n = $derived($i18nStore);
-  const coins = $derived($coinsStore);
   const walletChannels = $derived($walletChannelsStore);
+  let registryCoins = $state<CoinDefinition[]>([]);
+  let activeAssetIds = $state<string[]>([]);
 
   let searchInput = $state('');
   let debouncedSearch = $state('');
@@ -59,9 +54,10 @@
 
   const catalogView = $derived(
     buildAddAssetCatalogView({
-      coins,
+      coins: registryCoins,
       network,
-      query: debouncedSearch
+      query: debouncedSearch,
+      activeCoinIds: activeAssetIds
     })
   );
 
@@ -85,6 +81,50 @@
       }
     };
   });
+
+  $effect(() => {
+    if (!isOpen) return;
+    void (async () => {
+      try {
+        await hydrateCatalogState();
+        actionError = '';
+      } catch (error) {
+        actionError = translateAssetError(error, 'wallet.addAsset.error.addFailed');
+      }
+    })();
+  });
+
+  function normalizeCoinId(value: string): string {
+    return value.trim().toLowerCase();
+  }
+
+  function filterCoinsByActiveIds(coins: CoinDefinition[], coinIds: string[]): CoinDefinition[] {
+    const activeSet = new Set(
+      coinIds
+        .map((coinId) => normalizeCoinId(coinId))
+        .filter((coinId) => coinId.length > 0)
+    );
+    if (activeSet.size === 0) return [];
+
+    return coins.filter((coin) => activeSet.has(normalizeCoinId(coin.id)));
+  }
+
+  function applyActiveAssetsState(state: ActiveAssetsState, sourceCoins: CoinDefinition[] = registryCoins): void {
+    activeAssetIds = state.coinIds;
+    const activeCoins = filterCoinsByActiveIds(sourceCoins, state.coinIds);
+    coinsStore.set(activeCoins);
+    walletChannelsStore.set(buildWalletChannels(activeCoins, walletChannels.vrpcAddress));
+  }
+
+  async function hydrateCatalogState(): Promise<void> {
+    const [allCoins, activeAssets] = await Promise.all([
+      coinsService.getCoinRegistry(),
+      walletService.getActiveAssets()
+    ]);
+    const networkCoins = allCoins.filter((coin) => isWalletSupportedAsset(coin, network));
+    registryCoins = networkCoins;
+    applyActiveAssetsState(activeAssets, networkCoins);
+  }
 
   function handleOpenAutoFocus(event: Event) {
     event.preventDefault();
@@ -201,12 +241,42 @@
 
   async function refreshRegistryState() {
     const allCoins = await coinsService.getCoinRegistry();
-    const networkCoins = filterVisibleAssets(
-      allCoins.filter((coin) => isWalletSupportedAsset(coin, network)),
-      network
+    const networkCoins = allCoins.filter((coin) => isWalletSupportedAsset(coin, network));
+    registryCoins = networkCoins;
+
+    const activeCoins = filterCoinsByActiveIds(networkCoins, activeAssetIds);
+    coinsStore.set(activeCoins);
+    walletChannelsStore.set(buildWalletChannels(activeCoins, walletChannels.vrpcAddress));
+  }
+
+  async function persistActiveAssets(coinIds: string[]): Promise<void> {
+    const nextState = await walletService.setActiveAssets(coinIds);
+    applyActiveAssetsState(nextState);
+  }
+
+  async function activateAsset(coinId: string): Promise<void> {
+    await persistActiveAssets([...activeAssetIds, coinId]);
+  }
+
+  async function deactivateAsset(coinId: string): Promise<void> {
+    const nextIds = activeAssetIds.filter((existingId) => normalizeCoinId(existingId) !== normalizeCoinId(coinId));
+    await persistActiveAssets(nextIds);
+  }
+
+  function findMatchingRegistryCoin(definition: CoinDefinition): CoinDefinition | null {
+    const normalizedId = normalizeCoinId(definition.id);
+    const normalizedCurrencyId = normalizeCoinId(definition.currencyId ?? '');
+    const byId = registryCoins.find((coin) => normalizeCoinId(coin.id) === normalizedId);
+    if (byId) return byId;
+
+    if (normalizedCurrencyId.length === 0) return null;
+    return (
+      registryCoins.find(
+        (coin) =>
+          coin.proto === definition.proto &&
+          normalizeCoinId(coin.currencyId ?? '') === normalizedCurrencyId
+      ) ?? null
     );
-    coinsStore.set(networkCoins);
-    walletChannelsStore.set(buildWalletChannels(networkCoins, walletChannels.vrpcAddress));
   }
 
   async function addCoinToRegistry(
@@ -217,11 +287,10 @@
     const showSuccessNotice = options?.showSuccessNotice ?? true;
     const successTone = options?.successTone ?? 'success';
     const autoClearMs = options?.autoClearMs;
-    const visibilityKey = assetVisibilityKey(definition.id, definition.proto);
     try {
-      await coinsService.addCoinDefinition(definition);
-      showAssetByKey(visibilityKey, network);
+      const addedCoin = await coinsService.addCoinDefinition(definition);
       await refreshRegistryState();
+      await activateAsset(addedCoin.id);
       actionError = '';
       if (showSuccessNotice) {
         setActionSuccess(i18n.t(successMessageKey, { ticker: definition.displayTicker }), successTone, autoClearMs);
@@ -230,9 +299,13 @@
       }
     } catch (error) {
       const errorType = extractWalletErrorType(error);
-      if (errorType === 'AssetAlreadyExists' && isAssetHiddenByKey(visibilityKey, network)) {
-        showAssetByKey(visibilityKey, network);
+      if (errorType === 'AssetAlreadyExists' || errorType === 'DuplicatePbaasCurrency') {
         await refreshRegistryState();
+        const existingCoin = findMatchingRegistryCoin(definition);
+        if (!existingCoin) {
+          throw error;
+        }
+        await activateAsset(existingCoin.id);
         actionError = '';
         if (showSuccessNotice) {
           setActionSuccess(i18n.t('wallet.addAsset.toast.enabled', { ticker: definition.displayTicker }), successTone, autoClearMs);
@@ -253,15 +326,13 @@
 
     try {
       if (entry.status === 'added') {
-        hideAssetByKey(entry.key, network);
-        await refreshRegistryState();
+        await deactivateAsset(entry.id);
         setActionSuccess(i18n.t('wallet.addAsset.toast.disabled', { ticker: entry.displayTicker }), 'destructive', 2000);
         return;
       }
 
-      if (isAssetHiddenByKey(entry.key, network)) {
-        showAssetByKey(entry.key, network);
-        await refreshRegistryState();
+      if (entry.addStrategy === 'activate') {
+        await activateAsset(entry.id);
         setActionSuccess(i18n.t('wallet.addAsset.toast.enabled', { ticker: entry.displayTicker }));
         return;
       }

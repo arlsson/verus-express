@@ -39,7 +39,7 @@ pub use transaction::{
 };
 pub use vrpc_transfer::{VrpcTransferPreflightParams, VrpcTransferPreflightResult};
 pub use wallet::{
-    AccountRecord, ActiveWalletResponse, AddressResponse, CreateWalletRequest, CreateWalletResult,
-    GenerateMnemonicRequest, ImportWalletTextRequest, MnemonicResult, WalletListItem,
-    WalletMetadata, WalletSecretKind,
+    AccountRecord, ActiveAssetsState, ActiveWalletResponse, AddressResponse, CoinScope,
+    CoinScopesResult, CreateWalletRequest, CreateWalletResult, GenerateMnemonicRequest,
+    ImportWalletTextRequest, MnemonicResult, WalletListItem, WalletMetadata, WalletSecretKind,
 };

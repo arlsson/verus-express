@@ -10,6 +10,7 @@ use crate::core::auth::SessionManager;
 use crate::core::channels::btc::BtcProviderPool;
 use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
+use crate::core::coins::Channel;
 use crate::core::coins::{CoinDefinition, CoinRegistry};
 use crate::types::transaction::{
     BalanceResult, PreflightParams, PreflightResult, SendResult, Transaction,
@@ -23,6 +24,9 @@ mod store;
 pub mod vrpc;
 
 pub use store::{PreflightRecord, PreflightStore};
+
+const VRSC_MAINNET_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
+const VRSC_TESTNET_SYSTEM_ID: &str = "iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq";
 
 #[derive(Debug, Clone)]
 pub struct TransactionsFetchResult {
@@ -43,6 +47,41 @@ pub trait WalletChannel: Send + Sync {
     async fn send(&self, preflight_id: &str) -> Result<SendResult, WalletError>;
 }
 
+fn network_root_system_id(network: WalletNetwork) -> &'static str {
+    if matches!(network, WalletNetwork::Testnet) {
+        VRSC_TESTNET_SYSTEM_ID
+    } else {
+        VRSC_MAINNET_SYSTEM_ID
+    }
+}
+
+fn coin_supports_vrpc(coin: &CoinDefinition) -> bool {
+    coin.compatible_channels
+        .iter()
+        .any(|ch| matches!(ch, Channel::Vrpc))
+}
+
+fn is_native_vrpc_system_coin(coin: &CoinDefinition) -> bool {
+    coin_supports_vrpc(coin) && coin.currency_id.eq_ignore_ascii_case(&coin.system_id)
+}
+
+fn is_allowed_vrpc_scope_system(
+    coin_registry: &CoinRegistry,
+    system_id: &str,
+    network: WalletNetwork,
+) -> bool {
+    if system_id.eq_ignore_ascii_case(network_root_system_id(network)) {
+        return true;
+    }
+
+    let is_testnet = matches!(network, WalletNetwork::Testnet);
+    coin_registry.get_all().into_iter().any(|coin| {
+        coin.is_testnet == is_testnet
+            && coin.system_id.eq_ignore_ascii_case(system_id)
+            && is_native_vrpc_system_coin(&coin)
+    })
+}
+
 fn resolve_vrpc_coin_context(
     coin_registry: &CoinRegistry,
     system_id: &str,
@@ -54,11 +93,13 @@ fn resolve_vrpc_coin_context(
         let hinted = coin_registry
             .find_by_id(coin_id, is_testnet)
             .ok_or(WalletError::UnsupportedChannel)?;
-        let supports_vrpc = hinted
-            .compatible_channels
-            .iter()
-            .any(|ch| matches!(ch, crate::core::coins::Channel::Vrpc));
-        if !supports_vrpc || hinted.system_id != system_id {
+        if !coin_supports_vrpc(&hinted) {
+            return Err(WalletError::UnsupportedChannel);
+        }
+
+        let hinted_matches_scope = hinted.system_id.eq_ignore_ascii_case(system_id);
+        if !hinted_matches_scope && !is_allowed_vrpc_scope_system(coin_registry, system_id, network)
+        {
             return Err(WalletError::UnsupportedChannel);
         }
         hinted
@@ -125,13 +166,19 @@ pub async fn route_preflight(
 
             let canonical_channel_id =
                 vrpc::canonical_vrpc_channel_id(&resolved.address, &resolved.system_id);
+            if !vrpc_provider_pool.has_system_provider(network, &resolved.system_id) {
+                println!(
+                    "[VRPC] Missing system-specific endpoint for {}. Falling back to network default.",
+                    resolved.system_id
+                );
+            }
             vrpc::preflight(
                 params,
                 preflight_store,
                 &account_id,
                 &resolved.address,
                 &canonical_channel_id,
-                vrpc_provider_pool.for_network(network),
+                vrpc_provider_pool.for_system(network, &resolved.system_id),
             )
             .await
         }
@@ -290,8 +337,19 @@ pub async fn route_get_balances(
                 coin_id_hint,
                 network,
             )?;
+            if !vrpc_provider_pool.has_system_provider(network, &resolved.system_id) {
+                println!(
+                    "[VRPC] Missing system-specific endpoint for {}. Falling back to network default.",
+                    resolved.system_id
+                );
+            }
             let addresses = vec![resolved.address];
-            vrpc::get_balances(vrpc_provider_pool.for_network(network), &addresses, &coin).await
+            vrpc::get_balances(
+                vrpc_provider_pool.for_system(network, &resolved.system_id),
+                &addresses,
+                &coin,
+            )
+            .await
         }
         "btc" => {
             let session = session_manager.lock().await;
@@ -366,10 +424,19 @@ pub async fn route_get_transactions(
                 coin_id_hint,
                 network,
             )?;
+            if !vrpc_provider_pool.has_system_provider(network, &resolved.system_id) {
+                println!(
+                    "[VRPC] Missing system-specific endpoint for {}. Falling back to network default.",
+                    resolved.system_id
+                );
+            }
             let addresses = vec![resolved.address];
-            let res =
-                vrpc::get_transactions(vrpc_provider_pool.for_network(network), &addresses, &coin)
-                    .await?;
+            let res = vrpc::get_transactions(
+                vrpc_provider_pool.for_system(network, &resolved.system_id),
+                &addresses,
+                &coin,
+            )
+            .await?;
             Ok(TransactionsFetchResult {
                 transactions: res.transactions,
                 warning: res.warning,
@@ -444,5 +511,118 @@ pub async fn route_get_transactions(
             })
         }
         _ => Err(WalletError::UnsupportedChannel),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_vrpc_coin_context;
+    use crate::core::coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
+    use crate::types::wallet::WalletNetwork;
+
+    const VRSC_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
+    const VETH_SYSTEM_ID: &str = "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X";
+    const CHIPS_SYSTEM_ID: &str = "iJ3WZocnjG9ufv7GKUA4LijQno5gTMb7tP";
+
+    fn sample_vrpc_coin(
+        id: &str,
+        currency_id: &str,
+        system_id: &str,
+        ticker: &str,
+        name: &str,
+    ) -> CoinDefinition {
+        CoinDefinition {
+            id: id.to_string(),
+            currency_id: currency_id.to_string(),
+            system_id: system_id.to_string(),
+            display_ticker: ticker.to_string(),
+            display_name: name.to_string(),
+            coin_paprika_id: None,
+            proto: Protocol::Vrsc,
+            compatible_channels: vec![Channel::Vrpc],
+            decimals: 8,
+            vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+            electrum_endpoints: None,
+            seconds_per_block: 60,
+            mapped_to: None,
+            is_testnet: false,
+        }
+    }
+
+    #[test]
+    fn resolve_vrpc_coin_context_allows_root_scope_for_vrpc_token() {
+        let registry = CoinRegistry::new();
+        registry
+            .add_coin(sample_vrpc_coin(
+                "vUSDC",
+                "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd",
+                VETH_SYSTEM_ID,
+                "vUSDC.vETH",
+                "USDC on Verus",
+            ))
+            .expect("add vUSDC");
+
+        let context = resolve_vrpc_coin_context(
+            &registry,
+            VRSC_SYSTEM_ID,
+            Some("vUSDC"),
+            WalletNetwork::Mainnet,
+        )
+        .expect("resolve context");
+        assert_eq!(context.currency_id, "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd");
+    }
+
+    #[test]
+    fn resolve_vrpc_coin_context_allows_native_chain_scope_for_vrpc_token() {
+        let registry = CoinRegistry::new();
+        registry
+            .add_coin(sample_vrpc_coin(
+                "vUSDC",
+                "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd",
+                VETH_SYSTEM_ID,
+                "vUSDC.vETH",
+                "USDC on Verus",
+            ))
+            .expect("add vUSDC");
+        registry
+            .add_coin(sample_vrpc_coin(
+                "CHIPS",
+                CHIPS_SYSTEM_ID,
+                CHIPS_SYSTEM_ID,
+                "CHIPS",
+                "CHIPS",
+            ))
+            .expect("add CHIPS");
+
+        let context = resolve_vrpc_coin_context(
+            &registry,
+            CHIPS_SYSTEM_ID,
+            Some("vUSDC"),
+            WalletNetwork::Mainnet,
+        )
+        .expect("resolve context");
+        assert_eq!(context.currency_id, "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd");
+    }
+
+    #[test]
+    fn resolve_vrpc_coin_context_rejects_unrelated_non_native_scope() {
+        let registry = CoinRegistry::new();
+        registry
+            .add_coin(sample_vrpc_coin(
+                "vUSDC",
+                "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd",
+                VETH_SYSTEM_ID,
+                "vUSDC.vETH",
+                "USDC on Verus",
+            ))
+            .expect("add vUSDC");
+
+        let result = resolve_vrpc_coin_context(
+            &registry,
+            "iUnrelatedSystem",
+            Some("vUSDC"),
+            WalletNetwork::Mainnet,
+        );
+        assert!(result.is_err());
     }
 }
