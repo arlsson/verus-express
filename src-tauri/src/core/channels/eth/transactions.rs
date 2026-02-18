@@ -7,6 +7,13 @@ use crate::types::transaction::Transaction;
 use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
 
+#[derive(Debug, Clone)]
+pub struct EthTransactionsPage {
+    pub transactions: Vec<Transaction>,
+    pub next_page: u32,
+    pub has_more: bool,
+}
+
 pub async fn get_eth_transactions(
     provider: &EthNetworkProvider,
     network: WalletNetwork,
@@ -24,6 +31,34 @@ pub async fn get_eth_transactions(
 
     sort_transactions(&mut txs);
     Ok(txs)
+}
+
+pub async fn get_eth_transactions_page(
+    provider: &EthNetworkProvider,
+    network: WalletNetwork,
+    address: &str,
+    page: u32,
+    limit: usize,
+) -> Result<EthTransactionsPage, WalletError> {
+    let safe_limit = limit.clamp(1, 100) as u32;
+    let safe_page = page.max(1);
+    let records = provider
+        .history_provider
+        .get_eth_history_page(network, address, safe_page, safe_limit)
+        .await?;
+
+    let mut txs = records
+        .into_iter()
+        .map(|record| map_record_to_transaction(record, address, 18, true))
+        .collect::<Vec<_>>();
+    sort_transactions(&mut txs);
+
+    let has_more = txs.len() >= safe_limit as usize;
+    Ok(EthTransactionsPage {
+        transactions: txs,
+        next_page: safe_page.saturating_add(1),
+        has_more,
+    })
 }
 
 pub async fn get_erc20_transactions(
@@ -44,6 +79,35 @@ pub async fn get_erc20_transactions(
 
     sort_transactions(&mut txs);
     Ok(txs)
+}
+
+pub async fn get_erc20_transactions_page(
+    provider: &EthNetworkProvider,
+    network: WalletNetwork,
+    address: &str,
+    coin: &CoinDefinition,
+    page: u32,
+    limit: usize,
+) -> Result<EthTransactionsPage, WalletError> {
+    let safe_limit = limit.clamp(1, 100) as u32;
+    let safe_page = page.max(1);
+    let records = provider
+        .history_provider
+        .get_erc20_history_page(network, address, &coin.currency_id, safe_page, safe_limit)
+        .await?;
+
+    let mut txs = records
+        .into_iter()
+        .map(|record| map_record_to_transaction(record, address, coin.decimals as usize, false))
+        .collect::<Vec<_>>();
+    sort_transactions(&mut txs);
+
+    let has_more = txs.len() >= safe_limit as usize;
+    Ok(EthTransactionsPage {
+        transactions: txs,
+        next_page: safe_page.saturating_add(1),
+        has_more,
+    })
 }
 
 fn map_record_to_transaction(

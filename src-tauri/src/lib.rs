@@ -168,6 +168,7 @@ pub fn run() {
             transaction::send_transaction,
             transaction::get_balances,
             transaction::get_transaction_history,
+            transaction::get_transaction_history_page,
             vrpc_transfer::preflight_vrpc_transfer,
             bridge_transfer::get_bridge_capabilities,
             bridge_transfer::get_bridge_conversion_paths,

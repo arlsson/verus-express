@@ -12,6 +12,38 @@ use crate::types::transaction::Transaction;
 use crate::types::WalletError;
 
 const RESERVE_TRANSFER_DESTINATION_ADDRESS: &str = "RTqQe58LSj2yr5CrwYFwcsAQ1edQwmrkUU";
+const VRPC_WINDOW_BLOCK_COUNT: u64 = 2000;
+const MAX_VRPC_WINDOW_REQUESTS: usize = 24;
+
+#[derive(Debug, Clone, Copy)]
+pub struct VrpcHistoryCursor {
+    pub end_block: u64,
+    pub include_pending: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct VrpcTransactionsPage {
+    pub transactions: Vec<Transaction>,
+    pub next_cursor: Option<VrpcHistoryCursor>,
+    pub has_more: bool,
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AggregatedTransaction {
+    transaction: Transaction,
+    height: Option<u64>,
+}
+
+#[derive(Default)]
+struct TxAggregate {
+    delta: f64,
+    pending: bool,
+    height: Option<u64>,
+    blocktime: Option<u64>,
+    address: Option<String>,
+    sent_output_addresses: Vec<String>,
+}
 
 /// Fetch transaction history for addresses with coin context.
 pub async fn get_transactions(
@@ -73,12 +105,255 @@ pub async fn get_transactions(
     })
 }
 
+pub async fn get_transactions_page(
+    provider: &VrpcProvider,
+    addresses: &[String],
+    coin: &VrpcCoinContext,
+    cursor: Option<VrpcHistoryCursor>,
+    limit: usize,
+) -> Result<VrpcTransactionsPage, WalletError> {
+    let safe_limit = limit.clamp(1, 100);
+    if addresses.is_empty() {
+        return Ok(VrpcTransactionsPage {
+            transactions: vec![],
+            next_cursor: None,
+            has_more: false,
+            warning: None,
+        });
+    }
+
+    let mut warning_messages = Vec::<String>::new();
+    let longest_chain = match provider.getinfo().await {
+        Ok(info) => info
+            .get("longestchain")
+            .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|i| i as u64))),
+        Err(_) => {
+            warning_messages.push("Chain info unavailable".to_string());
+            None
+        }
+    };
+
+    let include_pending = cursor.map(|value| value.include_pending).unwrap_or(true);
+    let mut current_end_block = cursor
+        .map(|value| value.end_block)
+        .or(longest_chain)
+        .unwrap_or(0);
+    if current_end_block == 0 {
+        if cursor.is_some() {
+            return Ok(VrpcTransactionsPage {
+                transactions: vec![],
+                next_cursor: None,
+                has_more: false,
+                warning: build_warning(warning_messages),
+            });
+        }
+
+        warning_messages.push(
+            "Paged history unavailable for this endpoint. Falling back to first page.".to_string(),
+        );
+        let fallback = get_transactions(provider, addresses, coin).await?;
+        let mut transactions = fallback.transactions;
+        if transactions.len() > safe_limit {
+            transactions.truncate(safe_limit);
+        }
+        if let Some(warning) = fallback.warning {
+            warning_messages.push(warning);
+        }
+        return Ok(VrpcTransactionsPage {
+            transactions,
+            next_cursor: None,
+            has_more: false,
+            warning: build_warning(warning_messages),
+        });
+    }
+
+    let mut ordered_entries: Vec<(Value, bool)> = Vec::new();
+    if include_pending {
+        match provider.getaddressmempool(addresses).await {
+            Ok(Value::Array(arr)) => {
+                for entry in arr {
+                    ordered_entries.push((entry, true));
+                }
+            }
+            Ok(_) => {}
+            Err(_) => warning_messages.push("Mempool temporarily unavailable".to_string()),
+        }
+    }
+
+    let mut reached_oldest_window = false;
+    for _ in 0..MAX_VRPC_WINDOW_REQUESTS {
+        if current_end_block == 0 {
+            reached_oldest_window = true;
+            break;
+        }
+
+        let start_block = current_end_block
+            .saturating_sub(VRPC_WINDOW_BLOCK_COUNT.saturating_sub(1))
+            .max(1);
+        let deltas = match provider
+            .getaddressdeltas_window(addresses, Some(start_block), Some(current_end_block))
+            .await
+        {
+            Ok(value) => value,
+            Err(error) => {
+                if cursor.is_none() {
+                    warning_messages.push("VRPC endpoint does not support windowed paging.".to_string());
+                    let fallback = get_transactions(provider, addresses, coin).await?;
+                    let mut transactions = fallback.transactions;
+                    if transactions.len() > safe_limit {
+                        transactions.truncate(safe_limit);
+                    }
+                    if let Some(warning) = fallback.warning {
+                        warning_messages.push(warning);
+                    }
+                    return Ok(VrpcTransactionsPage {
+                        transactions,
+                        next_cursor: None,
+                        has_more: false,
+                        warning: build_warning(warning_messages),
+                    });
+                }
+                return Err(error);
+            }
+        };
+
+        if let Some(entries) = deltas.as_array() {
+            for entry in entries {
+                ordered_entries.push((entry.clone(), false));
+            }
+        }
+
+        let aggregated = aggregate_transactions_with_meta(
+            &ordered_entries,
+            addresses,
+            coin,
+            longest_chain,
+        );
+
+        if aggregated.len() > safe_limit {
+            let page = paginate_aggregated_transactions(aggregated, safe_limit, current_end_block);
+            return Ok(VrpcTransactionsPage {
+                transactions: page.transactions,
+                next_cursor: page.next_cursor,
+                has_more: page.has_more,
+                warning: build_warning(warning_messages),
+            });
+        }
+
+        if start_block <= 1 {
+            reached_oldest_window = true;
+            current_end_block = 0;
+            break;
+        }
+
+        current_end_block = start_block.saturating_sub(1);
+    }
+
+    let aggregated = aggregate_transactions_with_meta(&ordered_entries, addresses, coin, longest_chain);
+    let transactions = aggregated
+        .into_iter()
+        .map(|item| item.transaction)
+        .collect::<Vec<_>>();
+    let has_more = !reached_oldest_window && !transactions.is_empty();
+    let next_cursor = if has_more {
+        Some(VrpcHistoryCursor {
+            end_block: current_end_block,
+            include_pending: false,
+        })
+    } else {
+        None
+    };
+
+    Ok(VrpcTransactionsPage {
+        transactions,
+        next_cursor,
+        has_more,
+        warning: build_warning(warning_messages),
+    })
+}
+
+fn build_warning(messages: Vec<String>) -> Option<String> {
+    if messages.is_empty() {
+        None
+    } else {
+        Some(messages.join("; "))
+    }
+}
+
+struct PaginatedAggregateResult {
+    transactions: Vec<Transaction>,
+    has_more: bool,
+    next_cursor: Option<VrpcHistoryCursor>,
+}
+
+fn paginate_aggregated_transactions(
+    items: Vec<AggregatedTransaction>,
+    limit: usize,
+    current_end_block: u64,
+) -> PaginatedAggregateResult {
+    if items.len() <= limit {
+        return PaginatedAggregateResult {
+            transactions: items.into_iter().map(|item| item.transaction).collect(),
+            has_more: false,
+            next_cursor: None,
+        };
+    }
+
+    let mut slice_end = limit;
+    let boundary = &items[limit - 1];
+    if boundary.transaction.pending {
+        while slice_end < items.len() && items[slice_end].transaction.pending {
+            slice_end += 1;
+        }
+    } else if let Some(boundary_height) = boundary.height {
+        while slice_end < items.len() && items[slice_end].height == Some(boundary_height) {
+            slice_end += 1;
+        }
+    }
+
+    let has_more = slice_end < items.len();
+    let next_cursor = if has_more {
+        let next_end_block = items[slice_end - 1]
+            .height
+            .map(|height| height.saturating_sub(1))
+            .unwrap_or(current_end_block);
+        Some(VrpcHistoryCursor {
+            end_block: next_end_block,
+            include_pending: false,
+        })
+    } else {
+        None
+    };
+
+    PaginatedAggregateResult {
+        transactions: items
+            .into_iter()
+            .take(slice_end)
+            .map(|item| item.transaction)
+            .collect(),
+        has_more,
+        next_cursor,
+    }
+}
+
 fn aggregate_transactions(
     ordered_entries: Vec<(Value, bool)>,
     owner_addresses: &[String],
     coin: &VrpcCoinContext,
     longest_chain: Option<u64>,
 ) -> Vec<Transaction> {
+    aggregate_transactions_with_meta(&ordered_entries, owner_addresses, coin, longest_chain)
+        .into_iter()
+        .map(|item| item.transaction)
+        .collect()
+}
+
+fn aggregate_transactions_with_meta(
+    ordered_entries: &[(Value, bool)],
+    owner_addresses: &[String],
+    coin: &VrpcCoinContext,
+    longest_chain: Option<u64>,
+) -> Vec<AggregatedTransaction> {
     let owner_addresses_lower: Vec<String> = owner_addresses
         .iter()
         .map(|addr| addr.to_ascii_lowercase())
@@ -105,7 +380,7 @@ fn aggregate_transactions(
             continue;
         }
 
-        let height = obj
+        let raw_height = obj
             .get("height")
             .and_then(|v| v.as_i64().or_else(|| v.as_u64().map(|u| u as i64)));
         let blocktime = obj
@@ -119,10 +394,10 @@ fn aggregate_transactions(
 
         let agg = by_txid.entry(txid).or_default();
         agg.delta += delta;
-        agg.pending = agg.pending || is_mempool || height.unwrap_or(0) <= 0;
-        if let Some(h) = height {
-            if h > 0 {
-                agg.height = Some(agg.height.map_or(h, |prev| prev.max(h)));
+        agg.pending = agg.pending || *is_mempool || raw_height.unwrap_or(0) <= 0;
+        if let Some(height) = raw_height.and_then(|h| u64::try_from(h).ok()) {
+            if height > 0 {
+                agg.height = Some(agg.height.map_or(height, |prev| prev.max(height)));
             }
         }
         if agg.blocktime.is_none() {
@@ -136,7 +411,7 @@ fn aggregate_transactions(
         }
     }
 
-    let mut txs: Vec<Transaction> = by_txid
+    let mut txs: Vec<AggregatedTransaction> = by_txid
         .into_iter()
         .filter_map(|(txid, agg)| {
             if agg.delta.abs() < f64::EPSILON {
@@ -145,13 +420,13 @@ fn aggregate_transactions(
 
             let confirmations = if agg.pending {
                 0
-            } else if let (Some(h), Some(longest)) = (agg.height, longest_chain) {
-                if h > 0 && longest >= h as u64 {
-                    (longest - h as u64 + 1) as i64
+            } else if let (Some(height), Some(longest)) = (agg.height, longest_chain) {
+                if longest >= height {
+                    (longest - height + 1) as i64
                 } else {
                     1
                 }
-            } else if agg.height.unwrap_or(0) > 0 {
+            } else if agg.height.is_some() {
                 1
             } else {
                 0
@@ -159,13 +434,13 @@ fn aggregate_transactions(
 
             let timestamp = match (agg.blocktime, agg.height, longest_chain) {
                 (Some(ts), _, _) => Some(ts),
-                (None, Some(h), Some(longest)) if h > 0 && longest >= h as u64 => {
+                (None, Some(height), Some(longest)) if longest >= height => {
                     let now = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .ok()
                         .map(|d| d.as_secs())
                         .unwrap_or(0);
-                    let confirms = longest - h as u64;
+                    let confirms = longest - height;
                     let estimate_secs = confirms.saturating_mul(coin.seconds_per_block);
                     Some(now.saturating_sub(estimate_secs))
                 }
@@ -191,35 +466,34 @@ fn aggregate_transactions(
                 (counterparty, scope_address)
             };
 
-            Some(Transaction {
-                txid,
-                amount,
-                from_address,
-                to_address,
-                confirmations,
-                timestamp,
-                pending: agg.pending,
+            Some(AggregatedTransaction {
+                height: agg.height,
+                transaction: Transaction {
+                    txid,
+                    amount,
+                    from_address,
+                    to_address,
+                    confirmations,
+                    timestamp,
+                    pending: agg.pending,
+                },
             })
         })
         .collect();
 
     txs.sort_by(|a, b| {
-        b.pending
-            .cmp(&a.pending)
-            .then(b.timestamp.unwrap_or(0).cmp(&a.timestamp.unwrap_or(0)))
+        b.transaction
+            .pending
+            .cmp(&a.transaction.pending)
+            .then(
+                b.transaction
+                    .timestamp
+                    .unwrap_or(0)
+                    .cmp(&a.transaction.timestamp.unwrap_or(0)),
+            )
     });
 
     txs
-}
-
-#[derive(Default)]
-struct TxAggregate {
-    delta: f64,
-    pending: bool,
-    height: Option<i64>,
-    blocktime: Option<u64>,
-    address: Option<String>,
-    sent_output_addresses: Vec<String>,
 }
 
 fn extract_delta(obj: &serde_json::Map<String, Value>, coin: &VrpcCoinContext) -> f64 {
@@ -536,5 +810,52 @@ mod tests {
         assert_eq!(txs.len(), 1);
         assert_eq!(txs[0].from_address, "Rwallet");
         assert!(txs[0].to_address.is_empty());
+    }
+
+    #[test]
+    fn pagination_keeps_same_block_entries_together() {
+        let txs = vec![
+            AggregatedTransaction {
+                transaction: Transaction {
+                    txid: "a".to_string(),
+                    amount: "1".to_string(),
+                    from_address: String::new(),
+                    to_address: String::new(),
+                    confirmations: 1,
+                    timestamp: Some(100),
+                    pending: false,
+                },
+                height: Some(20),
+            },
+            AggregatedTransaction {
+                transaction: Transaction {
+                    txid: "b".to_string(),
+                    amount: "1".to_string(),
+                    from_address: String::new(),
+                    to_address: String::new(),
+                    confirmations: 1,
+                    timestamp: Some(99),
+                    pending: false,
+                },
+                height: Some(20),
+            },
+            AggregatedTransaction {
+                transaction: Transaction {
+                    txid: "c".to_string(),
+                    amount: "1".to_string(),
+                    from_address: String::new(),
+                    to_address: String::new(),
+                    confirmations: 1,
+                    timestamp: Some(98),
+                    pending: false,
+                },
+                height: Some(19),
+            },
+        ];
+
+        let page = paginate_aggregated_transactions(txs, 1, 22);
+        assert_eq!(page.transactions.len(), 2);
+        assert!(page.has_more);
+        assert_eq!(page.next_cursor.expect("cursor").end_block, 19);
     }
 }

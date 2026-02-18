@@ -182,6 +182,36 @@ impl EtherscanHistoryClient {
             .await
     }
 
+    pub async fn get_eth_history_page(
+        &self,
+        network: WalletNetwork,
+        address: &str,
+        page: u32,
+        offset: u32,
+    ) -> Result<Vec<EtherscanTxRecord>, WalletError> {
+        self.fetch_history_page(network, "txlist", address, None, page, offset)
+            .await
+    }
+
+    pub async fn get_erc20_history_page(
+        &self,
+        network: WalletNetwork,
+        address: &str,
+        contract_address: &str,
+        page: u32,
+        offset: u32,
+    ) -> Result<Vec<EtherscanTxRecord>, WalletError> {
+        self.fetch_history_page(
+            network,
+            "tokentx",
+            address,
+            Some(contract_address),
+            page,
+            offset,
+        )
+        .await
+    }
+
     async fn fetch_history(
         &self,
         network: WalletNetwork,
@@ -195,6 +225,48 @@ impl EtherscanHistoryClient {
         };
 
         let query = self.build_history_query(network, action, address, contract_address);
+
+        let response = self
+            .client
+            .get(url)
+            .query(&query)
+            .send()
+            .await
+            .map_err(|_| WalletError::NetworkError)?;
+
+        if !response.status().is_success() {
+            return Err(WalletError::NetworkError);
+        }
+
+        let payload: Value = response
+            .json()
+            .await
+            .map_err(|_| WalletError::OperationFailed)?;
+        Self::parse_history_payload(network, action, payload)
+    }
+
+    async fn fetch_history_page(
+        &self,
+        network: WalletNetwork,
+        action: &str,
+        address: &str,
+        contract_address: Option<&str>,
+        page: u32,
+        offset: u32,
+    ) -> Result<Vec<EtherscanTxRecord>, WalletError> {
+        let url = match network {
+            WalletNetwork::Mainnet => &self.mainnet_url,
+            WalletNetwork::Testnet => &self.testnet_url,
+        };
+
+        let query = self.build_history_page_query(
+            network,
+            action,
+            address,
+            contract_address,
+            page,
+            offset,
+        );
 
         let response = self
             .client
@@ -238,6 +310,40 @@ impl EtherscanHistoryClient {
 
         if let Some(contract) = contract_address {
             // Match valu-mobile's ethers provider parameter naming.
+            query.push(("contractAddress".to_string(), contract.to_string()));
+        }
+
+        query
+    }
+
+    fn build_history_page_query(
+        &self,
+        network: WalletNetwork,
+        action: &str,
+        address: &str,
+        contract_address: Option<&str>,
+        page: u32,
+        offset: u32,
+    ) -> Vec<(String, String)> {
+        let safe_page = page.max(1);
+        let safe_offset = offset.clamp(1, 100);
+        let mut query = vec![
+            (
+                "chainid".to_string(),
+                chain_id_for_network(network).to_string(),
+            ),
+            ("module".to_string(), "account".to_string()),
+            ("action".to_string(), action.to_string()),
+            ("address".to_string(), address.to_string()),
+            ("startblock".to_string(), "0".to_string()),
+            ("endblock".to_string(), "99999999".to_string()),
+            ("page".to_string(), safe_page.to_string()),
+            ("offset".to_string(), safe_offset.to_string()),
+            ("sort".to_string(), "desc".to_string()),
+            ("apikey".to_string(), self.api_key.clone()),
+        ];
+
+        if let Some(contract) = contract_address {
             query.push(("contractAddress".to_string(), contract.to_string()));
         }
 
@@ -375,6 +481,28 @@ mod tests {
             query_value(&query, "contractAddress").as_deref(),
             Some("0xtoken")
         );
+    }
+
+    #[test]
+    fn build_history_page_query_sets_desc_sort_and_paging() {
+        let client = EtherscanHistoryClient::new(
+            "api-key".to_string(),
+            "https://api.etherscan.io/v2/api".to_string(),
+            "https://api.etherscan.io/v2/api".to_string(),
+        );
+        let query = client.build_history_page_query(
+            WalletNetwork::Mainnet,
+            "txlist",
+            "0xowner",
+            None,
+            3,
+            50,
+        );
+
+        assert_eq!(query_value(&query, "chainid").as_deref(), Some("1"));
+        assert_eq!(query_value(&query, "page").as_deref(), Some("3"));
+        assert_eq!(query_value(&query, "offset").as_deref(), Some("50"));
+        assert_eq!(query_value(&query, "sort").as_deref(), Some("desc"));
     }
 
     #[test]

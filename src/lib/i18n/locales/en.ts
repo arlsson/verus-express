@@ -204,6 +204,7 @@ export const en: Record<string, string> = {
   'wallet.assetDetails.connectedToScope': 'Connected to {address} on {network}',
   'wallet.assetDetails.loadingTransactions': 'Loading transactions…',
   'wallet.assetDetails.errorLoadTransactions': 'Could not load transactions for this scope.',
+  'wallet.assetDetails.errorLoadMoreTransactions': 'Could not load more transactions.',
   'wallet.assetDetails.noTransactionsForScope':
     'No transactions for this address on this network.',
   'wallet.assetDetails.addressSheetTitle': 'Select address',

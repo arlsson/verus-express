@@ -156,6 +156,29 @@ impl BtcProvider {
         Ok(list)
     }
 
+    /// GET /address/:address/txs/chain/:last_seen_txid -> older confirmed txs page.
+    pub async fn get_address_txs_chain_after(
+        &self,
+        address: &str,
+        last_seen_txid: &str,
+    ) -> Result<Vec<MempoolTx>, WalletError> {
+        let url = self.url(&format!(
+            "address/{}/txs/chain/{}",
+            address, last_seen_txid
+        ));
+        let res = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|_| WalletError::NetworkError)?;
+        if !res.status().is_success() {
+            return Err(WalletError::NetworkError);
+        }
+        let list: Vec<MempoolTx> = res.json().await.map_err(|_| WalletError::OperationFailed)?;
+        Ok(list)
+    }
+
     /// POST /tx with raw tx hex body. Returns txid on success.
     pub async fn broadcast(&self, tx_hex: &str) -> Result<String, WalletError> {
         let url = self.url("tx");

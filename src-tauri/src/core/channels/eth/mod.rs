@@ -107,6 +107,16 @@ pub async fn get_eth_transactions(
     transactions::get_eth_transactions(provider, network, address).await
 }
 
+pub async fn get_eth_transactions_page(
+    provider: &EthNetworkProvider,
+    network: WalletNetwork,
+    address: &str,
+    page: u32,
+    limit: usize,
+) -> Result<transactions::EthTransactionsPage, WalletError> {
+    transactions::get_eth_transactions_page(provider, network, address, page, limit).await
+}
+
 pub async fn get_erc20_transactions(
     provider: &EthNetworkProvider,
     network: WalletNetwork,
@@ -114,6 +124,17 @@ pub async fn get_erc20_transactions(
     coin: &CoinDefinition,
 ) -> Result<Vec<Transaction>, WalletError> {
     transactions::get_erc20_transactions(provider, network, address, coin).await
+}
+
+pub async fn get_erc20_transactions_page(
+    provider: &EthNetworkProvider,
+    network: WalletNetwork,
+    address: &str,
+    coin: &CoinDefinition,
+    page: u32,
+    limit: usize,
+) -> Result<transactions::EthTransactionsPage, WalletError> {
+    transactions::get_erc20_transactions_page(provider, network, address, coin, page, limit).await
 }
 
 #[cfg(test)]

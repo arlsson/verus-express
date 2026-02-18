@@ -79,3 +79,23 @@ pub struct Transaction {
     pub timestamp: Option<u64>,
     pub pending: bool,
 }
+
+/// Request shape for paged transaction history.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionHistoryPageRequest {
+    pub channel_id: String,
+    pub coin_id: Option<String>,
+    pub cursor: Option<String>,
+    pub limit: Option<u32>,
+}
+
+/// One page of transaction history plus opaque cursor metadata.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionHistoryPage {
+    pub transactions: Vec<Transaction>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+    pub warning: Option<String>,
+}

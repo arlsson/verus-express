@@ -46,8 +46,9 @@
   /* eslint-disable prefer-const */
   let {
     activeSection = $bindable('overview' as SectionId),
-    walletData
-  }: { activeSection?: SectionId; walletData: WalletData } = $props();
+    walletData,
+    onSelectOverview = () => {}
+  }: { activeSection?: SectionId; walletData: WalletData; onSelectOverview?: () => void } = $props();
   /* eslint-enable prefer-const */
 
   const i18n = $derived($i18nStore);
@@ -86,6 +87,13 @@
       console.error('[WALLET] Lock failed');
     }
   }
+
+  function handleMenuClick(itemId: MenuItem['id']): void {
+    if (itemId === 'overview') {
+      onSelectOverview();
+    }
+    activeSection = itemId;
+  }
 </script>
 
 <Sidebar.Root class="[--sidebar:#EDEDED] dark:[--sidebar:#28282B]">
@@ -113,7 +121,7 @@
                 size="sm"
                 class={menuButtonClass}
                 isActive={isMenuItemActive(item.id)}
-                onclick={() => (activeSection = item.id)}
+                onclick={() => handleMenuClick(item.id)}
                 tooltipContent={item.title}
               >
                 <item.icon class="size-3.5" />

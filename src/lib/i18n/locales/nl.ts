@@ -208,6 +208,7 @@ export const nl: Record<string, string> = {
   'wallet.assetDetails.loadingTransactions': 'Transacties laden…',
   'wallet.assetDetails.errorLoadTransactions':
     'Transacties voor deze scope konden niet worden geladen.',
+  'wallet.assetDetails.errorLoadMoreTransactions': 'Meer transacties konden niet worden geladen.',
   'wallet.assetDetails.noTransactionsForScope':
     'Geen transacties voor dit adres op dit netwerk.',
   'wallet.assetDetails.addressSheetTitle': 'Adres selecteren',

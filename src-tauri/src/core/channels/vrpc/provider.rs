@@ -47,12 +47,21 @@ fn params_getaddressbalance(addresses: &[String]) -> Result<Value, WalletError> 
     Ok(serde_json::json!([{"addresses": addresses, "friendlynames": true}]))
 }
 
-fn params_getaddressdeltas(addresses: &[String]) -> Value {
-    if addresses.is_empty() {
-        serde_json::json!([{}])
-    } else {
-        serde_json::json!([{"addresses": addresses, "friendlynames": true, "verbosity": 1}])
+fn params_getaddressdeltas(addresses: &[String], start: Option<u64>, end: Option<u64>) -> Value {
+    let mut request = serde_json::Map::new();
+    if !addresses.is_empty() {
+        request.insert("addresses".to_string(), serde_json::json!(addresses));
     }
+    request.insert("friendlynames".to_string(), Value::Bool(true));
+    request.insert("verbosity".to_string(), Value::from(1));
+    if let Some(start_block) = start {
+        request.insert("start".to_string(), Value::from(start_block));
+    }
+    if let Some(end_block) = end {
+        request.insert("end".to_string(), Value::from(end_block));
+    }
+
+    Value::Array(vec![Value::Object(request)])
 }
 
 fn params_getaddressmempool(addresses: &[String]) -> Value {
@@ -593,7 +602,18 @@ impl VrpcProvider {
 
     /// getaddressdeltas: params [{"addresses": ["R..."], "friendlynames": true, "verbosity": 1}]
     pub async fn getaddressdeltas(&self, addresses: &[String]) -> Result<Value, WalletError> {
-        let params = params_getaddressdeltas(addresses);
+        let params = params_getaddressdeltas(addresses, None, None);
+        self.call("getaddressdeltas", params, TTL_DELTAS).await
+    }
+
+    /// getaddressdeltas with block window selectors.
+    pub async fn getaddressdeltas_window(
+        &self,
+        addresses: &[String],
+        start: Option<u64>,
+        end: Option<u64>,
+    ) -> Result<Value, WalletError> {
+        let params = params_getaddressdeltas(addresses, start, end);
         self.call("getaddressdeltas", params, TTL_DELTAS).await
     }
 
@@ -961,11 +981,25 @@ mod tests {
     #[test]
     fn getaddressdeltas_and_mempool_include_verbosity_and_friendlynames() {
         let addresses = vec!["RExampleAddress".to_string()];
-        let deltas = params_getaddressdeltas(&addresses);
+        let deltas = params_getaddressdeltas(&addresses, None, None);
         let mempool = params_getaddressmempool(&addresses);
         let expected = serde_json::json!([{"addresses": ["RExampleAddress"], "friendlynames": true, "verbosity": 1}]);
         assert_eq!(deltas, expected);
         assert_eq!(mempool, expected);
+    }
+
+    #[test]
+    fn getaddressdeltas_window_params_include_start_and_end() {
+        let addresses = vec!["RExampleAddress".to_string()];
+        let deltas = params_getaddressdeltas(&addresses, Some(10), Some(42));
+        let expected = serde_json::json!([{
+            "addresses": ["RExampleAddress"],
+            "friendlynames": true,
+            "verbosity": 1,
+            "start": 10,
+            "end": 42
+        }]);
+        assert_eq!(deltas, expected);
     }
 
     #[test]

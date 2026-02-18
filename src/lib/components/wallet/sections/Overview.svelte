@@ -232,9 +232,9 @@
             <ul class="space-y-1 pb-3">
               {#each overviewSkeletonRows as skeletonRow (skeletonRow)}
                 <li class="grid grid-cols-[minmax(0,1fr)_11rem_10.25rem_auto] items-center gap-3.5 rounded-md px-3.5 py-3">
-                  <div class="min-w-0 flex items-center gap-3.5">
+                  <div class="min-w-0 flex w-full items-center gap-3.5">
                     <Skeleton class="h-[34px] w-[34px] rounded-full" />
-                    <div class="min-w-0 flex min-h-8 items-center">
+                    <div class="min-w-0 flex flex-1 min-h-8 items-center">
                       <Skeleton class="h-5 w-28 rounded-sm" />
                     </div>
                   </div>
@@ -264,7 +264,7 @@
                     class="hover:bg-muted/40 focus-visible:ring-ring/55 grid w-full grid-cols-[minmax(0,1fr)_11rem_10.25rem_auto] items-center gap-3.5 rounded-md px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2"
                     onclick={() => onOpenAssetDetails(row.coinId)}
                   >
-                    <div class="min-w-0 flex items-center gap-3.5">
+                    <div class="min-w-0 flex w-full items-center gap-3.5">
                       <CoinIcon
                         coinId={row.coinId}
                         coinName={row.name}
@@ -273,7 +273,7 @@
                         showBadge
                         decorative
                       />
-                      <div class="min-w-0 flex min-h-8 items-center">
+                      <div class="min-w-0 flex flex-1 min-h-8 items-center">
                         <p class="text-foreground truncate text-base leading-tight font-medium">{row.name}</p>
                       </div>
                     </div>

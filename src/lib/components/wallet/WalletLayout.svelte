@@ -59,7 +59,15 @@
   {/if}
   <Sidebar.Provider class="h-full overflow-hidden">
     {#if !isTransferFocusMode}
-      <AppSidebar bind:activeSection {walletData} />
+      <AppSidebar
+        bind:activeSection
+        {walletData}
+        onSelectOverview={() => {
+          activeAssetDetailsCoinId = null;
+          transferEntryContext = null;
+          activeSection = 'overview';
+        }}
+      />
     {/if}
     <Sidebar.Inset class="h-full min-h-0 dark:bg-[#111111]">
       {#if !isTransferFocusMode}
@@ -84,9 +92,6 @@
           {#if activeAssetDetailsCoinId}
             <AssetDetails
               coinId={activeAssetDetailsCoinId}
-              onBack={() => {
-                activeAssetDetailsCoinId = null;
-              }}
               onNavigateToReceive={() => {
                 activeSection = 'receive';
               }}

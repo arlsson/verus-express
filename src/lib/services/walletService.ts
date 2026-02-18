@@ -9,6 +9,7 @@ import type {
   BalanceResult,
   CoinScopesResult,
   Transaction,
+  TransactionHistoryPage,
   WalletNetwork
 } from '$lib/types/wallet.js';
 
@@ -109,5 +110,21 @@ export async function getTransactionHistory(channelId: string, coinId?: string):
   return invoke<Transaction[]>('get_transaction_history', {
     channel_id: channelId,
     ...(coinId ? { coin_id: coinId } : {})
+  });
+}
+
+export async function getTransactionHistoryPage(
+  channelId: string,
+  coinId?: string,
+  cursor?: string,
+  limit = 50
+): Promise<TransactionHistoryPage> {
+  return invoke<TransactionHistoryPage>('get_transaction_history_page', {
+    request: {
+      channelId,
+      ...(coinId ? { coinId } : {}),
+      ...(cursor ? { cursor } : {}),
+      limit
+    }
   });
 }

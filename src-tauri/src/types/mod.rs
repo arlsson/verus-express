@@ -35,7 +35,7 @@ pub use identity::{
 };
 pub use transaction::{
     BalanceResult, PreflightParams, PreflightResult, PreflightWarning, SendRequest, SendResult,
-    Transaction,
+    Transaction, TransactionHistoryPage, TransactionHistoryPageRequest,
 };
 pub use vrpc_transfer::{VrpcTransferPreflightParams, VrpcTransferPreflightResult};
 pub use wallet::{

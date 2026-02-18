@@ -20,6 +20,20 @@ export interface Transaction {
   pending: boolean;
 }
 
+export interface TransactionHistoryPageRequest {
+  channelId: string;
+  coinId?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface TransactionHistoryPage {
+  transactions: Transaction[];
+  nextCursor?: string | null;
+  hasMore: boolean;
+  warning?: string | null;
+}
+
 export type WalletNetwork = 'mainnet' | 'testnet';
 
 export interface ActiveAssetsState {
