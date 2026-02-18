@@ -357,6 +357,7 @@ export const nl: Record<string, string> = {
     'Kies op welk netwerk de ontvanger {value} moet ontvangen.',
   'wallet.transfer.onlyAvailableOnNetwork': 'Deze asset is alleen beschikbaar op het {value}-netwerk.',
   'wallet.transfer.sameNetwork': 'Zelfde netwerk',
+  'wallet.transfer.keepOnNetwork': 'Behouden op {value}',
   'wallet.transfer.receiveAs': 'Ontvangen als {value}',
   'wallet.transfer.loadingTargets': 'Bestemmingsopties laden…',
   'wallet.transfer.noRoutes':

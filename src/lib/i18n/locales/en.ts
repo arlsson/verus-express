@@ -351,6 +351,7 @@ export const en: Record<string, string> = {
   'wallet.transfer.exportSheetDescription': 'Choose where the recipient should receive {value}.',
   'wallet.transfer.onlyAvailableOnNetwork': 'This asset is only available on the {value} network.',
   'wallet.transfer.sameNetwork': 'Same network',
+  'wallet.transfer.keepOnNetwork': 'Keep on {value}',
   'wallet.transfer.receiveAs': 'Receive as {value}',
   'wallet.transfer.loadingTargets': 'Loading destination options…',
   'wallet.transfer.noRoutes': 'No conversion routes available. You can still send the same asset.',

@@ -52,6 +52,7 @@
   } from '$lib/transfer/transferWizardCopy';
   import {
     buildReceiveAssetSections,
+    type ExportRouteOption,
     filterReceiveAssetSectionsByQuery,
     type ReceiveAssetOption,
     type ReceiveAssetSections,
@@ -124,6 +125,7 @@
 
   const defaultClose = () => {};
   const OPERATIONAL_STEPS: WizardOperationalStepId[] = ['details', 'recipient', 'review'];
+  const VETH_SYSTEM_ID = 'i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X';
 
   /* eslint-disable prefer-const */
   let { entryIntent, entryContext = null, onClose = defaultClose }: TransferWizardProps = $props();
@@ -232,6 +234,21 @@
   const selectedChannelId = $derived(selectedCoinOption?.channelId ?? null);
 
   const selectedChannelPrefix = $derived(selectedChannelId?.split('.')[0] ?? '');
+  const selectedSourceSystemId = $derived(
+    (() => {
+      const channelId = selectedChannelId?.trim() ?? '';
+      if (channelId.startsWith('vrpc.')) {
+        const parts = channelId.split('.');
+        if (parts.length >= 3) {
+          return parts.slice(2).join('.');
+        }
+      }
+      return selectedCoin?.systemId ?? selectedCoin?.id ?? '';
+    })()
+  );
+  const sourceNetworkDisplayName = $derived(
+    resolveSourceNetworkDisplayName(selectedSourceSystemId, selectedChannelPrefix)
+  );
   const sourceSupportsConversion = $derived(
     (() => {
       if (!selectedCoin || !selectedChannelId) return false;
@@ -322,6 +339,9 @@
     isPositiveAmount(amount) ? selectedViaOption ?? bestViaOption : null
   );
   const activeTargetOption = $derived(conversionEnabled ? activeConvertRoute : sameAssetOption);
+  const activeExportSystemId = $derived(
+    conversionEnabled ? (activeConvertRoute?.exportTo ?? null) : null
+  );
 
   const convertUnavailableForSource = $derived(
     !!selectedCoin && !!selectedChannelId && !!bridgeCapabilities && !bridgeCapabilities.conversionSupported
@@ -348,13 +368,13 @@
   );
 
   const destinationAddressKind = $derived<DestinationAddressKind>(
-    activeTargetOption?.ethDestination ||
-      selectedChannelPrefix === 'eth' ||
-      selectedChannelPrefix === 'erc20'
+    isEthereumExport(activeExportSystemId)
       ? 'eth'
-      : selectedChannelPrefix === 'btc'
-        ? 'btc'
-        : 'vrpc'
+      : !activeExportSystemId && (selectedChannelPrefix === 'eth' || selectedChannelPrefix === 'erc20')
+        ? 'eth'
+        : selectedChannelPrefix === 'btc'
+          ? 'btc'
+          : 'vrpc'
   );
 
   const selfDestinationAddress = $derived(
@@ -524,7 +544,10 @@
 
   const reviewDestinationNetworkValue = $derived(
     conversionEnabled
-      ? (activeConvertRoute?.exportToLabel ?? activeConvertRoute?.exportTo ?? '')
+      ? normalizeNetworkDisplayName(
+          activeConvertRoute?.exportTo ?? null,
+          activeConvertRoute?.exportToLabel ?? activeConvertRoute?.exportTo ?? ''
+        )
       : ''
   );
 
@@ -1350,6 +1373,155 @@
       minimumFractionDigits: 0,
       maximumFractionDigits: 8
     });
+  }
+
+  function isEthereumExport(systemId: string | null | undefined): boolean {
+    return systemId?.trim().toLowerCase() === VETH_SYSTEM_ID.toLowerCase();
+  }
+
+  function normalizeNetworkDisplayName(systemId: string | null | undefined, fallback: string): string {
+    const fallbackTrimmed = fallback.trim();
+    const normalizedFallback = fallbackTrimmed.toLowerCase();
+    if (
+      isEthereumExport(systemId) ||
+      systemId?.trim().toLowerCase() === '.eth' ||
+      normalizedFallback === 'veth' ||
+      normalizedFallback === 'ethereum on verus'
+    ) {
+      return resolveCoinPresentationById('ETH')?.displayName?.trim() || fallbackTrimmed || systemId?.trim() || '';
+    }
+    return fallbackTrimmed || systemId?.trim() || '';
+  }
+
+  function networkLabelForExportOption(exportTo: string, exportToName: string): string {
+    return normalizeNetworkDisplayName(exportTo, exportToName || exportTo);
+  }
+
+  function networkLabelForGroupedOption(option: ReceiveAssetOption): string {
+    if (option.hasOnChainPath) {
+      return i18n.t('wallet.transfer.keepOnNetwork', { value: sourceNetworkDisplayName });
+    }
+    const firstExportOption = option.exportOptions[0];
+    if (!firstExportOption) return option.label;
+    return networkLabelForExportOption(firstExportOption.exportTo, firstExportOption.exportToName);
+  }
+
+  function receiveLabelForGroupedOption(option: ReceiveAssetOption): string {
+    if (option.hasOnChainPath || option.exportOptions.length === 0) {
+      return option.fullyqualifiedname || option.ticker || option.label;
+    }
+    return receiveLabelForExportOption(option.exportOptions[0], option);
+  }
+
+  function resolveSourceNetworkDisplayName(systemId: string | null | undefined, channelPrefix: string): string {
+    const normalizedSystemId = systemId?.trim() ?? '';
+    const normalizedSystemIdLc = normalizedSystemId.toLowerCase();
+    const normalizedPrefix = channelPrefix.trim().toLowerCase();
+
+    // vETH is a Verus PBaaS system for same-network semantics.
+    if (isEthereumExport(normalizedSystemId)) {
+      return resolveCoinPresentationById('VRSC')?.displayName?.trim() || 'Verus';
+    }
+
+    if (
+      normalizedPrefix === 'eth' ||
+      normalizedPrefix === 'erc20' ||
+      normalizedSystemId.toLowerCase() === '.eth'
+    ) {
+      return resolveCoinPresentationById('ETH')?.displayName?.trim() || 'Ethereum';
+    }
+
+    if (normalizedPrefix === 'btc' || normalizedSystemId.toLowerCase() === '.btc') {
+      return resolveCoinPresentationById('BTC')?.displayName?.trim() || 'Bitcoin';
+    }
+
+    const systemCoin =
+      coins.find(
+        (coin) =>
+          coin.systemId.toLowerCase() === normalizedSystemIdLc &&
+          coin.currencyId.toLowerCase() === normalizedSystemIdLc
+      ) ??
+      coins.find((coin) => coin.systemId.toLowerCase() === normalizedSystemIdLc) ??
+      null;
+
+    const presentation = systemCoin
+      ? resolveCoinPresentation(systemCoin)
+      : normalizedSystemId
+        ? resolveCoinPresentationById(normalizedSystemId)
+        : null;
+    const displayName = presentation?.displayName?.trim() || presentation?.displayTicker?.trim() || '';
+    if (displayName) {
+      return displayName;
+    }
+
+    // Avoid exposing raw i-addresses in user-facing copy.
+    if (/^i[a-km-zA-HJ-NP-Z1-9]{24,60}$/.test(normalizedSystemId)) {
+      if (normalizedPrefix === 'vrpc') {
+        return resolveCoinPresentationById('VRSC')?.displayName?.trim() || 'Verus';
+      }
+      return 'Network';
+    }
+
+    return (
+      normalizedSystemId ||
+      'Verus'
+    );
+  }
+
+  function stripBridgeSuffix(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const withoutErc20 = trimmed.replace(/\s*\[ERC20\]\s*/gi, '').trim();
+    const withoutNetworkSuffix = withoutErc20
+      .replace(/\s+on\s+Ethereum$/i, '')
+      .replace(/\s+on\s+Verus$/i, '')
+      .trim();
+    if (!withoutNetworkSuffix.toUpperCase().endsWith('.VETH')) {
+      return withoutNetworkSuffix;
+    }
+    const withoutVeth = withoutNetworkSuffix.slice(0, -'.vETH'.length);
+    if (/^v[A-Za-z0-9]+$/.test(withoutVeth)) {
+      return withoutVeth.slice(1);
+    }
+    return withoutVeth;
+  }
+
+  function receiveLabelForExportOption(option: ExportRouteOption, targetOption: ReceiveAssetOption): string {
+    const exportTarget = option.exportTo?.trim() ?? '';
+    const ethereumExport = isEthereumExport(exportTarget) || exportTarget.toLowerCase() === '.eth';
+
+    if (ethereumExport) {
+      const ethDestinationLabel =
+        targetOption.ethDisplayTicker?.trim() || targetOption.ethDisplayName?.trim() || '';
+      if (ethDestinationLabel) {
+        return stripBridgeSuffix(ethDestinationLabel);
+      }
+
+      const targetPresentation = resolveCoinPresentationById(targetOption.destinationId);
+      const mappedToId = targetPresentation?.mappedTo?.trim() ?? '';
+      if (mappedToId) {
+        const mappedPresentation = resolveCoinPresentationById(mappedToId);
+        const mappedLabel =
+          mappedPresentation?.displayTicker?.trim() || mappedPresentation?.displayName?.trim() || '';
+        if (mappedLabel) {
+          return stripBridgeSuffix(mappedLabel);
+        }
+      }
+
+      const targetLabel =
+        targetOption.ticker?.trim() ||
+        targetOption.fullyqualifiedname?.trim() ||
+        targetOption.label?.trim() ||
+        '';
+      const strippedTargetLabel = stripBridgeSuffix(targetLabel);
+      if (strippedTargetLabel) {
+        return strippedTargetLabel;
+      }
+    }
+
+    return (
+      targetOption.fullyqualifiedname?.trim() || targetOption.ticker?.trim() || targetOption.label.trim()
+    );
   }
 
   function getReceiveOptionDisplay(option: ReceiveAssetOption): { primary: string; secondary?: string } {
@@ -2616,29 +2788,29 @@
             {#each pendingGroupedReceiveOption.networkOptions ?? [] as option}
               <button
                 type="button"
-                class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
-                  border-border/60 hover:bg-muted/30"
+                class="group flex w-full items-start justify-between rounded-lg p-3 text-left transition-colors
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
+                  {selectedReceiveAssetId === option.id && (selectedExportSystemId === null || selectedExportSystemId === option.exportOptions[0]?.exportTo)
+                    ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
+                    : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'}"
                 onclick={() => selectReceiveNetworkOption(option.id)}
               >
-                <div class="flex min-w-0 items-start gap-2">
-                  <CoinIcon coinId={option.destinationId} coinName={option.label} size={18} decorative={true} />
+                <div class="flex min-w-0 items-center gap-2">
+                  <CoinIcon
+                    coinId={option.exportOptions[0]?.exportTo ?? option.destinationId}
+                    coinName={networkLabelForGroupedOption(option)}
+                    size={18}
+                    decorative={true}
+                  />
                   <div class="min-w-0">
-                    <div class="flex items-center gap-2">
-                      <p class="truncate text-sm font-medium">{option.label}</p>
-                      {#if option.hasOnChainPath}
-                        <span class="rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold">
-                          {i18n.t('wallet.transfer.sameNetwork')}
-                        </span>
-                      {/if}
-                    </div>
+                    <p class="truncate text-sm font-medium">{networkLabelForGroupedOption(option)}</p>
                     <p class="text-muted-foreground truncate text-xs">
                       {i18n.t('wallet.transfer.receiveAs', {
-                        value: option.fullyqualifiedname || option.ticker || option.label
+                        value: receiveLabelForGroupedOption(option)
                       })}
                     </p>
                   </div>
                 </div>
-                <ChevronRightIcon class="text-foreground/45 ml-3 size-4 shrink-0" />
               </button>
             {/each}
           </div>
@@ -2657,7 +2829,10 @@
       <p class="text-muted-foreground text-sm">
         {#if !pendingTargetOption.hasOnChainPath && pendingTargetOption.exportOptions.length === 1}
           {i18n.t('wallet.transfer.onlyAvailableOnNetwork', {
-            value: pendingTargetOption.exportOptions[0].exportToName
+            value: networkLabelForExportOption(
+              pendingTargetOption.exportOptions[0].exportTo,
+              pendingTargetOption.exportOptions[0].exportToName
+            )
           })}
         {:else}
           {i18n.t('wallet.transfer.exportSheetDescription', { value: pendingTargetOption.label })}
@@ -2669,13 +2844,14 @@
             {#if pendingTargetOption.hasOnChainPath}
               <button
                 type="button"
-                class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
+                class="group flex w-full items-start justify-between rounded-lg p-3 text-left transition-colors
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
                   {selectedReceiveAssetId === pendingTargetOption.id && selectedExportSystemId === null
-                    ? 'border-primary/70 bg-primary/5'
-                    : 'border-border/60 hover:bg-muted/30'}"
+                    ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
+                    : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'}"
                 onclick={selectSameNetworkOption}
               >
-                <div class="flex min-w-0 items-start gap-2">
+                <div class="flex min-w-0 items-center gap-2">
                   <CoinIcon
                     coinId={selectedCoin?.id || pendingTargetOption.destinationId}
                     coinName={pendingTargetOption.label}
@@ -2683,7 +2859,9 @@
                     decorative={true}
                   />
                   <div class="min-w-0">
-                    <p class="truncate text-sm font-medium">{i18n.t('wallet.transfer.sameNetwork')}</p>
+                    <p class="truncate text-sm font-medium">
+                      {i18n.t('wallet.transfer.keepOnNetwork', { value: sourceNetworkDisplayName })}
+                    </p>
                     <p class="text-muted-foreground truncate text-xs">
                       {i18n.t('wallet.transfer.receiveAs', {
                         value:
@@ -2700,33 +2878,32 @@
             {#each pendingTargetOption.exportOptions as option}
               <button
                 type="button"
-                class="flex w-full items-start justify-between rounded-md border px-3 py-2 text-left transition-colors
+                class="group flex w-full items-start justify-between rounded-lg p-3 text-left transition-colors
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
                   {selectedReceiveAssetId === pendingTargetOption.id &&
                   selectedExportSystemId === option.exportTo
-                    ? 'border-primary/70 bg-primary/5'
-                    : 'border-border/60 hover:bg-muted/30'}"
+                    ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
+                    : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'}"
                 onclick={() => selectExportOption(option.exportTo)}
               >
-                <div class="flex min-w-0 items-start gap-2">
+                <div class="flex min-w-0 items-center gap-2">
                   <CoinIcon
                     coinId={option.exportTo}
-                    coinName={option.exportToName}
+                    coinName={networkLabelForExportOption(option.exportTo, option.exportToName)}
                     size={18}
                     decorative={true}
                   />
                   <div class="min-w-0">
-                    <p class="truncate text-sm font-medium">{option.exportToName}</p>
+                    <p class="truncate text-sm font-medium">
+                      {networkLabelForExportOption(option.exportTo, option.exportToName)}
+                    </p>
                     <p class="text-muted-foreground truncate text-xs">
                       {i18n.t('wallet.transfer.receiveAs', {
-                        value:
-                          pendingTargetOption.fullyqualifiedname ||
-                          pendingTargetOption.ticker ||
-                          pendingTargetOption.label
+                        value: receiveLabelForExportOption(option, pendingTargetOption)
                       })}
                     </p>
                   </div>
                 </div>
-                <ChevronRightIcon class="text-foreground/45 ml-3 size-4 shrink-0" />
               </button>
             {/each}
           </div>
