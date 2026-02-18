@@ -199,6 +199,11 @@
     font-family: 'Google Sans 17pt', var(--font-sans);
   }
 
+  .identifier-text {
+    @apply font-mono;
+    font-variant-ligatures: none;
+  }
+
   .guard-dock-button {
     @apply bg-primary/14 text-primary hover:bg-primary/22 dark:bg-primary/28 dark:text-primary-foreground dark:hover:bg-primary/36;
     position: fixed;

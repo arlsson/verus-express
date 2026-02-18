@@ -77,8 +77,8 @@
         value={targetIdentity}
         oninput={(event) => onTargetIdentityChange((event.target as HTMLInputElement).value)}
         placeholder={i18n.t('guard.flow.target.identityPlaceholder')}
+        class={'identifier-text ' + (errorMessage ? 'border-destructive' : '')}
         disabled={busy}
-        class={errorMessage ? 'border-destructive' : ''}
         autocapitalize="off"
         spellcheck="false"
       />

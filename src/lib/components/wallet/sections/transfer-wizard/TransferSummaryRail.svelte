@@ -10,6 +10,8 @@
     primary: string;
     secondary?: string;
     breakAll?: boolean;
+    primaryIdentifier?: boolean;
+    secondaryIdentifier?: boolean;
     iconCoinId?: string;
     iconCoinName?: string;
   };
@@ -101,9 +103,19 @@
                   decorative={true}
                 />
                 <div class="min-w-0">
-                  <p class={cn('truncate text-sm leading-tight font-semibold', row.breakAll ? 'break-all' : '')}>{row.primary}</p>
+                  <p
+                    class={cn(
+                      'truncate text-sm leading-tight font-semibold',
+                      row.breakAll ? 'break-all' : '',
+                      row.primaryIdentifier ? 'identifier-text' : ''
+                    )}
+                  >
+                    {row.primary}
+                  </p>
                   {#if row.secondary}
-                    <p class="text-muted-foreground mt-0.5 truncate text-xs">{row.secondary}</p>
+                    <p class={cn('text-muted-foreground mt-0.5 truncate text-xs', row.secondaryIdentifier ? 'identifier-text' : '')}>
+                      {row.secondary}
+                    </p>
                   {/if}
                 </div>
               </div>
@@ -114,10 +126,18 @@
               </div>
             {/if}
           {:else}
-            <dd class={cn(isAmountEstimateRow ? 'mt-0 text-sm leading-tight font-medium' : 'mt-1.5 text-sm leading-tight font-medium', row.breakAll ? 'break-all' : '')}>
+            <dd
+              class={cn(
+                isAmountEstimateRow ? 'mt-0 text-sm leading-tight font-medium' : 'mt-1.5 text-sm leading-tight font-medium',
+                row.breakAll ? 'break-all' : '',
+                row.primaryIdentifier ? 'identifier-text' : ''
+              )}
+            >
               <p>{row.primary}</p>
               {#if row.secondary}
-                <p class="text-muted-foreground mt-0.5 text-xs">{row.secondary}</p>
+                <p class={cn('text-muted-foreground mt-0.5 text-xs', row.secondaryIdentifier ? 'identifier-text' : '')}>
+                  {row.secondary}
+                </p>
               {/if}
             </dd>
             {#if showAmountEstimateArrow}

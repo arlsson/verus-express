@@ -39,11 +39,11 @@
       </div>
       <div class="sm:col-span-2">
         <p class="text-muted-foreground text-xs">{i18n.t('guard.flow.review.targetIdentity')}</p>
-        <p class="text-sm font-medium text-foreground break-all">{context.targetIdentity}</p>
+        <p class="identifier-text text-sm font-medium text-foreground break-all">{context.targetIdentity}</p>
       </div>
       <div class="sm:col-span-2">
         <p class="text-muted-foreground text-xs">{i18n.t('guard.flow.review.authorityAddress')}</p>
-        <p class="text-sm font-medium text-foreground break-all">{context.authorityAddress}</p>
+        <p class="identifier-text text-sm font-medium text-foreground break-all">{context.authorityAddress}</p>
       </div>
       <div>
         <p class="text-muted-foreground text-xs">{i18n.t('guard.flow.review.fee')}</p>
@@ -51,7 +51,7 @@
       </div>
       <div>
         <p class="text-muted-foreground text-xs">{i18n.t('guard.flow.review.preflightId')}</p>
-        <p class="text-sm font-medium text-foreground break-all">{context.preflight.preflightId}</p>
+        <p class="identifier-text text-sm font-medium text-foreground break-all">{context.preflight.preflightId}</p>
       </div>
     </div>
 
@@ -61,21 +61,21 @@
         <p class="text-xs font-medium text-foreground">{i18n.t('guard.flow.review.patchTitle')}</p>
         <div class="space-y-1 text-xs text-muted-foreground">
           <p>
-            {i18n.t('guard.flow.patch.primaryAddressLabel')}: <span class="text-foreground">{context.recoverDraft.primaryAddress}</span>
+            {i18n.t('guard.flow.patch.primaryAddressLabel')}: <span class="identifier-text text-foreground break-all">{context.recoverDraft.primaryAddress}</span>
           </p>
           {#if context.recoverDraft.recoveryAuthority.trim()}
             <p>
-              {i18n.t('guard.flow.patch.recoveryAuthorityLabel')}: <span class="text-foreground break-all">{context.recoverDraft.recoveryAuthority}</span>
+              {i18n.t('guard.flow.patch.recoveryAuthorityLabel')}: <span class="identifier-text text-foreground break-all">{context.recoverDraft.recoveryAuthority}</span>
             </p>
           {/if}
           {#if context.recoverDraft.revocationAuthority.trim()}
             <p>
-              {i18n.t('guard.flow.patch.revocationAuthorityLabel')}: <span class="text-foreground break-all">{context.recoverDraft.revocationAuthority}</span>
+              {i18n.t('guard.flow.patch.revocationAuthorityLabel')}: <span class="identifier-text text-foreground break-all">{context.recoverDraft.revocationAuthority}</span>
             </p>
           {/if}
           {#if context.recoverDraft.privateAddress.trim()}
             <p>
-              {i18n.t('guard.flow.patch.privateAddressLabel')}: <span class="text-foreground break-all">{context.recoverDraft.privateAddress}</span>
+              {i18n.t('guard.flow.patch.privateAddressLabel')}: <span class="identifier-text text-foreground break-all">{context.recoverDraft.privateAddress}</span>
             </p>
           {/if}
         </div>

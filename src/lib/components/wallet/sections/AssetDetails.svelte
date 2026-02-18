@@ -9,6 +9,7 @@
   import ArrowLeftRightIcon from '@lucide/svelte/icons/arrow-left-right';
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
   import CheckIcon from '@lucide/svelte/icons/check';
+  import CopyIcon from '@lucide/svelte/icons/copy';
   import SearchInput from '$lib/components/common/SearchInput.svelte';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import { Button } from '$lib/components/ui/button';
@@ -92,9 +93,9 @@
   let scopesLoading = $state(false);
   let scopesError = $state('');
   let loadingSelectedBalance = $state(false);
-  let showAddressSheet = $state(false);
-  let showNetworkSheet = $state(false);
+  let showScopeSheet = $state(false);
   let addressSearchTerm = $state('');
+  let copiedAddressKey = $state<string | null>(null);
 
   let loadedBalanceByChannel = $state<Record<string, boolean>>({});
   let txPagesByScopeKey = $state<Record<string, ScopeTransactionPageState>>({});
@@ -113,45 +114,17 @@
   const selectedAddress = $derived(selectedAddressMap[coinId] ?? '');
   const selectedSystem = $derived(selectedSystemMap[coinId] ?? '');
 
-  const addressOptions = $derived(
-    (() => {
-      const byAddress = new Map<string, CoinScope>();
-      for (const scope of allScopes) {
-        if (!byAddress.has(scope.address)) {
-          byAddress.set(scope.address, scope);
-        }
-      }
-
-      return [...byAddress.values()];
-    })()
-  );
-
-  const filteredAddressOptions = $derived(
+  const filteredScopeOptions = $derived(
     (() => {
       const query = addressSearchTerm.trim().toLowerCase();
-      if (!query) return addressOptions;
-      return addressOptions.filter((scope) => {
+      if (!query) return allScopes;
+      return allScopes.filter((scope) => {
         return (
           scope.address.toLowerCase().includes(query) ||
-          scope.addressLabel.toLowerCase().includes(query)
+          scope.addressLabel.toLowerCase().includes(query) ||
+          networkLabelForScope(scope).toLowerCase().includes(query)
         );
       });
-    })()
-  );
-
-  const chainOptionsForSelectedAddress = $derived(
-    allScopes.filter((scope) => scope.address === selectedAddress)
-  );
-
-  const networkOptionsForSelectedAddress = $derived(
-    (() => {
-      const bySystemId = new Map<string, CoinScope>();
-      for (const scope of chainOptionsForSelectedAddress) {
-        if (!bySystemId.has(scope.systemId)) {
-          bySystemId.set(scope.systemId, scope);
-        }
-      }
-      return [...bySystemId.values()];
     })()
   );
 
@@ -248,11 +221,18 @@
   const selectedNetworkDisplay = $derived(
     (() => {
       if (selectedScope) return networkLabelForScope(selectedScope);
-      if (networkOptionsForSelectedAddress.length > 0) return networkLabelForScope(networkOptionsForSelectedAddress[0]);
+      if (allScopes.length > 0) return networkLabelForScope(allScopes[0]);
       return '—';
     })()
   );
-  const hasMultipleNetworks = $derived(networkOptionsForSelectedAddress.length > 1);
+  const isSingleAddressExternalAsset = $derived(
+    (() => {
+      if (!coin) return false;
+      if (coin.proto !== 'eth' && coin.proto !== 'erc20' && coin.proto !== 'btc') return false;
+      const uniqueAddresses = new Set(allScopes.map((scope) => scope.address));
+      return uniqueAddresses.size <= 1;
+    })()
+  );
   const selectedFqnDisplay = $derived(
     (() => {
       const runtimeCoin = coin as (typeof coin & { fullyQualifiedName?: string | null }) | null;
@@ -271,10 +251,15 @@
   $effect(() => {
     coinId;
     addressSearchTerm = '';
-    showAddressSheet = false;
-    showNetworkSheet = false;
+    showScopeSheet = false;
     scopesError = '';
     void loadScopes();
+  });
+
+  $effect(() => {
+    if (!isSingleAddressExternalAsset) return;
+    showScopeSheet = false;
+    addressSearchTerm = '';
   });
 
   $effect(() => {
@@ -335,6 +320,12 @@
     );
     if (siblingScopes.length === 0) return;
     void fetchSiblingBalances(siblingScopes, currentCoin.id);
+  });
+
+  $effect(() => {
+    const currentCoin = coin;
+    if (!showScopeSheet || !currentCoin || allScopes.length === 0) return;
+    void fetchSiblingBalances(allScopes, currentCoin.id);
   });
 
   $effect(() => {
@@ -596,28 +587,24 @@
     await loadMoreTransactionsForScope(activeScope, currentCoin.id);
   }
 
-  function selectAddress(address: string): void {
-    if (!address) return;
-    setSelectedScopeAddress(coinId, address);
-
-    const firstScope = allScopes.find((scope) => scope.address === address);
-    if (firstScope) {
-      const rootSystemId = coin?.systemId ?? '';
-      const matchingRoot = allScopes.find(
-        (scope) => scope.address === address && scope.systemId === rootSystemId
-      );
-      setSelectedScopeSystem(coinId, matchingRoot?.systemId ?? firstScope.systemId);
-    }
-
-    showAddressSheet = false;
-    showNetworkSheet = false;
+  function selectScope(scope: CoinScope): void {
+    setSelectedScopeAddress(coinId, scope.address);
+    setSelectedScopeSystem(coinId, scope.systemId);
+    showScopeSheet = false;
     addressSearchTerm = '';
   }
 
-  function selectSystem(systemId: string): void {
-    if (!systemId) return;
-    setSelectedScopeSystem(coinId, systemId);
-    showNetworkSheet = false;
+  async function copyAddress(address: string, key: string): Promise<void> {
+    if (!address) return;
+    try {
+      await globalThis.navigator.clipboard.writeText(address);
+      copiedAddressKey = key;
+      setTimeout(() => {
+        if (copiedAddressKey === key) copiedAddressKey = null;
+      }, 1800);
+    } catch {
+      copiedAddressKey = null;
+    }
   }
 
   function updateTxScrollAffordance(): void {
@@ -705,10 +692,14 @@
     return `${transactionDirection(transaction) === 'in' ? '+' : '-'}${formatCryptoAmount(amount, ticker, coin?.decimals ?? 8)}`;
   }
 
+  function transactionCounterpartyRaw(transaction: Transaction): string {
+    const direction = transactionDirection(transaction);
+    return direction === 'in' ? transaction.fromAddress.trim() : transaction.toAddress.trim();
+  }
+
   function transactionCounterparty(transaction: Transaction): string {
     const direction = transactionDirection(transaction);
-    const counterparty =
-      direction === 'in' ? transaction.fromAddress.trim() : transaction.toAddress.trim();
+    const counterparty = transactionCounterpartyRaw(transaction);
     if (!counterparty) {
       return direction === 'in'
         ? i18n.t('wallet.assetDetails.receivedFallback')
@@ -716,6 +707,10 @@
     }
 
     return truncateMiddle(counterparty, 10, 10);
+  }
+
+  function transactionCounterpartyIsAddress(transaction: Transaction): boolean {
+    return transactionCounterpartyRaw(transaction).length > 0;
   }
 
   function truncateMiddle(value: string, start = 8, end = 8): string {
@@ -742,6 +737,24 @@
     if (ticker) return ticker;
     const displayName = scope.systemDisplayName.trim();
     return displayName || '—';
+  }
+
+  function scopeAmountValue(scope: CoinScope): number | null {
+    if (!coin) return null;
+    return toFiniteNumber(getBalance(scope.channelId, coin.id, balances)?.total);
+  }
+
+  function scopeCryptoAmountDisplay(scope: CoinScope): string {
+    const value = scopeAmountValue(scope);
+    if (value === null) return '—';
+    const ticker = coinPresentation?.displayTicker ?? coin?.displayTicker ?? coinId;
+    return formatCryptoAmount(value, ticker, coin?.decimals ?? 8);
+  }
+
+  function scopeFiatAmountDisplay(scope: CoinScope): string {
+    const value = scopeAmountValue(scope);
+    if (value === null || selectedUsdRate === null) return '—';
+    return formatUsdAmount(value * selectedUsdRate, i18n.intlLocale);
   }
 
   function mapWalletError(error: unknown): string {
@@ -828,43 +841,68 @@
           </div>
 
           <div class="mt-8 flex items-center gap-2">
-            <Button
-              variant="secondary"
-              class="h-10 min-w-0 flex-1 justify-between rounded-md px-3 font-mono text-xs sm:text-sm"
-              onclick={() => (showAddressSheet = true)}
-            >
-              <span class="truncate">{truncateMiddle(selectedAddress, 12, 12)}</span>
-              <span class="text-muted-foreground text-xs">{i18n.t('wallet.assetDetails.changeAddress')}</span>
-            </Button>
-
-            {#if hasMultipleNetworks}
-              <Button
-                variant="secondary"
-                class="h-10 min-w-[6.5rem] max-w-[9rem] justify-between gap-1 rounded-md px-3 text-xs sm:text-sm"
-                aria-label={i18n.t('wallet.assetDetails.chain')}
-                title={i18n.t('wallet.assetDetails.chain')}
-                onclick={() => (showNetworkSheet = true)}
-              >
-                <span class="truncate">{selectedNetworkDisplay}</span>
-                <ChevronDownIcon class="text-muted-foreground h-4 w-4 shrink-0" />
-              </Button>
+            {#if isSingleAddressExternalAsset}
+              <div class="flex h-[52px] min-w-0 flex-1 items-center justify-between gap-2 rounded-md bg-muted/55 pl-3 pr-1.5">
+                <p class="identifier-text truncate text-sm font-medium text-foreground">
+                  {truncateMiddle(selectedAddress || '—', 10, 10)}
+                </p>
+                <button
+                  type="button"
+                  class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 -mr-0.5 h-8 w-8 shrink-0 rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2"
+                  onclick={() => copyAddress(selectedAddress, 'selected-static')}
+                  title={i18n.t('wallet.receive.copy')}
+                  aria-label={i18n.t('wallet.receive.copy')}
+                >
+                  {#if copiedAddressKey === 'selected-static'}
+                    <CheckIcon class="size-4 text-emerald-600 dark:text-emerald-400" />
+                  {:else}
+                    <CopyIcon class="size-4" />
+                  {/if}
+                </button>
+              </div>
             {:else}
-              <Button
-                variant="secondary"
-                class="h-10 min-w-[6.5rem] max-w-[9rem] justify-center rounded-md px-3 text-xs sm:text-sm"
-                aria-label={i18n.t('wallet.assetDetails.chain')}
-                title={i18n.t('wallet.assetDetails.chain')}
-                disabled
-              >
-                <span class="truncate">{selectedNetworkDisplay}</span>
-              </Button>
+              <div class="bg-primary flex h-[52px] min-w-0 flex-1 items-center gap-1 rounded-md pl-1.5 pr-1">
+                <button
+                  type="button"
+                  class="hover:bg-primary/90 focus-visible:ring-primary-foreground/60 flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 py-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2"
+                  aria-label={i18n.t('wallet.assetDetails.scopePicker')}
+                  title={i18n.t('wallet.assetDetails.scopePicker')}
+                  onclick={() => (showScopeSheet = true)}
+                >
+                  <div class="min-w-0 flex-1 text-left">
+                    <p class="identifier-text truncate text-sm font-medium text-primary-foreground">
+                      {truncateMiddle(selectedAddress || '—', 10, 10)}
+                      <span class="ml-1.5 font-normal text-primary-foreground/80">• {selectedNetworkDisplay}</span>
+                    </p>
+                    <p class="mt-0.5 truncate text-xs text-primary-foreground/80">
+                      {selectedCryptoAmountDisplay}
+                      <span class="mx-1.5">•</span>
+                      {selectedFiatDisplay}
+                    </p>
+                  </div>
+                  <ChevronDownIcon class="h-4 w-4 shrink-0 text-primary-foreground/80" />
+                </button>
+                <button
+                  type="button"
+                  class="text-primary-foreground/75 hover:text-primary-foreground focus-visible:ring-primary-foreground/60 -mr-0.5 h-8 w-8 shrink-0 rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2"
+                  onclick={() => copyAddress(selectedAddress, 'selected-interactive')}
+                  title={i18n.t('wallet.receive.copy')}
+                  aria-label={i18n.t('wallet.receive.copy')}
+                >
+                  {#if copiedAddressKey === 'selected-interactive'}
+                    <CheckIcon class="size-4 text-emerald-300 dark:text-emerald-200" />
+                  {:else}
+                    <CopyIcon class="size-4" />
+                  {/if}
+                </button>
+              </div>
             {/if}
 
             <div class="flex items-center gap-2">
               <Button
                 variant="secondary"
                 size="icon-lg"
-                class="size-10 rounded-md"
+                class="size-[52px] rounded-md"
                 aria-label={i18n.t('wallet.overview.receive')}
                 title={i18n.t('wallet.overview.receive')}
                 onclick={onNavigateToReceive}
@@ -874,7 +912,7 @@
               <Button
                 variant="secondary"
                 size="icon-lg"
-                class="size-10 rounded-md"
+                class="size-[52px] rounded-md"
                 disabled={!canSendOrConvert}
                 aria-label={i18n.t('wallet.overview.send')}
                 title={i18n.t('wallet.overview.send')}
@@ -888,7 +926,7 @@
               <Button
                 variant="secondary"
                 size="icon-lg"
-                class="size-10 rounded-md"
+                class="size-[52px] rounded-md"
                 disabled={!canSendOrConvert}
                 aria-label={i18n.t('wallet.overview.convert')}
                 title={i18n.t('wallet.overview.convert')}
@@ -950,7 +988,11 @@
                   {#each sortedSelectedTransactions as transaction (transaction.txid)}
                     <li class="flex items-center justify-between rounded-md px-0 py-2 hover:bg-muted/45">
                       <div class="min-w-0">
-                        <p class="truncate text-sm font-medium">{transactionCounterparty(transaction)}</p>
+                        <p
+                          class={`truncate text-sm font-medium ${transactionCounterpartyIsAddress(transaction) ? 'identifier-text' : ''}`}
+                        >
+                          {transactionCounterparty(transaction)}
+                        </p>
                         <p class="text-muted-foreground mt-0.5 text-xs">
                           {formatTimestamp(transaction)}
                         </p>
@@ -959,7 +1001,7 @@
                         <p class={`text-sm font-semibold ${transactionDirection(transaction) === 'in' ? 'text-emerald-700 dark:text-emerald-300' : 'text-foreground'}`}>
                           {transactionAmountDisplay(transaction)}
                         </p>
-                        <p class="text-muted-foreground mt-0.5 text-[11px] font-mono">
+                        <p class="text-muted-foreground identifier-text mt-0.5 text-[11px]">
                           {truncateMiddle(transaction.txid, 8, 8)}
                         </p>
                       </div>
@@ -1009,76 +1051,61 @@
   </section>
 </div>
 
-<StandardRightSheet bind:isOpen={showAddressSheet} title={i18n.t('wallet.assetDetails.addressSheetTitle')}>
+<StandardRightSheet bind:isOpen={showScopeSheet} title={i18n.t('wallet.assetDetails.scopeSheetTitle')}>
   <div class="flex h-full min-h-0 flex-col gap-3">
     <SearchInput
       bind:value={addressSearchTerm}
-      placeholder={i18n.t('wallet.assetDetails.addressSearchPlaceholder')}
+      placeholder={i18n.t('wallet.assetDetails.scopeSearchPlaceholder')}
     />
     <ScrollArea.Root class="min-h-0 flex-1" type="scroll">
       <ScrollArea.Viewport class="h-full pr-1">
-        {#if filteredAddressOptions.length === 0}
-          <p class="text-muted-foreground px-1 py-4 text-sm">{i18n.t('wallet.assetDetails.noAddresses')}</p>
+        {#if filteredScopeOptions.length === 0}
+          <p class="text-muted-foreground px-1 py-4 text-sm">{i18n.t('wallet.assetDetails.noScopeMatches')}</p>
         {:else}
           <ul class="space-y-1.5 pb-2">
-            {#each filteredAddressOptions as scopeOption (scopeOption.address)}
+            {#each filteredScopeOptions as scopeOption (scopeOption.channelId)}
               <li>
-                <button
-                  type="button"
-                  class="hover:bg-muted/50 focus-visible:ring-ring/60 flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left outline-none focus-visible:ring-2"
-                  onclick={() => selectAddress(scopeOption.address)}
-                >
-                  <div class="min-w-0">
-                    <p class="truncate font-mono text-sm">{truncateMiddle(scopeOption.addressLabel, 12, 12)}</p>
-                    <p class="text-muted-foreground mt-0.5 text-xs">
-                      {scopeOption.isPrimaryAddress
-                        ? i18n.t('wallet.assetDetails.primaryAddress')
-                        : i18n.t('wallet.assetDetails.readOnlyAddress')}
-                    </p>
-                  </div>
+                <div class="hover:bg-muted/50 flex items-center gap-1 rounded-md pr-0.5">
+                  <button
+                    type="button"
+                    class="focus-visible:ring-ring/60 flex min-w-0 flex-1 items-center justify-between rounded-md px-3 py-2.5 text-left outline-none focus-visible:ring-2"
+                    onclick={() => selectScope(scopeOption)}
+                  >
+                    <div class="min-w-0">
+                      <p class="identifier-text truncate text-sm">{truncateMiddle(scopeOption.addressLabel, 10, 10)}</p>
+                      <p class="text-muted-foreground mt-0.5 text-xs">
+                        {networkLabelForScope(scopeOption)}
+                        <span class="mx-1.5">•</span>
+                        {scopeCryptoAmountDisplay(scopeOption)}
+                        <span class="mx-1.5">•</span>
+                        {scopeFiatAmountDisplay(scopeOption)}
+                      </p>
+                    </div>
 
-                  <div class="flex items-center gap-1.5">
-                    {#if scopeOption.address === selectedAddress}
-                      <CheckIcon class="text-primary h-4 w-4" />
+                    <div class="flex items-center gap-1.5">
+                      {#if scopeOption.address === selectedAddress && scopeOption.systemId === selectedSystem}
+                        <CheckIcon class="text-primary h-4 w-4" />
+                      {/if}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 -mr-0.5 h-8 w-8 shrink-0 rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2"
+                    onclick={() => copyAddress(scopeOption.address, `scope:${scopeOption.channelId}`)}
+                    title={i18n.t('wallet.receive.copy')}
+                    aria-label={i18n.t('wallet.receive.copy')}
+                  >
+                    {#if copiedAddressKey === `scope:${scopeOption.channelId}`}
+                      <CheckIcon class="size-4 text-emerald-600 dark:text-emerald-400" />
+                    {:else}
+                      <CopyIcon class="size-4" />
                     {/if}
-                  </div>
-                </button>
+                  </button>
+                </div>
               </li>
             {/each}
           </ul>
         {/if}
-      </ScrollArea.Viewport>
-      <ScrollArea.Scrollbar orientation="vertical" />
-    </ScrollArea.Root>
-  </div>
-</StandardRightSheet>
-
-<StandardRightSheet bind:isOpen={showNetworkSheet} title={i18n.t('wallet.assetDetails.chain')}>
-  <div class="flex h-full min-h-0 flex-col">
-    <ScrollArea.Root class="min-h-0 flex-1" type="scroll">
-      <ScrollArea.Viewport class="h-full pr-1">
-        <ul class="space-y-1.5 pb-2">
-          {#each networkOptionsForSelectedAddress as scopeOption (scopeOption.systemId)}
-            <li>
-              <button
-                type="button"
-                class="hover:bg-muted/50 focus-visible:ring-ring/60 flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left outline-none focus-visible:ring-2"
-                onclick={() => selectSystem(scopeOption.systemId)}
-              >
-                <div class="min-w-0">
-                  <p class="truncate text-sm font-medium">{networkLabelForScope(scopeOption)}</p>
-                  {#if scopeOption.systemDisplayName && scopeOption.systemDisplayName !== networkLabelForScope(scopeOption)}
-                    <p class="text-muted-foreground mt-0.5 truncate text-xs">{scopeOption.systemDisplayName}</p>
-                  {/if}
-                </div>
-
-                {#if scopeOption.systemId === selectedSystem}
-                  <CheckIcon class="text-primary h-4 w-4 shrink-0" />
-                {/if}
-              </button>
-            </li>
-          {/each}
-        </ul>
       </ScrollArea.Viewport>
       <ScrollArea.Scrollbar orientation="vertical" />
     </ScrollArea.Root>

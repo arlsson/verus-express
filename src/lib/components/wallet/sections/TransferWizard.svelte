@@ -104,6 +104,8 @@
     primary: string;
     secondary?: string;
     breakAll?: boolean;
+    primaryIdentifier?: boolean;
+    secondaryIdentifier?: boolean;
     iconCoinId?: string;
     iconCoinName?: string;
   };
@@ -735,7 +737,9 @@
         rows.push({
           label: i18n.t('wallet.transfer.summary.recipient'),
           primary: recipientPrimary,
-          secondary: recipientSecondary
+          secondary: recipientSecondary,
+          primaryIdentifier: !recipientName,
+          secondaryIdentifier: true
         });
       }
 
@@ -2133,7 +2137,7 @@
               <div class="relative w-full">
                 <Input
                   id="transfer-recipient"
-                  class="h-11 rounded-xl bg-muted/85 px-4 pr-14 text-center text-base font-medium dark:bg-muted/55 md:text-base"
+                  class="identifier-text h-11 rounded-xl bg-muted/85 px-4 pr-14 text-center text-base font-medium dark:bg-muted/55 md:text-base"
                   bind:value={destinationAddress}
                   placeholder={recipientInputCopy.placeholder}
                 />
@@ -2258,11 +2262,11 @@
                     <p class="text-muted-foreground mt-0.5 text-[11px]">{i18n.t('wallet.transfer.summary.recipient')}</p>
                     <div class="flex min-w-0 items-start gap-1.5">
                       <div class="min-w-0 text-right">
-                        <p class="truncate text-[13px] font-medium">
+                        <p class={`truncate text-[13px] font-medium ${reviewRecipientName ? '' : 'identifier-text'}`}>
                           {reviewRecipientName || reviewRecipientAddress || i18n.t('wallet.transfer.summary.notSet')}
                         </p>
                         {#if reviewRecipientName && reviewRecipientAddress}
-                          <p class="text-muted-foreground mt-0.5 font-mono text-[10px]">{reviewRecipientAddress}</p>
+                          <p class="text-muted-foreground identifier-text mt-0.5 text-[10px]">{reviewRecipientAddress}</p>
                         {/if}
                       </div>
                       <button
@@ -2384,7 +2388,7 @@
           <h3 class="text-lg font-semibold">{i18n.t('wallet.transfer.step.success.title')}</h3>
           <p class="text-muted-foreground mt-1 text-sm">{i18n.t('wallet.transfer.step.success.description')}</p>
           {#if sendResult}
-            <p class="mt-3 break-all font-mono text-xs">{sendResult.txid}</p>
+            <p class="identifier-text mt-3 break-all text-xs">{sendResult.txid}</p>
             <p class="text-muted-foreground mt-2 text-sm">
               {i18n.t('wallet.send.sentSummary', { value: sendResult.value, address: sendResult.toAddress })}
             </p>
@@ -2483,7 +2487,7 @@
                     >
                       {endpointBadgeLabel(option.endpointKind)}
                     </span>
-                    <span class="truncate">{shortRecipientAddress(option.endpointAddress)}</span>
+                    <span class="identifier-text truncate">{shortRecipientAddress(option.endpointAddress)}</span>
                   </p>
                 </div>
                 {#if option.lastUsedAt}

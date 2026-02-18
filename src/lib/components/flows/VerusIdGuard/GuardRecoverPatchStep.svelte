@@ -46,6 +46,7 @@
         value={draft.primaryAddress}
         oninput={(event) => updateField('primaryAddress', (event.target as HTMLInputElement).value)}
         placeholder={i18n.t('guard.flow.target.primaryPlaceholder')}
+        class="identifier-text"
         disabled={busy}
         autocapitalize="off"
         spellcheck="false"
@@ -65,6 +66,7 @@
                 value={draft.recoveryAuthority}
                 oninput={(event) => updateField('recoveryAuthority', (event.target as HTMLInputElement).value)}
                 placeholder={i18n.t('guard.flow.patch.recoveryAuthorityPlaceholder')}
+                class="identifier-text"
                 disabled={busy}
                 autocapitalize="off"
                 spellcheck="false"
@@ -78,6 +80,7 @@
                 value={draft.revocationAuthority}
                 oninput={(event) => updateField('revocationAuthority', (event.target as HTMLInputElement).value)}
                 placeholder={i18n.t('guard.flow.patch.revocationAuthorityPlaceholder')}
+                class="identifier-text"
                 disabled={busy}
                 autocapitalize="off"
                 spellcheck="false"
@@ -91,6 +94,7 @@
                 value={draft.privateAddress}
                 oninput={(event) => updateField('privateAddress', (event.target as HTMLInputElement).value)}
                 placeholder={i18n.t('guard.flow.patch.privateAddressPlaceholder')}
+                class="identifier-text"
                 disabled={busy}
                 autocapitalize="off"
                 spellcheck="false"

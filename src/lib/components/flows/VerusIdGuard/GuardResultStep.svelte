@@ -65,7 +65,7 @@
   {#if hasSuccess && sendResult}
     <div class="bg-muted/20 border-border/70 space-y-2 rounded-xl border p-4 text-left">
       <p class="text-muted-foreground text-xs">{i18n.t('guard.flow.result.txidLabel')}</p>
-      <p class="text-sm break-all text-foreground">{sendResult.txid}</p>
+      <p class="identifier-text text-sm break-all text-foreground">{sendResult.txid}</p>
       <div class="flex items-center gap-2 pt-1">
         <Button variant="outline" size="sm" onclick={onCopyTxid}>
           {i18n.t('guard.flow.result.copyTxid')}

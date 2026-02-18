@@ -426,6 +426,7 @@
                       value={endpoint.address}
                       oninput={(event) => updateEndpointAddress(index, (event.currentTarget as HTMLInputElement).value)}
                       placeholder={i18n.t('wallet.addressBook.form.addressPlaceholder')}
+                      class="identifier-text"
                     />
                   </div>
 
@@ -497,7 +498,7 @@
                   >
                     {endpointBadgeLabel(endpoint.kind)}
                   </span>
-                  <p class="min-w-0 flex-1 break-all text-sm leading-6">{endpoint.address}</p>
+                  <p class="identifier-text min-w-0 flex-1 break-all text-sm leading-6">{endpoint.address}</p>
                   <button
                     type="button"
                     class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 -mr-3 pl-1 h-8 w-8 shrink-0 rounded-sm p-0 transition-colors focus-visible:outline-none focus-visible:ring-2"
