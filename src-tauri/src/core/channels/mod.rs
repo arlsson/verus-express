@@ -747,10 +747,12 @@ pub async fn route_get_transactions_page(
 
             ProtocolPageResult {
                 transactions: res.transactions,
-                next_cursor: res.next_cursor.map(|cursor| TransactionHistoryCursor::Vrpc {
-                    end_block: cursor.end_block,
-                    include_pending: cursor.include_pending,
-                }),
+                next_cursor: res
+                    .next_cursor
+                    .map(|cursor| TransactionHistoryCursor::Vrpc {
+                        end_block: cursor.end_block,
+                        include_pending: cursor.include_pending,
+                    }),
                 has_more: res.has_more,
                 warning: res.warning,
             }
@@ -916,8 +918,8 @@ pub async fn route_get_transactions_page(
 #[cfg(test)]
 mod tests {
     use super::{
-        clamp_history_limit, decode_history_cursor, encode_history_cursor, resolve_vrpc_coin_context,
-        TransactionHistoryCursor,
+        clamp_history_limit, decode_history_cursor, encode_history_cursor,
+        resolve_vrpc_coin_context, TransactionHistoryCursor,
     };
     use crate::core::coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
     use crate::types::wallet::WalletNetwork;

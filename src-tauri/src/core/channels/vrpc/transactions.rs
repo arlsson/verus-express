@@ -197,7 +197,8 @@ pub async fn get_transactions_page(
             Ok(value) => value,
             Err(error) => {
                 if cursor.is_none() {
-                    warning_messages.push("VRPC endpoint does not support windowed paging.".to_string());
+                    warning_messages
+                        .push("VRPC endpoint does not support windowed paging.".to_string());
                     let fallback = get_transactions(provider, addresses, coin).await?;
                     let mut transactions = fallback.transactions;
                     if transactions.len() > safe_limit {
@@ -223,12 +224,8 @@ pub async fn get_transactions_page(
             }
         }
 
-        let aggregated = aggregate_transactions_with_meta(
-            &ordered_entries,
-            addresses,
-            coin,
-            longest_chain,
-        );
+        let aggregated =
+            aggregate_transactions_with_meta(&ordered_entries, addresses, coin, longest_chain);
 
         if aggregated.len() > safe_limit {
             let page = paginate_aggregated_transactions(aggregated, safe_limit, current_end_block);
@@ -249,7 +246,8 @@ pub async fn get_transactions_page(
         current_end_block = start_block.saturating_sub(1);
     }
 
-    let aggregated = aggregate_transactions_with_meta(&ordered_entries, addresses, coin, longest_chain);
+    let aggregated =
+        aggregate_transactions_with_meta(&ordered_entries, addresses, coin, longest_chain);
     let transactions = aggregated
         .into_iter()
         .map(|item| item.transaction)
@@ -482,15 +480,12 @@ fn aggregate_transactions_with_meta(
         .collect();
 
     txs.sort_by(|a, b| {
-        b.transaction
-            .pending
-            .cmp(&a.transaction.pending)
-            .then(
-                b.transaction
-                    .timestamp
-                    .unwrap_or(0)
-                    .cmp(&a.transaction.timestamp.unwrap_or(0)),
-            )
+        b.transaction.pending.cmp(&a.transaction.pending).then(
+            b.transaction
+                .timestamp
+                .unwrap_or(0)
+                .cmp(&a.transaction.timestamp.unwrap_or(0)),
+        )
     });
 
     txs

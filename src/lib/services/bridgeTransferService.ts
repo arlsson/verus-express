@@ -11,6 +11,8 @@ import type {
   BridgeConversionEstimateResult,
   BridgeConversionPathRequest,
   BridgeConversionPathsResult,
+  BridgeExportFeeEstimateRequest,
+  BridgeExportFeeEstimateResult,
   BridgeTransferPreflightParams,
   BridgeTransferPreflightResult
 } from '$lib/types/wallet.js';
@@ -51,6 +53,17 @@ export async function estimateBridgeConversion(
       amount: request.amount,
       via: request.via ?? null,
       preconvert: request.preconvert ?? null
+    }
+  });
+}
+
+export async function estimateBridgeExportFee(
+  request: BridgeExportFeeEstimateRequest
+): Promise<BridgeExportFeeEstimateResult> {
+  return invoke<BridgeExportFeeEstimateResult>('estimate_bridge_export_fee', {
+    request: {
+      coinId: request.coinId,
+      channelId: request.channelId
     }
   });
 }

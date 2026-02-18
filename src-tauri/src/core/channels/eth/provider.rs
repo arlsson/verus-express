@@ -259,14 +259,8 @@ impl EtherscanHistoryClient {
             WalletNetwork::Testnet => &self.testnet_url,
         };
 
-        let query = self.build_history_page_query(
-            network,
-            action,
-            address,
-            contract_address,
-            page,
-            offset,
-        );
+        let query =
+            self.build_history_page_query(network, action, address, contract_address, page, offset);
 
         let response = self
             .client

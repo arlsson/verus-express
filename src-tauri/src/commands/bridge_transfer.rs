@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use serde_json::Value;
 use tauri::State;
 use tokio::sync::Mutex;
 
@@ -11,14 +12,19 @@ use crate::core::auth::SessionManager;
 use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::{self, VrpcProviderPool};
 use crate::core::channels::PreflightStore;
-use crate::core::coins::{Channel, CoinRegistry};
+use crate::core::coins::{Channel, CoinRegistry, Protocol};
 use crate::types::wallet::WalletNetwork;
 use crate::types::{
     BridgeCapabilitiesRequest, BridgeCapabilitiesResult, BridgeConversionEstimateRequest,
     BridgeConversionEstimateResult, BridgeConversionPathRequest, BridgeConversionPathsResult,
-    BridgeExecutionHint, BridgeTransferPreflightParams, BridgeTransferPreflightResult,
-    BridgeTransferRoute, VrpcTransferPreflightParams, WalletError,
+    BridgeExecutionHint, BridgeExportFeeEstimateRequest, BridgeExportFeeEstimateResult,
+    BridgeTransferPreflightParams, BridgeTransferPreflightResult, BridgeTransferRoute,
+    VrpcTransferPreflightParams, WalletError,
 };
+
+const VETH_SYSTEM_ID: &str = "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X";
+const SATOSHIS_PER_COIN: i64 = 100_000_000;
+const DEFAULT_PARENT_FEE_LOW: f64 = 0.0001;
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_bridge_capabilities(
@@ -162,6 +168,223 @@ pub async fn estimate_bridge_conversion(
         }
         _ => Err(WalletError::UnsupportedChannel),
     }
+}
+
+fn parse_coin_value_sat(value: &Value) -> Option<i64> {
+    if let Some(raw_sat) = value.as_i64() {
+        return Some(raw_sat.max(0));
+    }
+    if let Some(raw_sat) = value.as_u64() {
+        return i64::try_from(raw_sat).ok();
+    }
+    if let Some(raw_coin) = value.as_f64() {
+        let sat = (raw_coin.max(0.0) * SATOSHIS_PER_COIN as f64).round() as i64;
+        return Some(sat.max(0));
+    }
+    value.as_str().and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if trimmed.contains('.') || trimmed.contains('e') || trimmed.contains('E') {
+            let coin = trimmed.parse::<f64>().ok()?;
+            let sat = (coin.max(0.0) * SATOSHIS_PER_COIN as f64).round() as i64;
+            Some(sat.max(0))
+        } else {
+            trimmed.parse::<i64>().ok().map(|sat| sat.max(0))
+        }
+    })
+}
+
+fn parse_decimal_coins(value: &Value) -> Option<f64> {
+    if let Some(raw) = value.as_f64() {
+        return Some(raw.max(0.0));
+    }
+    if let Some(raw) = value.as_i64() {
+        return Some((raw as f64).max(0.0));
+    }
+    if let Some(raw) = value.as_u64() {
+        return Some(raw as f64);
+    }
+    value
+        .as_str()
+        .and_then(|raw| raw.trim().parse::<f64>().ok())
+        .map(|value| value.max(0.0))
+}
+
+fn matches_currency_ref(left: &str, right: &str) -> bool {
+    left.trim().eq_ignore_ascii_case(right.trim())
+}
+
+fn push_currency_ref(target: &mut Vec<String>, value: &str) {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    if target
+        .iter()
+        .any(|existing| matches_currency_ref(existing, trimmed))
+    {
+        return;
+    }
+    target.push(trimmed.to_string());
+}
+
+fn parse_outputtotals_fee_sat(raw: &Value, fee_currency_refs: &[String]) -> Option<i64> {
+    let totals = raw.get("outputtotals")?.as_object()?;
+    for fee_ref in fee_currency_refs {
+        if fee_ref.trim().is_empty() {
+            continue;
+        }
+        if let Some((_, value)) = totals
+            .iter()
+            .find(|(key, _)| matches_currency_ref(key, fee_ref))
+        {
+            let parsed = parse_coin_value_sat(value)?;
+            if parsed > 0 {
+                return Some(parsed);
+            }
+        }
+    }
+    None
+}
+
+fn parse_source_system_balance_coins(raw: &Value, system_currency_refs: &[String]) -> Option<f64> {
+    let raw_object = raw.as_object()?;
+
+    if let Some(currency_balance) = raw_object.get("currencybalance").and_then(Value::as_object) {
+        for currency_ref in system_currency_refs {
+            if currency_ref.trim().is_empty() {
+                continue;
+            }
+            if let Some((_, value)) = currency_balance
+                .iter()
+                .find(|(key, _)| matches_currency_ref(key, currency_ref))
+            {
+                let parsed = parse_decimal_coins(value)?;
+                if parsed >= 0.0 {
+                    return Some(parsed);
+                }
+            }
+        }
+    }
+
+    raw_object
+        .get("balance")
+        .and_then(parse_coin_value_sat)
+        .map(|sat| sat as f64 / SATOSHIS_PER_COIN as f64)
+}
+
+fn format_decimal_coins(value: f64) -> String {
+    let clamped = value.max(0.0);
+    format!("{:.8}", clamped)
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_string()
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn estimate_bridge_export_fee(
+    request: BridgeExportFeeEstimateRequest,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+    coin_registry: State<'_, Arc<CoinRegistry>>,
+    vrpc_provider_pool: State<'_, Arc<VrpcProviderPool>>,
+) -> Result<BridgeExportFeeEstimateResult, WalletError> {
+    if !request.channel_id.starts_with("vrpc.") {
+        return Err(WalletError::UnsupportedChannel);
+    }
+
+    let session = session_manager.lock().await;
+    if !session.is_unlocked() {
+        return Err(WalletError::WalletLocked);
+    }
+    let (session_vrpc_address, session_eth_address, _) = session.get_addresses()?;
+    let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+    drop(session);
+
+    let resolved = vrpc::parse_vrpc_channel_id(&request.channel_id, Some(&session_vrpc_address))?;
+    if resolved.address != session_vrpc_address {
+        return Err(WalletError::InvalidAddress);
+    }
+
+    let is_testnet = matches!(network, WalletNetwork::Testnet);
+    let source_coin = coin_registry
+        .find_by_id(&request.coin_id, is_testnet)
+        .ok_or(WalletError::UnsupportedChannel)?;
+    if source_coin.proto != Protocol::Vrsc {
+        return Err(WalletError::UnsupportedChannel);
+    }
+    if !source_coin
+        .compatible_channels
+        .iter()
+        .any(|channel| matches!(channel, Channel::Vrpc))
+    {
+        return Err(WalletError::UnsupportedChannel);
+    }
+
+    let source_system_coin = coin_registry
+        .find_by_system_id(&resolved.system_id, is_testnet)
+        .ok_or(WalletError::UnsupportedChannel)?;
+
+    if !vrpc_provider_pool.has_system_provider(network, &resolved.system_id) {
+        println!(
+            "[VRPC] Missing system-specific endpoint for {}. Falling back to network default.",
+            resolved.system_id
+        );
+    }
+    let provider = vrpc_provider_pool.for_system(network, &resolved.system_id);
+
+    let mut probe_output = serde_json::Map::new();
+    probe_output.insert(
+        "currency".to_string(),
+        Value::String(request.coin_id.clone()),
+    );
+    probe_output.insert("amount".to_string(), Value::from(0.0));
+    probe_output.insert(
+        "address".to_string(),
+        Value::String(session_eth_address.clone()),
+    );
+    probe_output.insert(
+        "exportto".to_string(),
+        Value::String(VETH_SYSTEM_ID.to_string()),
+    );
+    probe_output.insert(
+        "feecurrency".to_string(),
+        Value::String(resolved.system_id.clone()),
+    );
+
+    let sendcurrency_probe = provider
+        .sendcurrency(
+            &session_vrpc_address,
+            &[Value::Object(probe_output)],
+            1,
+            DEFAULT_PARENT_FEE_LOW,
+            true,
+        )
+        .await?;
+
+    let mut fee_currency_refs = Vec::<String>::new();
+    push_currency_ref(&mut fee_currency_refs, &resolved.system_id);
+    push_currency_ref(&mut fee_currency_refs, &source_system_coin.currency_id);
+    push_currency_ref(&mut fee_currency_refs, &source_system_coin.id);
+    push_currency_ref(&mut fee_currency_refs, &source_system_coin.display_ticker);
+    let fee_sats = parse_outputtotals_fee_sat(&sendcurrency_probe, &fee_currency_refs)
+        .ok_or(WalletError::OperationFailed)?;
+
+    let balance_raw = provider
+        .getaddressbalance(&[session_vrpc_address.clone()])
+        .await?;
+    let balance_coins = parse_source_system_balance_coins(&balance_raw, &fee_currency_refs)
+        .ok_or(WalletError::OperationFailed)?;
+
+    Ok(BridgeExportFeeEstimateResult {
+        fee_coins: format_decimal_coins(fee_sats as f64 / SATOSHIS_PER_COIN as f64),
+        fee_sats: fee_sats.to_string(),
+        balance_coins: format_decimal_coins(balance_coins),
+        system_id: resolved.system_id,
+        source_address: session_vrpc_address,
+        currency_ticker: source_system_coin.display_ticker,
+    })
 }
 
 async fn get_bridge_conversion_paths_vrpc(
@@ -549,7 +772,10 @@ fn bridge_route_from_params(params: &BridgeTransferPreflightParams) -> BridgeTra
 
 #[cfg(test)]
 mod tests {
-    use super::{bridge_route_from_params, to_vrpc_bridge_params};
+    use super::{
+        bridge_route_from_params, parse_outputtotals_fee_sat, parse_source_system_balance_coins,
+        to_vrpc_bridge_params,
+    };
     use crate::types::BridgeTransferPreflightParams;
 
     #[test]
@@ -614,5 +840,47 @@ mod tests {
         let empty: std::collections::HashMap<String, Vec<crate::types::BridgeConversionPathQuote>> =
             std::collections::HashMap::new();
         assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn parse_outputtotals_fee_sat_prefers_matching_currency_ref() {
+        let raw = serde_json::json!({
+            "outputtotals": {
+                "VRSC": "0.00025000",
+                "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV": "0.00030000"
+            }
+        });
+        let refs = vec![
+            "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV".to_string(),
+            "VRSC".to_string(),
+        ];
+
+        let parsed = parse_outputtotals_fee_sat(&raw, &refs).expect("fee");
+        assert_eq!(parsed, 30_000);
+    }
+
+    #[test]
+    fn parse_source_system_balance_coins_reads_currencybalance_when_present() {
+        let raw = serde_json::json!({
+            "balance": 123456789,
+            "currencybalance": {
+                "VRSC": "16.65388586"
+            }
+        });
+        let refs = vec!["VRSC".to_string()];
+
+        let parsed = parse_source_system_balance_coins(&raw, &refs).expect("balance");
+        assert!((parsed - 16.65388586).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn parse_source_system_balance_coins_falls_back_to_native_balance() {
+        let raw = serde_json::json!({
+            "balance": 1665388586i64
+        });
+        let refs = vec!["VRSC".to_string()];
+
+        let parsed = parse_source_system_balance_coins(&raw, &refs).expect("balance");
+        assert!((parsed - 16.65388586).abs() < f64::EPSILON);
     }
 }

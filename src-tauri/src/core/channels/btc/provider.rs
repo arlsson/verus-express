@@ -162,10 +162,7 @@ impl BtcProvider {
         address: &str,
         last_seen_txid: &str,
     ) -> Result<Vec<MempoolTx>, WalletError> {
-        let url = self.url(&format!(
-            "address/{}/txs/chain/{}",
-            address, last_seen_txid
-        ));
+        let url = self.url(&format!("address/{}/txs/chain/{}", address, last_seen_txid));
         let res = self
             .client
             .get(&url)

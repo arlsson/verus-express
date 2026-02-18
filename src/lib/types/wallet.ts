@@ -283,6 +283,20 @@ export interface BridgeConversionEstimateResult {
   price?: string | null;
 }
 
+export interface BridgeExportFeeEstimateRequest {
+  coinId: string;
+  channelId: string;
+}
+
+export interface BridgeExportFeeEstimateResult {
+  feeCoins: string;
+  feeSats: string;
+  balanceCoins: string;
+  systemId: string;
+  sourceAddress: string;
+  currencyTicker: string;
+}
+
 export interface BridgeTransferPreflightParams {
   coinId: string;
   channelId: string;

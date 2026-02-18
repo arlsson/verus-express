@@ -83,6 +83,24 @@ pub struct BridgeConversionEstimateResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BridgeExportFeeEstimateRequest {
+    pub coin_id: String,
+    pub channel_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeExportFeeEstimateResult {
+    pub fee_coins: String,
+    pub fee_sats: String,
+    pub balance_coins: String,
+    pub system_id: String,
+    pub source_address: String,
+    pub currency_ticker: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BridgeTransferPreflightParams {
     pub coin_id: String,
     pub channel_id: String,

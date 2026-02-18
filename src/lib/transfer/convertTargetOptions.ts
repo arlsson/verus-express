@@ -116,6 +116,7 @@ export type ReceiveAssetSections = {
 
 export function buildReceiveAssetSections(input: TargetBuildInput): ReceiveAssetSections {
   const sourceAliases = buildSourceAliasSet(input);
+  const sourceIsEvmLike = input.sourceCurrencyId.trim().toLowerCase().startsWith('0x');
   const destinationMap = new Map<string, DestinationEntry>();
   const debugStats = {
     inputQuoteCount: 0,
@@ -135,11 +136,12 @@ export function buildReceiveAssetSections(input: TargetBuildInput): ReceiveAsset
       if (!destinationId) continue;
       const convertTo = quote.convertTo || destinationId;
 
-      if (isSameCurrencyRoute(destinationId, convertTo, sourceAliases)) {
+      const sameCurrencyRoute = isSameCurrencyRoute(destinationId, convertTo, sourceAliases);
+      if (sameCurrencyRoute && !quote.exportTo) {
         continue;
       }
 
-      if (quote.mapping && quote.exportTo) {
+      if (quote.mapping && quote.exportTo && !sameCurrencyRoute && !sourceIsEvmLike) {
         continue;
       }
       debugStats.postSuppressionCount += 1;

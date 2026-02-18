@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
+  import ArrowLeftRightIcon from '@lucide/svelte/icons/arrow-left-right';
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
   import CheckCircle2Icon from '@lucide/svelte/icons/check-circle-2';
   import BookUserIcon from '@lucide/svelte/icons/book-user';
@@ -16,6 +17,7 @@
   import * as ScrollArea from '$lib/components/ui/scroll-area';
   import * as Tabs from '$lib/components/ui/tabs';
   import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+  import InlineTextActionButton from '$lib/components/common/InlineTextActionButton.svelte';
   import SearchInput from '$lib/components/common/SearchInput.svelte';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import WalletTransferStepperShell from '$lib/components/shared/WalletTransferStepperShell.svelte';
@@ -34,6 +36,7 @@
   import {
     endpointKindForDestinationKind,
     findMatchingSavedEndpoint,
+    normalizeAddressByKind,
     sharesSuspiciousPrefixSuffix
   } from '$lib/address-book/utils';
   import { channelIdForCoin } from '$lib/utils/channelId.js';
@@ -41,6 +44,7 @@
   import { preflightSend, sendTransaction } from '$lib/services/txService.js';
   import {
     estimateBridgeConversion,
+    estimateBridgeExportFee,
     getBridgeCapabilities,
     getBridgeConversionPaths,
     preflightBridgeTransfer
@@ -61,6 +65,7 @@
   import type {
     BridgeCapabilitiesResult,
     BridgeConversionPathQuote,
+    BridgeExportFeeEstimateResult,
     BridgeTransferPreflightResult,
     PreflightResult,
     SendResult
@@ -117,6 +122,16 @@
     percentage: string;
   };
 
+  type BridgeFeeInfo = {
+    loading: boolean;
+    feeCoins: string | null;
+    feeSats: string | null;
+    balanceCoins: string | null;
+    currencyTicker: string;
+    systemId: string | null;
+    error: string | null;
+  };
+
   type TransferWizardProps = {
     entryIntent: EntryIntent;
     entryContext?: TransferEntryContext | null;
@@ -125,6 +140,8 @@
 
   const defaultClose = () => {};
   const OPERATIONAL_STEPS: WizardOperationalStepId[] = ['details', 'recipient', 'review'];
+  const VRSC_SYSTEM_ID = 'i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV';
+  const VRSCTEST_SYSTEM_ID = 'iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq';
   const VETH_SYSTEM_ID = 'i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X';
 
   /* eslint-disable prefer-const */
@@ -192,6 +209,7 @@
   let conversionInitialized = $state(false);
   let selectedReceiveAssetId = $state('');
   let selectedExportSystemId = $state<string | null>(null);
+  let selectedSendExportSystemId = $state<string | null>(null);
   let selectedViaOptionId = $state('');
   let manualViaLocked = $state(false);
   let sourceCoinManuallyChosen = $state(false);
@@ -201,6 +219,15 @@
   let pendingTargetOption = $state<ReceiveAssetOption | null>(null);
   let routeEstimateOutputs = $state<Record<string, string>>({});
   let bridgeCapabilities = $state<BridgeCapabilitiesResult | null>(null);
+  let bridgeFeeInfo = $state<BridgeFeeInfo>({
+    loading: false,
+    feeCoins: null,
+    feeSats: null,
+    balanceCoins: null,
+    currencyTicker: resolveCoinPresentationById('VRSC')?.displayTicker?.trim() || 'VRSC',
+    systemId: null,
+    error: null
+  });
 
   let loadingTargets = $state(false);
   let preflighting = $state(false);
@@ -218,6 +245,7 @@
   let showViaSheet = $state(false);
   let showNetworkSheet = $state(false);
   let showExportSheet = $state(false);
+  let exportSheetMode = $state<'convert' | 'send'>('convert');
   let showAddressBookSheet = $state(false);
   let addressBookSearchTerm = $state('');
   let unsavedRecipientConfirmed = $state(false);
@@ -277,27 +305,18 @@
 
   const receiveAssetSelectionEnabled = $derived(sourceCoinManuallyChosen && !!selectedCoin);
 
-  const sameAssetOption = $derived<SameAssetOption | null>(
-    selectedCoin && selectedCoinPresentation
-      ? {
-          id: `same-${selectedCoin.id}`,
-          label: i18n.t('wallet.transfer.sameAssetOption', {
-            ticker: selectedCoinPresentation.displayTicker
-          }),
-          destinationId: selectedCoin.id,
-          receiveLabel: selectedCoinPresentation.displayTicker,
-          ethDestination: false
-        }
-      : null
-  );
-
   const rawReceiveAssetSections = $derived<ReceiveAssetSections>(
     buildReceiveAssetSections({
       paths: discoveredPathQuotes,
       sourceCurrencyId: selectedCoin?.currencyId || selectedCoin?.id || '',
-      sourceCurrencyAliases: [selectedCoin?.currencyId, selectedCoin?.id].filter(
-        (value): value is string => typeof value === 'string' && value.trim().length > 0
-      )
+      sourceCurrencyAliases: [
+        selectedCoin?.currencyId,
+        selectedCoin?.id,
+        selectedCoin?.systemId,
+        selectedCoin?.mappedTo,
+        selectedCoinPresentation?.currencyId,
+        selectedCoinPresentation?.mappedTo
+      ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     })
   );
 
@@ -338,9 +357,204 @@
   const activeConvertRoute = $derived(
     isPositiveAmount(amount) ? selectedViaOption ?? bestViaOption : null
   );
+
+  const sourceRouteAliasKeys = $derived(
+    new Set(
+      [
+        selectedCoin?.currencyId,
+        selectedCoin?.id,
+        selectedCoin?.systemId,
+        selectedCoin?.mappedTo,
+        selectedCoinPresentation?.currencyId,
+        selectedCoinPresentation?.mappedTo
+      ]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map((value) => value.trim().toLowerCase())
+    )
+  );
+  const sourceCanonicalKey = $derived(
+    (() => {
+      const sourceTicker =
+        selectedCoinPresentation?.displayTicker?.trim() ||
+        selectedCoinPresentation?.displayName?.trim() ||
+        selectedCoin?.displayTicker?.trim() ||
+        selectedCoin?.displayName?.trim() ||
+        selectedCoin?.id?.trim() ||
+        '';
+      const canonical = canonicalizeBridgeTicker(sourceTicker);
+      return canonical;
+    })()
+  );
+  const sendSameAssetOption = $derived<ReceiveAssetOption | null>(
+    (() => {
+      if (!selectedCoin) return null;
+      for (const option of selectableReceiveAssetOptions) {
+        const destinationKey = option.destinationId.trim().toLowerCase();
+        if (sourceRouteAliasKeys.has(destinationKey)) {
+          return option;
+        }
+        const matchesViaOption = option.viaOptions.some((viaOption) => {
+          const convertToKey = viaOption.convertTo?.trim().toLowerCase() ?? '';
+          return !!convertToKey && sourceRouteAliasKeys.has(convertToKey);
+        });
+        if (matchesViaOption) {
+          return option;
+        }
+        if (sourceCanonicalKey && option.canonicalKey.toUpperCase() === sourceCanonicalKey) {
+          return option;
+        }
+        if (sourceCanonicalKey) {
+          const optionCanonicalCandidates = [
+            option.ticker,
+            option.label,
+            option.fullyqualifiedname
+          ]
+            .map((value) => canonicalizeBridgeTicker(value ?? ''))
+            .filter((value) => value.length > 0);
+          if (optionCanonicalCandidates.includes(sourceCanonicalKey)) {
+            return option;
+          }
+        }
+      }
+      return null;
+    })()
+  );
+  const sendCrossChainAvailable = $derived(
+    !!sendSameAssetOption && sendSameAssetOption.exportOptions.length > 0
+  );
+  const activeSendExportSystemId = $derived(
+    (() => {
+      if (!sendSameAssetOption) return null;
+      if (
+        selectedSendExportSystemId &&
+        sendSameAssetOption.exportOptions.some((option) => option.exportTo === selectedSendExportSystemId)
+      ) {
+        return selectedSendExportSystemId;
+      }
+      return null;
+    })()
+  );
+  const selectedSendExportRouteOption = $derived(
+    sendSameAssetOption && activeSendExportSystemId
+      ? sendSameAssetOption.exportOptions.find((option) => option.exportTo === activeSendExportSystemId) ?? null
+      : null
+  );
+  const sendSameAssetViaOptions = $derived(
+    sendSameAssetOption
+      ? filterViaOptionsByExport(sendSameAssetOption.viaOptions, activeSendExportSystemId)
+      : []
+  );
+  const activeSendRoute = $derived<ViaRouteOption | null>(
+    (() => {
+      if (sendSameAssetViaOptions.length === 0) return null;
+      if (!isPositiveAmount(amount)) return sendSameAssetViaOptions[0];
+      return sortViaOptionsByScore(sendSameAssetViaOptions, amount, routeEstimateOutputs)[0] ?? null;
+    })()
+  );
+  const sendDestinationNetworkValue = $derived(
+    activeSendExportSystemId
+      ? normalizeNetworkDisplayName(
+          activeSendExportSystemId,
+          selectedSendExportRouteOption?.exportToName ?? activeSendExportSystemId
+        )
+      : i18n.t('wallet.transfer.keepOnNetwork', { value: sourceNetworkDisplayName })
+  );
+  const sameAssetOption = $derived<SameAssetOption | null>(
+    selectedCoin && selectedCoinPresentation
+      ? {
+          id: `same-${selectedCoin.id}${activeSendExportSystemId ? `|${activeSendExportSystemId}` : ''}`,
+          label: i18n.t('wallet.transfer.sameAssetOption', {
+            ticker: selectedCoinPresentation.displayTicker
+          }),
+          destinationId: sendSameAssetOption?.destinationId ?? selectedCoin.id,
+          receiveLabel:
+            sendSameAssetOption && activeSendExportSystemId
+              ? resolveReceiveLabel(sendSameAssetOption, activeSendExportSystemId)
+              : selectedCoinPresentation.displayTicker,
+          ethDestination: activeSendRoute?.ethDestination ?? false,
+          convertTo: activeSendRoute?.convertTo ?? null,
+          exportTo: activeSendExportSystemId,
+          via: activeSendRoute?.via ?? null,
+          mapTo: activeSendRoute?.mapTo ?? null,
+          price: activeSendRoute?.price ?? null
+        }
+      : null
+  );
   const activeTargetOption = $derived(conversionEnabled ? activeConvertRoute : sameAssetOption);
   const activeExportSystemId = $derived(
-    conversionEnabled ? (activeConvertRoute?.exportTo ?? null) : null
+    conversionEnabled ? (activeConvertRoute?.exportTo ?? null) : (sameAssetOption?.exportTo ?? null)
+  );
+  const bridgeFeeParityEligible = $derived(
+    !!selectedCoin &&
+      !!selectedChannelId &&
+      selectedChannelPrefix === 'vrpc' &&
+      selectedCoin.proto === 'vrsc'
+  );
+  const selectedExportRouteOption = $derived(
+    selectedReceiveAssetOption && selectedExportSystemId
+      ? selectedReceiveAssetOption.exportOptions.find(
+          (option) => option.exportTo === selectedExportSystemId
+        ) ?? null
+      : null
+  );
+  const selectedDestinationNetworkValue = $derived(
+    conversionEnabled
+      ? selectedExportSystemId
+        ? normalizeNetworkDisplayName(
+            selectedExportSystemId,
+            selectedExportRouteOption?.exportToName ?? selectedExportSystemId
+          )
+        : ''
+      : activeExportSystemId
+        ? sendDestinationNetworkValue
+        : ''
+  );
+  const selectedReceiveLabel = $derived(
+    resolveReceiveLabel(selectedReceiveAssetOption, selectedExportSystemId)
+  );
+  const bridgeFeeInsufficient = $derived(
+    (() => {
+      if (!bridgeFeeParityEligible) return false;
+      if (!bridgeFeeInfo.feeCoins || !bridgeFeeInfo.balanceCoins) return false;
+      if (bridgeFeeInfo.loading || bridgeFeeInfo.error) return false;
+      const required = toFiniteNumber(bridgeFeeInfo.feeCoins);
+      const available = toFiniteNumber(bridgeFeeInfo.balanceCoins);
+      if (required <= 0) return false;
+      return available < required;
+    })()
+  );
+  const bridgeFeeFiatDisplay = $derived(
+    formatFiatEstimate(
+      bridgeFeeInfo.feeCoins ?? null,
+      getUsdRateForCurrencyLabel(bridgeFeeInfo.currencyTicker)
+    )
+  );
+  const bridgeFeeEstimateValue = $derived(
+    (() => {
+      if (bridgeFeeInfo.loading) return i18n.t('wallet.transfer.bridgeFeeCalculating');
+      if (bridgeFeeInfo.error || !bridgeFeeInfo.feeCoins) {
+        return i18n.t('wallet.transfer.bridgeFeeUnavailable');
+      }
+      return `${bridgeFeeInfo.feeCoins} ${bridgeFeeInfo.currencyTicker}`;
+    })()
+  );
+  const bridgeFeeEstimateSecondary = $derived(
+    (() => {
+      if (bridgeFeeInsufficient) {
+        return i18n.t('wallet.transfer.bridgeFeeInsufficient', {
+          ticker: bridgeFeeInfo.currencyTicker
+        });
+      }
+      if (
+        !bridgeFeeInfo.loading &&
+        !bridgeFeeInfo.error &&
+        bridgeFeeInfo.feeCoins &&
+        bridgeFeeFiatDisplay !== '≈ —'
+      ) {
+        return bridgeFeeFiatDisplay;
+      }
+      return undefined;
+    })()
   );
 
   const convertUnavailableForSource = $derived(
@@ -430,6 +644,13 @@
   const matchedSavedRecipient = $derived(
     findMatchingSavedEndpoint(addressBookContacts, destinationEndpointKind, destinationAddress)
   );
+  const isSelfRecipient = $derived(
+    (() => {
+      const normalizedDestination = normalizeAddressByKind(destinationEndpointKind, destinationAddress);
+      const normalizedSelf = normalizeAddressByKind(destinationEndpointKind, selfDestinationAddress);
+      return !!normalizedDestination && !!normalizedSelf && normalizedDestination === normalizedSelf;
+    })()
+  );
   const isSavedRecipient = $derived(!!matchedSavedRecipient);
   const hasRecipientSimilarityWarning = $derived(
     !isSavedRecipient &&
@@ -437,7 +658,7 @@
   );
   const activePreflight = $derived(simplePreflightResult ?? bridgePreflightResult);
   const requiresUnsavedRecipientAck = $derived(
-    !!destinationAddress.trim() && !!activePreflight && !isSavedRecipient
+    !!destinationAddress.trim() && !!activePreflight && !isSavedRecipient && !isSelfRecipient
   );
 
   const recipientInputCopy = $derived(getRecipientInputCopy(i18n.t, destinationAddressKind));
@@ -493,7 +714,7 @@
       return i18n.t('wallet.transfer.ratePair', {
         from: selectedCoinPresentation.displayTicker,
         rate: activeConvertRouteRate,
-        to: selectedReceiveAssetOption.label
+        to: selectedReceiveLabel || selectedReceiveAssetOption.label
       });
     })()
   );
@@ -529,11 +750,7 @@
   const reviewReceivingValue = $derived(
     (() => {
       if (!conversionEnabled || !estimatedConversionValue) return '';
-      const receiveLabel =
-        selectedReceiveAssetOption?.fullyqualifiedname?.trim() ||
-        selectedReceiveAssetOption?.ticker?.trim() ||
-        selectedReceiveAssetOption?.label?.trim() ||
-        '';
+      const receiveLabel = resolveReceiveLabel(selectedReceiveAssetOption, activeExportSystemId);
       return receiveLabel ? `~${estimatedConversionValue} ${receiveLabel}` : `~${estimatedConversionValue}`;
     })()
   );
@@ -544,11 +761,12 @@
 
   const reviewDestinationNetworkValue = $derived(
     conversionEnabled
-      ? normalizeNetworkDisplayName(
-          activeConvertRoute?.exportTo ?? null,
-          activeConvertRoute?.exportToLabel ?? activeConvertRoute?.exportTo ?? ''
-        )
-      : ''
+      ? selectedDestinationNetworkValue ||
+          normalizeNetworkDisplayName(
+            activeConvertRoute?.exportTo ?? null,
+            activeConvertRoute?.exportToLabel ?? activeConvertRoute?.exportTo ?? ''
+          )
+      : selectedDestinationNetworkValue
   );
 
   const reviewNetworkFeeValue = $derived(
@@ -559,6 +777,10 @@
       if (!activePreflight) return '≈ —';
 
       let totalFiat = 0;
+      const bridgeFeeRequired =
+        !!activeExportSystemId &&
+        isEthereumExport(activeExportSystemId) &&
+        bridgeFeeParityEligible;
 
       const networkFeeAmount = parseNonNegativeAmount(activePreflight.fee);
       const networkFeeRate = getUsdRateForCurrencyLabel(activePreflight.feeCurrency) ?? sourceUsdRate;
@@ -574,6 +796,15 @@
         }
       }
 
+      if (bridgeFeeRequired) {
+        if (bridgeFeeInfo.loading || bridgeFeeInfo.error || !bridgeFeeInfo.feeCoins) return '≈ —';
+
+        const bridgeAmount = parseNonNegativeAmount(bridgeFeeInfo.feeCoins);
+        const bridgeRate = getUsdRateForCurrencyLabel(bridgeFeeInfo.currencyTicker) ?? sourceUsdRate;
+        if (bridgeAmount === null || bridgeRate === null) return '≈ —';
+        totalFiat += bridgeAmount * bridgeRate;
+      }
+
       if (!Number.isFinite(totalFiat) || totalFiat <= 0) return '≈ —';
       return `≈ ${formatUsdAmountDynamic(totalFiat)}`;
     })()
@@ -582,7 +813,7 @@
     (() => {
       if (!activePreflight) return null;
 
-      if (!conversionEnabled) {
+      if (!conversionEnabled && !activeExportSystemId) {
         return {
           value: i18n.t('wallet.transfer.summary.estimatedTimeSimple'),
           tooltip: i18n.t('wallet.transfer.summary.estimatedTimeTooltipSimple')
@@ -604,7 +835,12 @@
   );
 
   const reviewRecipientName = $derived(matchedSavedRecipient?.contact.displayName?.trim() ?? '');
-  const reviewRecipientAddress = $derived(truncateAddressMiddle(destinationAddress, 6, 6));
+  const reviewRecipientAddress = $derived(truncateAddressMiddle(destinationAddress));
+  const reviewRecipientAddressWithSelf = $derived(
+    isSelfRecipient && reviewRecipientAddress
+      ? `${reviewRecipientAddress} ${i18n.t('wallet.transfer.review.selfSuffix')}`
+      : reviewRecipientAddress
+  );
 
   const stepNumber = $derived(
     currentStep === 'success'
@@ -638,6 +874,7 @@
       !!amount.trim() ||
       !!destinationAddress.trim() ||
       conversionEnabled !== (entryIntent === 'convert') ||
+      !!selectedSendExportSystemId ||
       !!simplePreflightResult ||
       !!bridgePreflightResult ||
       !!sendResult
@@ -650,7 +887,10 @@
           !selectedChannelId ||
           !amountValid ||
           !activeTargetOption ||
-          (conversionEnabled && !selectedReceiveAssetOption))) ||
+          (conversionEnabled && !selectedReceiveAssetOption) ||
+          (activeExportSystemId !== null &&
+            isEthereumExport(activeExportSystemId) &&
+            bridgeFeeInsufficient))) ||
       (currentStep === 'recipient' && !recipientValid) ||
       (currentStep === 'review' && !activePreflight) ||
       (currentStep === 'review' && requiresUnsavedRecipientAck && !unsavedRecipientConfirmed)
@@ -692,7 +932,13 @@
       }
 
       if (conversionEnabled) {
-        const toDisplay = selectedReceiveAssetOption ? getReceiveOptionDisplay(selectedReceiveAssetOption) : null;
+        const toDisplay = selectedReceiveAssetOption
+          ? getReceiveOptionDisplay(
+              selectedReceiveAssetOption,
+              selectedReceiveLabel,
+              selectedExportSystemId ?? activeExportSystemId
+            )
+          : null;
         const toPrimary = toDisplay?.primary?.trim() ?? '';
         const toSecondary = toDisplay?.secondary;
         if (toPrimary) {
@@ -706,12 +952,18 @@
         }
       }
 
+      if (selectedDestinationNetworkValue) {
+        rows.push({
+          label: i18n.t('wallet.transfer.summary.destinationNetwork'),
+          primary: selectedDestinationNetworkValue
+        });
+      }
+
       if (conversionEnabled && amountValid && activeConvertRoute) {
         const routePrimary = getViaOptionLabel(activeConvertRoute).trim();
-        const routeSecondary = normalizeRouteSummarySecondary(
-          routePrimary,
-          getRouteSubtitle(activeConvertRoute)
-        );
+        const routeSecondary = selectedDestinationNetworkValue
+          ? undefined
+          : normalizeRouteSummarySecondary(routePrimary, getRouteSubtitle(activeConvertRoute));
         if (routePrimary) {
           rows.push({
             label: i18n.t('wallet.transfer.summary.route'),
@@ -735,20 +987,29 @@
 
       if (conversionEnabled && estimatedConversionValue && selectedReceiveAssetOption) {
         const estimatedPrimaryValue = estimatedConversionValue.trim();
-        const estimatedFqn =
-          selectedReceiveAssetOption.fullyqualifiedname?.trim() ||
-          selectedReceiveAssetOption.ticker?.trim() ||
-          selectedReceiveAssetOption.label?.trim() ||
-          '';
         if (estimatedPrimaryValue) {
-          const estimatedPrimary = estimatedFqn
-            ? `~${estimatedPrimaryValue} ${estimatedFqn}`
+          const estimatedReceiveLabel = resolveReceiveLabel(
+            selectedReceiveAssetOption,
+            selectedExportSystemId ?? activeExportSystemId
+          );
+          const estimatedPrimary = estimatedReceiveLabel
+            ? `~${estimatedPrimaryValue} ${estimatedReceiveLabel}`
             : `~${estimatedPrimaryValue}`;
           rows.push({
             label: i18n.t('wallet.transfer.summary.estimatedReceive'),
             primary: estimatedPrimary
           });
         }
+      }
+
+      if (activeExportSystemId && isEthereumExport(activeExportSystemId)) {
+        rows.push({
+          label: i18n.t('wallet.transfer.summary.bridgeFeeEstimate'),
+          primary: bridgeFeeParityEligible
+            ? bridgeFeeEstimateValue
+            : i18n.t('wallet.transfer.bridgeFeeUnavailable'),
+          secondary: bridgeFeeParityEligible ? bridgeFeeEstimateSecondary : undefined
+        });
       }
 
       const recipientAddress = destinationAddress.trim();
@@ -788,7 +1049,7 @@
       selectedChannelId ?? '',
       conversionEnabled ? '1' : '0',
       selectedReceiveAssetId,
-      selectedExportSystemId ?? '',
+      activeExportSystemId ?? '',
       activeTargetOption?.id ?? '',
       amount.trim(),
       destinationAddress.trim()
@@ -840,6 +1101,72 @@
   });
 
   $effect(() => {
+    const coin = selectedCoin;
+    const channelId = selectedChannelId;
+    const defaultTicker = resolveCoinPresentationById('VRSC')?.displayTicker?.trim() || 'VRSC';
+    let cancelled = false;
+
+    if (!bridgeFeeParityEligible || !coin || !channelId) {
+      bridgeFeeInfo = {
+        loading: false,
+        feeCoins: null,
+        feeSats: null,
+        balanceCoins: null,
+        currencyTicker: defaultTicker,
+        systemId: null,
+        error: null
+      };
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    bridgeFeeInfo = {
+      loading: true,
+      feeCoins: null,
+      feeSats: null,
+      balanceCoins: null,
+      currencyTicker: defaultTicker,
+      systemId: null,
+      error: null
+    };
+
+    void (async () => {
+      try {
+        const estimate: BridgeExportFeeEstimateResult = await estimateBridgeExportFee({
+          coinId: coin.id,
+          channelId
+        });
+        if (cancelled) return;
+        bridgeFeeInfo = {
+          loading: false,
+          feeCoins: estimate.feeCoins?.trim() || null,
+          feeSats: estimate.feeSats?.trim() || null,
+          balanceCoins: estimate.balanceCoins?.trim() || null,
+          currencyTicker: estimate.currencyTicker?.trim() || defaultTicker,
+          systemId: estimate.systemId?.trim() || null,
+          error: null
+        };
+      } catch (error) {
+        if (cancelled) return;
+        bridgeFeeInfo = {
+          loading: false,
+          feeCoins: null,
+          feeSats: null,
+          balanceCoins: null,
+          currencyTicker: defaultTicker,
+          systemId: null,
+          error: mapWalletError(error)
+        };
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  $effect(() => {
     if (positiveSendableCoinOptions.length === 0) {
       selectedCoinId = '';
       sourceCoinManuallyChosen = false;
@@ -874,6 +1201,7 @@
       targetsError = '';
       selectedReceiveAssetId = '';
       selectedExportSystemId = null;
+      selectedSendExportSystemId = null;
       selectedViaOptionId = '';
       manualViaLocked = false;
       receiveSearchTerm = '';
@@ -901,12 +1229,14 @@
   $effect(() => {
     if (showExportSheet) return;
     pendingTargetOption = null;
+    exportSheetMode = 'convert';
   });
 
   $effect(() => {
     if (rawReceiveAssetSections.allOptions.length === 0) {
       selectedReceiveAssetId = '';
       selectedExportSystemId = null;
+      selectedSendExportSystemId = null;
       selectedViaOptionId = '';
       manualViaLocked = false;
       pendingGroupedReceiveOption = null;
@@ -939,6 +1269,21 @@
       : selectedReceiveAssetOption.exportOptions[0]?.exportTo ?? null;
     selectedViaOptionId = '';
     manualViaLocked = false;
+  });
+
+  $effect(() => {
+    if (!sendSameAssetOption) {
+      selectedSendExportSystemId = null;
+      return;
+    }
+    if (selectedSendExportSystemId === null) return;
+
+    const exportStillValid = sendSameAssetOption.exportOptions.some(
+      (option) => option.exportTo === selectedSendExportSystemId
+    );
+    if (exportStillValid) return;
+
+    selectedSendExportSystemId = null;
   });
 
   $effect(() => {
@@ -1172,9 +1517,7 @@
   }
 
   function shortRecipientAddress(value: string): string {
-    const trimmed = value.trim();
-    if (trimmed.length <= 24) return trimmed;
-    return `${trimmed.slice(0, 10)}...${trimmed.slice(-10)}`;
+    return truncateAddressMiddle(value, 10, 10);
   }
 
   function endpointBadgeLabel(kind: AddressEndpointKind): string {
@@ -1315,6 +1658,7 @@
     showReceiveAssetSheet = false;
     showNetworkSheet = false;
     showExportSheet = false;
+    exportSheetMode = 'convert';
   }
 
   function finalizeReceiveSelection(option: ReceiveAssetOption, exportSystemId: string | null) {
@@ -1336,7 +1680,17 @@
     transferError = '';
   }
 
+  function finalizeSendExportSelection(exportSystemId: string | null) {
+    selectedSendExportSystemId = exportSystemId;
+    manualViaLocked = false;
+    pendingGroupedReceiveOption = null;
+    pendingTargetOption = null;
+    closeAssetSelectionSheets();
+    transferError = '';
+  }
+
   function beginReceiveSelection(option: ReceiveAssetOption) {
+    exportSheetMode = 'convert';
     pendingTargetOption = option;
     showReceiveAssetSheet = false;
     showNetworkSheet = false;
@@ -1347,6 +1701,18 @@
     }
 
     finalizeReceiveSelection(option, null);
+  }
+
+  function openSendDestinationNetworkSheet() {
+    if (!sendSameAssetOption) return;
+    exportSheetMode = 'send';
+    pendingGroupedReceiveOption = null;
+    pendingTargetOption = sendSameAssetOption;
+    showSourceAssetSheet = false;
+    showReceiveAssetSheet = false;
+    showNetworkSheet = false;
+    showExportSheet = true;
+    transferError = '';
   }
 
   function isPositiveAmount(input: string): boolean {
@@ -1380,11 +1746,26 @@
   }
 
   function normalizeNetworkDisplayName(systemId: string | null | undefined, fallback: string): string {
+    const normalizedSystemId = systemId?.trim().toLowerCase() ?? '';
     const fallbackTrimmed = fallback.trim();
     const normalizedFallback = fallbackTrimmed.toLowerCase();
     if (
+      normalizedSystemId === VRSC_SYSTEM_ID.toLowerCase() ||
+      normalizedFallback === 'vrsc' ||
+      normalizedFallback === 'verus'
+    ) {
+      return resolveCoinPresentationById('VRSC')?.displayName?.trim() || 'Verus';
+    }
+    if (
+      normalizedSystemId === VRSCTEST_SYSTEM_ID.toLowerCase() ||
+      normalizedFallback === 'vrsctest' ||
+      normalizedFallback === 'verus testnet'
+    ) {
+      return resolveCoinPresentationById('VRSCTEST')?.displayName?.trim() || 'Verus Testnet';
+    }
+    if (
       isEthereumExport(systemId) ||
-      systemId?.trim().toLowerCase() === '.eth' ||
+      normalizedSystemId === '.eth' ||
       normalizedFallback === 'veth' ||
       normalizedFallback === 'ethereum on verus'
     ) {
@@ -1397,6 +1778,39 @@
     return normalizeNetworkDisplayName(exportTo, exportToName || exportTo);
   }
 
+  function networkIconCoinIdForExportOption(exportTo: string, exportToName: string): string {
+    const normalizedExportTo = exportTo.trim().toLowerCase();
+    const normalizedName = (exportToName || '').trim().toLowerCase();
+
+    if (
+      isEthereumExport(exportTo) ||
+      normalizedExportTo === '.eth' ||
+      normalizedName === 'veth' ||
+      normalizedName === 'ethereum on verus' ||
+      normalizedName === 'ethereum'
+    ) {
+      return 'ETH';
+    }
+
+    if (
+      normalizedExportTo === VRSC_SYSTEM_ID.toLowerCase() ||
+      normalizedName === 'vrsc' ||
+      normalizedName === 'verus'
+    ) {
+      return 'VRSC';
+    }
+
+    if (
+      normalizedExportTo === VRSCTEST_SYSTEM_ID.toLowerCase() ||
+      normalizedName === 'vrsctest' ||
+      normalizedName === 'verus testnet'
+    ) {
+      return 'VRSCTEST';
+    }
+
+    return exportTo;
+  }
+
   function networkLabelForGroupedOption(option: ReceiveAssetOption): string {
     if (option.hasOnChainPath) {
       return i18n.t('wallet.transfer.keepOnNetwork', { value: sourceNetworkDisplayName });
@@ -1406,17 +1820,17 @@
     return networkLabelForExportOption(firstExportOption.exportTo, firstExportOption.exportToName);
   }
 
-  function receiveLabelForGroupedOption(option: ReceiveAssetOption): string {
-    if (option.hasOnChainPath || option.exportOptions.length === 0) {
-      return option.fullyqualifiedname || option.ticker || option.label;
-    }
-    return receiveLabelForExportOption(option.exportOptions[0], option);
-  }
-
   function resolveSourceNetworkDisplayName(systemId: string | null | undefined, channelPrefix: string): string {
     const normalizedSystemId = systemId?.trim() ?? '';
     const normalizedSystemIdLc = normalizedSystemId.toLowerCase();
     const normalizedPrefix = channelPrefix.trim().toLowerCase();
+
+    if (normalizedSystemIdLc === VRSC_SYSTEM_ID.toLowerCase()) {
+      return resolveCoinPresentationById('VRSC')?.displayName?.trim() || 'Verus';
+    }
+    if (normalizedSystemIdLc === VRSCTEST_SYSTEM_ID.toLowerCase()) {
+      return resolveCoinPresentationById('VRSCTEST')?.displayName?.trim() || 'Verus Testnet';
+    }
 
     // vETH is a Verus PBaaS system for same-network semantics.
     if (isEthereumExport(normalizedSystemId)) {
@@ -1486,6 +1900,15 @@
     return withoutVeth;
   }
 
+  function canonicalizeBridgeTicker(value: string): string {
+    const stripped = stripBridgeSuffix(value).trim();
+    if (!stripped) return '';
+    if (/^v[A-Za-z0-9]+$/.test(stripped)) {
+      return stripped.slice(1).toUpperCase();
+    }
+    return stripped.toUpperCase();
+  }
+
   function receiveLabelForExportOption(option: ExportRouteOption, targetOption: ReceiveAssetOption): string {
     const exportTarget = option.exportTo?.trim() ?? '';
     const ethereumExport = isEthereumExport(exportTarget) || exportTarget.toLowerCase() === '.eth';
@@ -1524,16 +1947,85 @@
     );
   }
 
-  function getReceiveOptionDisplay(option: ReceiveAssetOption): { primary: string; secondary?: string } {
+  function resolveReceiveLabel(
+    option: ReceiveAssetOption | null | undefined,
+    exportSystemId: string | null | undefined
+  ): string {
+    if (!option) return '';
+    const normalizedExportSystemId = exportSystemId?.trim() ?? '';
+    if (normalizedExportSystemId) {
+      const matchedExportOption =
+        option.exportOptions.find((exportOption) => exportOption.exportTo === normalizedExportSystemId) ?? null;
+      if (matchedExportOption) {
+        return receiveLabelForExportOption(matchedExportOption, option);
+      }
+    }
+
+    if (!normalizedExportSystemId && !option.hasOnChainPath && option.exportOptions.length > 0) {
+      return receiveLabelForExportOption(option.exportOptions[0], option);
+    }
+
+    return option.fullyqualifiedname?.trim() || option.ticker?.trim() || option.label.trim();
+  }
+
+  function bridgeFeeLineForExportOption(exportSystemId: string | null | undefined): string | null {
+    if (!isEthereumExport(exportSystemId)) return null;
+    if (bridgeFeeInfo.loading) return i18n.t('wallet.transfer.bridgeFeeCalculating');
+    if (bridgeFeeInfo.error || !bridgeFeeInfo.feeCoins) return i18n.t('wallet.transfer.bridgeFeeUnavailable');
+    return i18n.t('wallet.transfer.bridgeFeeEstimateLine', {
+      value: `${bridgeFeeInfo.feeCoins} ${bridgeFeeInfo.currencyTicker}`
+    });
+  }
+
+  function bridgeFeeMetaLineForExportOption(exportSystemId: string | null | undefined): string | null {
+    if (!isEthereumExport(exportSystemId)) return null;
+    if (bridgeFeeInsufficient) {
+      return i18n.t('wallet.transfer.bridgeFeeInsufficient', {
+        ticker: bridgeFeeInfo.currencyTicker
+      });
+    }
+    if (
+      !bridgeFeeInfo.loading &&
+      !bridgeFeeInfo.error &&
+      bridgeFeeInfo.feeCoins &&
+      bridgeFeeFiatDisplay !== '≈ —'
+    ) {
+      return bridgeFeeFiatDisplay;
+    }
+    return null;
+  }
+
+  function isBridgeFeeSelectionDisabled(exportSystemId: string | null | undefined): boolean {
+    if (!isEthereumExport(exportSystemId)) return false;
+    return bridgeFeeInsufficient;
+  }
+
+  function getReceiveOptionDisplay(
+    option: ReceiveAssetOption,
+    preferredReceiveLabel?: string | null,
+    exportSystemId?: string | null
+  ): { primary: string; secondary?: string } {
     const presentation = resolveCoinPresentationById(option.destinationId);
+    const preferredLabel = preferredReceiveLabel?.trim() ?? '';
     const primary =
+      preferredLabel ||
       presentation?.displayName?.trim() ||
       option.subtitle?.trim() ||
       option.label.trim();
+    if (isEthereumExport(exportSystemId)) {
+      return { primary, secondary: undefined };
+    }
     const secondaryCandidate =
       presentation?.displayTicker?.trim() ||
       option.fullyqualifiedname?.trim() ||
       option.ticker?.trim();
+    const normalizedSecondaryCandidate = secondaryCandidate ? stripBridgeSuffix(secondaryCandidate) : '';
+    if (
+      normalizedSecondaryCandidate &&
+      normalizedSecondaryCandidate.toLowerCase() === primary.toLowerCase()
+    ) {
+      return { primary, secondary: undefined };
+    }
     const secondary =
       secondaryCandidate && secondaryCandidate.toLowerCase() !== primary.toLowerCase()
         ? secondaryCandidate
@@ -1792,7 +2284,7 @@
     return normalized;
   }
 
-  function truncateAddressMiddle(value: string, startLength = 6, endLength = 6): string {
+  function truncateAddressMiddle(value: string, startLength = 10, endLength = 10): string {
     const trimmed = value.trim();
     if (!trimmed) return '';
     const minimumVisibleLength = startLength + endLength + 3;
@@ -1849,17 +2341,20 @@
     transferError = '';
 
     try {
-      if (conversionEnabled && activeConvertRoute) {
+      const useBridgePreflight = conversionEnabled
+        ? !!activeConvertRoute
+        : !!activeTargetOption.exportTo;
+      if (useBridgePreflight) {
         bridgePreflightResult = await preflightBridgeTransfer({
           coinId: selectedCoin.id,
           channelId: selectedChannelId,
           sourceAddress: selectedSourceAddress || null,
           destination: destinationAddress.trim(),
           amount: amount.trim(),
-          convertTo: activeConvertRoute.convertTo ?? null,
-          exportTo: activeConvertRoute.exportTo ?? null,
-          via: activeConvertRoute.via ?? null,
-          mapTo: activeConvertRoute.mapTo ?? null,
+          convertTo: activeTargetOption.convertTo ?? null,
+          exportTo: activeTargetOption.exportTo ?? null,
+          via: activeTargetOption.via ?? null,
+          mapTo: activeTargetOption.mapTo ?? null,
           preconvert: null
         });
         simplePreflightResult = null;
@@ -1955,6 +2450,7 @@
 
   function selectSourceCoin(coinId: string) {
     selectedCoinId = coinId;
+    selectedSendExportSystemId = null;
     sourceCoinManuallyChosen = true;
     showSourceAssetSheet = false;
     transferError = '';
@@ -1986,11 +2482,19 @@
 
   function selectExportOption(exportSystemId: string) {
     if (!pendingTargetOption) return;
+    if (exportSheetMode === 'send') {
+      finalizeSendExportSelection(exportSystemId);
+      return;
+    }
     finalizeReceiveSelection(pendingTargetOption, exportSystemId);
   }
 
   function selectSameNetworkOption() {
     if (!pendingTargetOption) return;
+    if (exportSheetMode === 'send') {
+      finalizeSendExportSelection(null);
+      return;
+    }
     finalizeReceiveSelection(pendingTargetOption, null);
   }
 
@@ -2140,7 +2644,7 @@
                     <p class="text-muted-foreground mt-1 px-0.5 text-xs tabular-nums">{sourceAmountFiatDisplay}</p>
                   </div>
 
-                  <div class="flex h-12 max-w-[72%] shrink-0 flex-col items-end">
+                  <div class="flex max-w-[72%] shrink-0 flex-col items-end gap-1">
                     <Button
                       variant={showChooseCurrencyCallToAction ? 'default' : 'ghost'}
                       class="max-w-full
@@ -2192,6 +2696,29 @@
                     </div>
                   {/if}
                 </div>
+
+                <div class="mt-1 min-h-6 flex items-center justify-end">
+                  {#if !showChooseCurrencyCallToAction && !conversionEnabled && sendCrossChainAvailable}
+                    <InlineTextActionButton
+                      class="max-w-full gap-1.5 text-xs"
+                      onclick={openSendDestinationNetworkSheet}
+                    >
+                      <ArrowLeftRightIcon class="size-3.5 shrink-0 opacity-70" />
+                      <span class="truncate">{i18n.t('wallet.transfer.crossChainSendAvailable')}</span>
+                      <span class="truncate opacity-80">· {sendDestinationNetworkValue}</span>
+                    </InlineTextActionButton>
+                  {:else if !showChooseCurrencyCallToAction && !conversionEnabled && selectedChannelPrefix === 'eth'}
+                    <InlineTextActionButton class="max-w-full gap-1.5 text-xs" disabled={true}>
+                      <ArrowLeftRightIcon class="size-3.5 shrink-0 opacity-50" />
+                      <span class="truncate">{i18n.t('wallet.transfer.crossChainSendUnavailable')}</span>
+                    </InlineTextActionButton>
+                  {:else if !showChooseCurrencyCallToAction && !conversionEnabled && selectedChannelPrefix === 'erc20'}
+                    <InlineTextActionButton class="max-w-full gap-1.5 text-xs" disabled={true}>
+                      <ArrowLeftRightIcon class="size-3.5 shrink-0 opacity-50" />
+                      <span class="truncate">{i18n.t('wallet.transfer.crossChainSendUnavailable')}</span>
+                    </InlineTextActionButton>
+                  {/if}
+                </div>
               </section>
             </div>
 
@@ -2229,7 +2756,11 @@
                       }}
                     >
                       {#if selectedReceiveAssetOption}
-                        {@const receiveDisplay = getReceiveOptionDisplay(selectedReceiveAssetOption)}
+                        {@const receiveDisplay = getReceiveOptionDisplay(
+                          selectedReceiveAssetOption,
+                          selectedReceiveLabel,
+                          selectedExportSystemId ?? activeExportSystemId
+                        )}
                         <CoinIcon
                           coinId={selectedReceiveAssetOption.destinationId}
                           coinName={receiveDisplay.primary}
@@ -2412,7 +2943,7 @@
                       {#if selectedReceiveAssetOption?.destinationId}
                         <CoinIcon
                           coinId={selectedReceiveAssetOption.destinationId}
-                          coinName={selectedReceiveAssetOption.label}
+                          coinName={resolveReceiveLabel(selectedReceiveAssetOption, activeExportSystemId)}
                           size={20}
                           decorative={true}
                         />
@@ -2435,10 +2966,10 @@
                     <div class="flex min-w-0 items-start gap-1.5">
                       <div class="min-w-0 text-right">
                         <p class={`truncate text-[13px] font-medium ${reviewRecipientName ? '' : 'identifier-text'}`}>
-                          {reviewRecipientName || reviewRecipientAddress || i18n.t('wallet.transfer.summary.notSet')}
+                          {reviewRecipientName || reviewRecipientAddressWithSelf || i18n.t('wallet.transfer.summary.notSet')}
                         </p>
-                        {#if reviewRecipientName && reviewRecipientAddress}
-                          <p class="text-muted-foreground identifier-text mt-0.5 text-[10px]">{reviewRecipientAddress}</p>
+                        {#if reviewRecipientName && reviewRecipientAddressWithSelf}
+                          <p class="text-muted-foreground identifier-text mt-0.5 text-[10px]">{reviewRecipientAddressWithSelf}</p>
                         {/if}
                       </div>
                       <button
@@ -2461,7 +2992,7 @@
                           endpoint: matchedSavedRecipient.endpoint.label
                         })}
                       </p>
-                    {:else}
+                    {:else if !isSelfRecipient}
                       <div class="space-y-0.5">
                         <p class="text-amber-700 dark:text-amber-300 text-[11px]">
                           {i18n.t('wallet.transfer.review.unsavedRecipient')}
@@ -2501,6 +3032,26 @@
                       {reviewNetworkFeeValue || i18n.t('wallet.transfer.summary.notSet')}
                     </p>
                   </div>
+
+                  {#if activeExportSystemId && isEthereumExport(activeExportSystemId)}
+                    <div class="flex items-start justify-between gap-3">
+                      <p class="text-muted-foreground text-[11px]">{i18n.t('wallet.transfer.summary.bridgeFeeEstimate')}</p>
+                      <div class="min-w-0 text-right">
+                        <p class="text-[13px] font-medium tabular-nums">
+                          {bridgeFeeParityEligible
+                            ? bridgeFeeEstimateValue
+                            : i18n.t('wallet.transfer.bridgeFeeUnavailable')}
+                        </p>
+                        {#if bridgeFeeParityEligible && bridgeFeeEstimateSecondary}
+                          <p
+                            class={`mt-0.5 text-[11px] ${bridgeFeeInsufficient ? 'text-destructive' : 'text-muted-foreground'} tabular-nums`}
+                          >
+                            {bridgeFeeEstimateSecondary}
+                          </p>
+                        {/if}
+                      </div>
+                    </div>
+                  {/if}
 
                   {#if conversionEnabled && conversionFeeInfo}
                     <div class="flex items-start justify-between gap-3">
@@ -2786,14 +3337,23 @@
         <ScrollArea.Viewport class="h-full pr-1">
           <div class="space-y-2 pb-1">
             {#each pendingGroupedReceiveOption.networkOptions ?? [] as option}
+              {@const optionExportSystemId = option.exportOptions[0]?.exportTo ?? null}
+              {@const optionDisabled = isBridgeFeeSelectionDisabled(optionExportSystemId)}
+              {@const optionBridgeFeeLine = bridgeFeeLineForExportOption(optionExportSystemId)}
+              {@const optionBridgeFeeMeta = bridgeFeeMetaLineForExportOption(optionExportSystemId)}
               <button
                 type="button"
-                class="group flex w-full items-start justify-between rounded-lg p-3 text-left transition-colors
+                class="group flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
+                  {optionDisabled ? 'cursor-not-allowed opacity-60' : ''}
                   {selectedReceiveAssetId === option.id && (selectedExportSystemId === null || selectedExportSystemId === option.exportOptions[0]?.exportTo)
                     ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
                     : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'}"
-                onclick={() => selectReceiveNetworkOption(option.id)}
+                disabled={optionDisabled}
+                onclick={() => {
+                  if (optionDisabled) return;
+                  selectReceiveNetworkOption(option.id);
+                }}
               >
                 <div class="flex min-w-0 items-center gap-2">
                   <CoinIcon
@@ -2806,9 +3366,19 @@
                     <p class="truncate text-sm font-medium">{networkLabelForGroupedOption(option)}</p>
                     <p class="text-muted-foreground truncate text-xs">
                       {i18n.t('wallet.transfer.receiveAs', {
-                        value: receiveLabelForGroupedOption(option)
+                        value: resolveReceiveLabel(option, optionExportSystemId)
                       })}
                     </p>
+                    {#if optionBridgeFeeLine}
+                      <p class={`truncate text-xs ${bridgeFeeInsufficient ? 'text-destructive' : 'text-muted-foreground'}`}>
+                        {optionBridgeFeeLine}
+                      </p>
+                    {/if}
+                    {#if optionBridgeFeeMeta}
+                      <p class={`truncate text-xs ${bridgeFeeInsufficient ? 'text-destructive' : 'text-muted-foreground'}`}>
+                        {optionBridgeFeeMeta}
+                      </p>
+                    {/if}
                   </div>
                 </div>
               </button>
@@ -2827,7 +3397,7 @@
   <div class="flex h-full min-h-0 flex-col gap-3">
     {#if pendingTargetOption}
       <p class="text-muted-foreground text-sm">
-        {#if !pendingTargetOption.hasOnChainPath && pendingTargetOption.exportOptions.length === 1}
+        {#if exportSheetMode !== 'send' && !pendingTargetOption.hasOnChainPath && pendingTargetOption.exportOptions.length === 1}
           {i18n.t('wallet.transfer.onlyAvailableOnNetwork', {
             value: networkLabelForExportOption(
               pendingTargetOption.exportOptions[0].exportTo,
@@ -2835,18 +3405,29 @@
             )
           })}
         {:else}
-          {i18n.t('wallet.transfer.exportSheetDescription', { value: pendingTargetOption.label })}
+          {i18n.t('wallet.transfer.exportSheetDescription', {
+            value:
+              exportSheetMode === 'send'
+                ? (selectedCoinPresentation?.displayTicker?.trim() ||
+                  selectedCoinPresentation?.displayName?.trim() ||
+                  pendingTargetOption.label)
+                : pendingTargetOption.label
+          })}
         {/if}
       </p>
       <ScrollArea.Root class="min-h-0 flex-1">
         <ScrollArea.Viewport class="h-full pr-1">
           <div class="space-y-2 pb-1">
-            {#if pendingTargetOption.hasOnChainPath}
+            {#if pendingTargetOption.hasOnChainPath || exportSheetMode === 'send'}
+              {@const sameNetworkSelected =
+                exportSheetMode === 'send'
+                  ? selectedSendExportSystemId === null
+                  : selectedReceiveAssetId === pendingTargetOption.id && selectedExportSystemId === null}
               <button
                 type="button"
-                class="group flex w-full items-start justify-between rounded-lg p-3 text-left transition-colors
+                class="group flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                  {selectedReceiveAssetId === pendingTargetOption.id && selectedExportSystemId === null
+                  {sameNetworkSelected
                     ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
                     : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'}"
                 onclick={selectSameNetworkOption}
@@ -2865,9 +3446,10 @@
                     <p class="text-muted-foreground truncate text-xs">
                       {i18n.t('wallet.transfer.receiveAs', {
                         value:
-                          pendingTargetOption.fullyqualifiedname ||
-                          pendingTargetOption.ticker ||
-                          pendingTargetOption.label
+                          exportSheetMode === 'send'
+                            ? (selectedCoinPresentation?.displayTicker?.trim() ||
+                              resolveReceiveLabel(pendingTargetOption, null))
+                            : resolveReceiveLabel(pendingTargetOption, null)
                       })}
                     </p>
                   </div>
@@ -2876,19 +3458,30 @@
             {/if}
 
             {#each pendingTargetOption.exportOptions as option}
+              {@const optionDisabled = isBridgeFeeSelectionDisabled(option.exportTo)}
+              {@const optionBridgeFeeLine = bridgeFeeLineForExportOption(option.exportTo)}
+              {@const optionBridgeFeeMeta = bridgeFeeMetaLineForExportOption(option.exportTo)}
+              {@const optionSelected =
+                exportSheetMode === 'send'
+                  ? selectedSendExportSystemId === option.exportTo
+                  : selectedReceiveAssetId === pendingTargetOption.id && selectedExportSystemId === option.exportTo}
               <button
                 type="button"
-                class="group flex w-full items-start justify-between rounded-lg p-3 text-left transition-colors
+                class="group flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                  {selectedReceiveAssetId === pendingTargetOption.id &&
-                  selectedExportSystemId === option.exportTo
+                  {optionDisabled ? 'cursor-not-allowed opacity-60' : ''}
+                  {optionSelected
                     ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
                     : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'}"
-                onclick={() => selectExportOption(option.exportTo)}
+                disabled={optionDisabled}
+                onclick={() => {
+                  if (optionDisabled) return;
+                  selectExportOption(option.exportTo);
+                }}
               >
                 <div class="flex min-w-0 items-center gap-2">
                   <CoinIcon
-                    coinId={option.exportTo}
+                    coinId={networkIconCoinIdForExportOption(option.exportTo, option.exportToName)}
                     coinName={networkLabelForExportOption(option.exportTo, option.exportToName)}
                     size={18}
                     decorative={true}
@@ -2899,9 +3492,19 @@
                     </p>
                     <p class="text-muted-foreground truncate text-xs">
                       {i18n.t('wallet.transfer.receiveAs', {
-                        value: receiveLabelForExportOption(option, pendingTargetOption)
+                        value: resolveReceiveLabel(pendingTargetOption, option.exportTo)
                       })}
                     </p>
+                    {#if optionBridgeFeeLine}
+                      <p class={`truncate text-xs ${bridgeFeeInsufficient ? 'text-destructive' : 'text-muted-foreground'}`}>
+                        {optionBridgeFeeLine}
+                      </p>
+                    {/if}
+                    {#if optionBridgeFeeMeta}
+                      <p class={`truncate text-xs ${bridgeFeeInsufficient ? 'text-destructive' : 'text-muted-foreground'}`}>
+                        {optionBridgeFeeMeta}
+                      </p>
+                    {/if}
                   </div>
                 </div>
               </button>

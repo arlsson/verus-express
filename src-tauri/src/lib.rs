@@ -173,6 +173,7 @@ pub fn run() {
             bridge_transfer::get_bridge_capabilities,
             bridge_transfer::get_bridge_conversion_paths,
             bridge_transfer::estimate_bridge_conversion,
+            bridge_transfer::estimate_bridge_export_fee,
             bridge_transfer::preflight_bridge_transfer,
             // Identity commands
             identity::preflight_identity_update,

@@ -19,8 +19,9 @@ pub use address_book::{
 pub use bridge::{
     BridgeCapabilitiesRequest, BridgeCapabilitiesResult, BridgeConversionEstimateRequest,
     BridgeConversionEstimateResult, BridgeConversionPathQuote, BridgeConversionPathRequest,
-    BridgeConversionPathsResult, BridgeExecutionHint, BridgeTransferPreflightParams,
-    BridgeTransferPreflightResult, BridgeTransferRoute,
+    BridgeConversionPathsResult, BridgeExecutionHint, BridgeExportFeeEstimateRequest,
+    BridgeExportFeeEstimateResult, BridgeTransferPreflightParams, BridgeTransferPreflightResult,
+    BridgeTransferRoute,
 };
 pub use errors::WalletError;
 pub use guard::{
