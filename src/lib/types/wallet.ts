@@ -194,6 +194,55 @@ export interface IdentitySendResult {
   fromAddress: string;
 }
 
+export interface LinkableIdentity {
+  identityAddress: string;
+  name?: string | null;
+  fullyQualifiedName?: string | null;
+  status?: string | null;
+  linked: boolean;
+}
+
+export interface LinkedIdentity {
+  identityAddress: string;
+  name?: string | null;
+  fullyQualifiedName?: string | null;
+  status?: string | null;
+  systemId?: string | null;
+  favorite: boolean;
+}
+
+export interface LinkIdentityRequest {
+  identityAddress: string;
+}
+
+export interface UnlinkIdentityRequest {
+  identityAddress: string;
+}
+
+export interface SetLinkedIdentityFavoriteRequest {
+  identityAddress: string;
+  favorite: boolean;
+}
+
+export interface IdentityDetailWarning {
+  warningType: string;
+  message: string;
+}
+
+export interface IdentityDetails {
+  identityAddress: string;
+  name?: string | null;
+  fullyQualifiedName?: string | null;
+  status?: string | null;
+  system?: string | null;
+  revocationAuthority?: string | null;
+  recoveryAuthority?: string | null;
+  primaryAddresses: string[];
+  privateAddress?: string | null;
+  ownedByPrimaryAddress: boolean;
+  warnings: IdentityDetailWarning[];
+}
+
 export interface VrpcTransferPreflightParams {
   coinId: string;
   channelId: string;

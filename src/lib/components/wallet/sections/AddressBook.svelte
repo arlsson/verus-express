@@ -335,7 +335,7 @@
       <p class="text-muted-foreground mt-1 text-sm">{i18n.t('wallet.addressBook.description')}</p>
     </div>
     {#if !formMode}
-      <Button class="gap-1.5" onclick={startCreateContact}>
+      <Button variant="secondary" size="lg" class="h-10 gap-1.5 rounded-md px-3" onclick={startCreateContact}>
         <CirclePlusIcon class="size-4" />
         {i18n.t('wallet.addressBook.addContact')}
       </Button>

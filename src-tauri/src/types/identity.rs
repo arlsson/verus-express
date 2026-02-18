@@ -76,3 +76,67 @@ pub struct IdentitySendResult {
     pub fee: String,
     pub from_address: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkableIdentity {
+    pub identity_address: String,
+    pub name: Option<String>,
+    pub fully_qualified_name: Option<String>,
+    pub status: Option<String>,
+    pub linked: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkedIdentity {
+    pub identity_address: String,
+    pub name: Option<String>,
+    pub fully_qualified_name: Option<String>,
+    pub status: Option<String>,
+    pub system_id: Option<String>,
+    #[serde(default)]
+    pub favorite: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkIdentityRequest {
+    pub identity_address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnlinkIdentityRequest {
+    pub identity_address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetLinkedIdentityFavoriteRequest {
+    pub identity_address: String,
+    pub favorite: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityDetailWarning {
+    pub warning_type: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityDetails {
+    pub identity_address: String,
+    pub name: Option<String>,
+    pub fully_qualified_name: Option<String>,
+    pub status: Option<String>,
+    pub system: Option<String>,
+    pub revocation_authority: Option<String>,
+    pub recovery_authority: Option<String>,
+    pub primary_addresses: Vec<String>,
+    pub private_address: Option<String>,
+    pub owned_by_primary_address: bool,
+    pub warnings: Vec<IdentityDetailWarning>,
+}

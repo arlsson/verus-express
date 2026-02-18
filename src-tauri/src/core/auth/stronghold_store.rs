@@ -9,6 +9,7 @@ use tauri::{AppHandle, Manager};
 use zeroize::Zeroizing;
 
 use crate::types::errors::WalletError;
+use crate::types::identity::LinkedIdentity;
 use crate::types::wallet::WalletNetwork;
 use iota_stronghold::{KeyProvider, SnapshotPath, Stronghold};
 
@@ -18,6 +19,10 @@ const WATCHED_VRPC_ADDRESSES_RECORD_KEY: &[u8] = b"watched_vrpc_addresses_v1";
 const WATCHED_VRPC_ADDRESSES_SCHEMA_VERSION: u8 = 1;
 const ACTIVE_ASSETS_RECORD_KEY: &[u8] = b"active_assets_v1";
 const ACTIVE_ASSETS_SCHEMA_VERSION: u8 = 1;
+const LINKED_IDENTITIES_RECORD_KEY: &[u8] = b"linked_identities_v1";
+const LINKED_IDENTITIES_SCHEMA_VERSION: u8 = 1;
+const MAX_LINKED_IDENTITIES: usize = 100;
+const MAX_FAVORITE_LINKED_IDENTITIES: usize = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct WatchedVrpcAddressesSnapshot {
@@ -60,6 +65,25 @@ struct ActiveAssetsSnapshot {
     mainnet: ActiveAssetsNetworkSnapshot,
     #[serde(default)]
     testnet: ActiveAssetsNetworkSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LinkedIdentitiesSnapshot {
+    schema_version: u8,
+    #[serde(default)]
+    mainnet: Vec<LinkedIdentity>,
+    #[serde(default)]
+    testnet: Vec<LinkedIdentity>,
+}
+
+impl Default for LinkedIdentitiesSnapshot {
+    fn default() -> Self {
+        Self {
+            schema_version: LINKED_IDENTITIES_SCHEMA_VERSION,
+            mainnet: vec![],
+            testnet: vec![],
+        }
+    }
 }
 
 impl Default for ActiveAssetsSnapshot {
@@ -115,6 +139,12 @@ impl StrongholdStore {
         let account_dir = self.base_path.join("accounts").join(account_id);
         let _ = std::fs::create_dir_all(&account_dir);
         account_dir.join("active_assets.snapshot.stronghold")
+    }
+
+    fn linked_identities_snapshot_path(&self, account_id: &str) -> PathBuf {
+        let account_dir = self.base_path.join("accounts").join(account_id);
+        let _ = std::fs::create_dir_all(&account_dir);
+        account_dir.join("linked_identities.snapshot.stronghold")
     }
 
     async fn load_watched_vrpc_addresses_snapshot(
@@ -188,6 +218,100 @@ impl StrongholdStore {
             println!("[AUTH] Parse active assets snapshot failed: {}", e);
             WalletError::OperationFailed
         })
+    }
+
+    async fn load_linked_identities_snapshot(
+        &self,
+        account_id: &str,
+        password_hash: &[u8],
+    ) -> Result<LinkedIdentitiesSnapshot, WalletError> {
+        let path = self.linked_identities_snapshot_path(account_id);
+        if !path.exists() {
+            return Ok(LinkedIdentitiesSnapshot::default());
+        }
+
+        let snapshot_path = SnapshotPath::from_path(&path);
+        let keyprovider = Self::keyprovider_from_hash(password_hash)?;
+        let stronghold = Stronghold::default();
+        let client = stronghold
+            .load_client_from_snapshot(account_id.as_bytes(), &keyprovider, &snapshot_path)
+            .map_err(|e| {
+                println!("[AUTH] Load linked identities snapshot failed: {}", e);
+                WalletError::OperationFailed
+            })?;
+
+        let bytes = client
+            .store()
+            .get(LINKED_IDENTITIES_RECORD_KEY)
+            .map_err(|e| {
+                println!("[AUTH] Read linked identities record failed: {}", e);
+                WalletError::OperationFailed
+            })?;
+
+        let Some(payload) = bytes else {
+            return Ok(LinkedIdentitiesSnapshot::default());
+        };
+
+        serde_json::from_slice::<LinkedIdentitiesSnapshot>(&payload).map_err(|e| {
+            println!("[AUTH] Parse linked identities snapshot failed: {}", e);
+            WalletError::OperationFailed
+        })
+    }
+
+    fn sanitize_linked_identities(identities: &[LinkedIdentity]) -> Vec<LinkedIdentity> {
+        use std::collections::HashSet;
+
+        let mut seen = HashSet::<String>::new();
+        let mut out = Vec::<LinkedIdentity>::new();
+        let mut favorite_count = 0usize;
+
+        for identity in identities {
+            let normalized_identity_address = identity.identity_address.trim();
+            if normalized_identity_address.is_empty() {
+                continue;
+            }
+
+            let key = normalized_identity_address.to_ascii_lowercase();
+            if !seen.insert(key) {
+                continue;
+            }
+
+            let favorite = identity.favorite && favorite_count < MAX_FAVORITE_LINKED_IDENTITIES;
+            if favorite {
+                favorite_count += 1;
+            }
+
+            out.push(LinkedIdentity {
+                identity_address: normalized_identity_address.to_string(),
+                name: identity
+                    .name
+                    .as_ref()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty()),
+                fully_qualified_name: identity
+                    .fully_qualified_name
+                    .as_ref()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty()),
+                status: identity
+                    .status
+                    .as_ref()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty()),
+                system_id: identity
+                    .system_id
+                    .as_ref()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty()),
+                favorite,
+            });
+
+            if out.len() >= MAX_LINKED_IDENTITIES {
+                break;
+            }
+        }
+
+        out
     }
 
     /// Password hash for Stronghold key (must match plugin / KDF used at unlock).
@@ -524,11 +648,76 @@ impl StrongholdStore {
 
         Ok(())
     }
+
+    pub async fn load_linked_identities(
+        &self,
+        account_id: &str,
+        password_hash: &[u8],
+        network: WalletNetwork,
+    ) -> Result<Vec<LinkedIdentity>, WalletError> {
+        let snapshot = self
+            .load_linked_identities_snapshot(account_id, password_hash)
+            .await?;
+        let records = match network {
+            WalletNetwork::Mainnet => snapshot.mainnet,
+            WalletNetwork::Testnet => snapshot.testnet,
+        };
+        Ok(Self::sanitize_linked_identities(&records))
+    }
+
+    pub async fn store_linked_identities(
+        &self,
+        account_id: &str,
+        password_hash: &[u8],
+        network: WalletNetwork,
+        identities: &[LinkedIdentity],
+    ) -> Result<(), WalletError> {
+        let path = self.linked_identities_snapshot_path(account_id);
+        let snapshot_path = SnapshotPath::from_path(&path);
+        let keyprovider = Self::keyprovider_from_hash(password_hash)?;
+
+        let mut snapshot = self
+            .load_linked_identities_snapshot(account_id, password_hash)
+            .await?;
+        snapshot.schema_version = LINKED_IDENTITIES_SCHEMA_VERSION;
+
+        let sanitized = Self::sanitize_linked_identities(identities);
+        match network {
+            WalletNetwork::Mainnet => snapshot.mainnet = sanitized,
+            WalletNetwork::Testnet => snapshot.testnet = sanitized,
+        }
+
+        let stronghold = Stronghold::default();
+        let client = Self::get_or_create_client(
+            &stronghold,
+            &snapshot_path,
+            account_id,
+            &keyprovider,
+            path.exists(),
+        )?;
+        let payload = serde_json::to_vec(&snapshot).map_err(|_| WalletError::OperationFailed)?;
+        client
+            .store()
+            .insert(LINKED_IDENTITIES_RECORD_KEY.to_vec(), payload, None)
+            .map_err(|e| {
+                println!("[AUTH] Store linked identities failed: {}", e);
+                WalletError::OperationFailed
+            })?;
+        stronghold
+            .commit_with_keyprovider(&snapshot_path, &keyprovider)
+            .map_err(|e| {
+                println!("[AUTH] Commit linked identities snapshot failed: {}", e);
+                WalletError::OperationFailed
+            })?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::StrongholdStore;
+    use crate::types::identity::LinkedIdentity;
     use crate::types::wallet::WalletNetwork;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -585,6 +774,135 @@ mod tests {
             .expect("load testnet");
         assert_eq!(testnet.0, false);
         assert_eq!(testnet.1, vec!["VRSCTEST".to_string()]);
+
+        let _ = std::fs::remove_dir_all(store.base_path);
+    }
+
+    #[tokio::test]
+    async fn linked_identities_round_trip_is_network_scoped_and_deduped() {
+        let _ = iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0);
+
+        let store = temp_store();
+        let account_id = "account_linked_ids";
+        let password_hash = StrongholdStore::hash_password("test-password");
+
+        store
+            .store_linked_identities(
+                account_id,
+                password_hash.as_slice(),
+                WalletNetwork::Mainnet,
+                &[
+                    LinkedIdentity {
+                        identity_address: "iMainnetAlpha".to_string(),
+                        name: Some("alpha".to_string()),
+                        fully_qualified_name: Some("alpha@".to_string()),
+                        status: Some("active".to_string()),
+                        system_id: Some("i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV".to_string()),
+                        favorite: true,
+                    },
+                    LinkedIdentity {
+                        identity_address: "iMAINNETALPHA".to_string(),
+                        name: Some("duplicate".to_string()),
+                        fully_qualified_name: None,
+                        status: None,
+                        system_id: None,
+                        favorite: false,
+                    },
+                ],
+            )
+            .await
+            .expect("store mainnet linked identities");
+
+        store
+            .store_linked_identities(
+                account_id,
+                password_hash.as_slice(),
+                WalletNetwork::Testnet,
+                &[LinkedIdentity {
+                    identity_address: "iTestnetBeta".to_string(),
+                    name: Some("beta".to_string()),
+                    fully_qualified_name: Some("beta@".to_string()),
+                    status: Some("active".to_string()),
+                    system_id: Some("iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq".to_string()),
+                    favorite: true,
+                }],
+            )
+            .await
+            .expect("store testnet linked identities");
+
+        let mainnet = store
+            .load_linked_identities(account_id, password_hash.as_slice(), WalletNetwork::Mainnet)
+            .await
+            .expect("load mainnet linked identities");
+        assert_eq!(mainnet.len(), 1);
+        assert_eq!(mainnet[0].identity_address, "iMainnetAlpha");
+        assert_eq!(mainnet[0].name.as_deref(), Some("alpha"));
+        assert!(mainnet[0].favorite);
+
+        let testnet = store
+            .load_linked_identities(account_id, password_hash.as_slice(), WalletNetwork::Testnet)
+            .await
+            .expect("load testnet linked identities");
+        assert_eq!(testnet.len(), 1);
+        assert_eq!(testnet[0].identity_address, "iTestnetBeta");
+        assert_eq!(testnet[0].name.as_deref(), Some("beta"));
+        assert!(testnet[0].favorite);
+
+        let _ = std::fs::remove_dir_all(store.base_path);
+    }
+
+    #[tokio::test]
+    async fn linked_identities_sanitize_caps_favorites_to_two() {
+        let _ = iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0);
+
+        let store = temp_store();
+        let account_id = "account_linked_ids_favorites";
+        let password_hash = StrongholdStore::hash_password("test-password");
+
+        store
+            .store_linked_identities(
+                account_id,
+                password_hash.as_slice(),
+                WalletNetwork::Mainnet,
+                &[
+                    LinkedIdentity {
+                        identity_address: "iAlpha".to_string(),
+                        name: None,
+                        fully_qualified_name: None,
+                        status: None,
+                        system_id: None,
+                        favorite: true,
+                    },
+                    LinkedIdentity {
+                        identity_address: "iBeta".to_string(),
+                        name: None,
+                        fully_qualified_name: None,
+                        status: None,
+                        system_id: None,
+                        favorite: true,
+                    },
+                    LinkedIdentity {
+                        identity_address: "iGamma".to_string(),
+                        name: None,
+                        fully_qualified_name: None,
+                        status: None,
+                        system_id: None,
+                        favorite: true,
+                    },
+                ],
+            )
+            .await
+            .expect("store linked identities");
+
+        let mainnet = store
+            .load_linked_identities(account_id, password_hash.as_slice(), WalletNetwork::Mainnet)
+            .await
+            .expect("load linked identities");
+
+        assert_eq!(mainnet.len(), 3);
+        assert!(mainnet[0].favorite);
+        assert!(mainnet[1].favorite);
+        assert!(!mainnet[2].favorite);
 
         let _ = std::fs::remove_dir_all(store.base_path);
     }

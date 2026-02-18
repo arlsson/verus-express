@@ -31,8 +31,10 @@ pub use guard::{
     GuardSendResult,
 };
 pub use identity::{
-    HighRiskChange, IdentityOperation, IdentityPatch, IdentityPreflightParams,
-    IdentityPreflightResult, IdentitySendRequest, IdentitySendResult, IdentityWarning,
+    HighRiskChange, IdentityDetailWarning, IdentityDetails, IdentityOperation, IdentityPatch,
+    IdentityPreflightParams, IdentityPreflightResult, IdentitySendRequest, IdentitySendResult,
+    IdentityWarning, LinkIdentityRequest, LinkableIdentity, LinkedIdentity,
+    SetLinkedIdentityFavoriteRequest, UnlinkIdentityRequest,
 };
 pub use transaction::{
     BalanceResult, PreflightParams, PreflightResult, PreflightWarning, SendRequest, SendResult,

@@ -178,6 +178,12 @@ pub fn run() {
             // Identity commands
             identity::preflight_identity_update,
             identity::send_identity_update,
+            identity::discover_linkable_identities,
+            identity::get_linked_identities,
+            identity::link_identity,
+            identity::unlink_identity,
+            identity::set_linked_identity_favorite,
+            identity::get_identity_details,
             guard::begin_guard_session,
             guard::end_guard_session,
             guard::lookup_guard_target_identity,

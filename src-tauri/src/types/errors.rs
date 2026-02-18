@@ -93,6 +93,12 @@ pub enum WalletError {
     #[error("Identity not found")]
     IdentityNotFound,
 
+    #[error("This VerusID is not controlled by this wallet address.")]
+    IdentityOwnershipMismatch,
+
+    #[error("You can only favorite up to 2 identities.")]
+    IdentityFavoriteLimitReached,
+
     #[error("Identity has an invalid state for this operation")]
     IdentityInvalidState,
 

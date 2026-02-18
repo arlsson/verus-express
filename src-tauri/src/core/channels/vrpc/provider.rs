@@ -33,6 +33,7 @@ const TTL_MEMPOOL: u64 = 10;
 const TTL_UTXOS: u64 = 5;
 const TTL_GETINFO: u64 = 1;
 const TTL_GETIDENTITY: u64 = 5;
+const TTL_GETIDENTITIES_WITH_ADDRESS: u64 = 5;
 const TTL_CURRENCY: u64 = 60;
 const TTL_LISTCURRENCIES: u64 = 600;
 const TTL_CURRENCY_CONVERSION_PATHS: u64 = 15;
@@ -70,6 +71,18 @@ fn params_getaddressmempool(addresses: &[String]) -> Value {
     } else {
         serde_json::json!([{"addresses": addresses, "friendlynames": true, "verbosity": 1}])
     }
+}
+
+fn params_getidentitieswithaddress(address: &str, unspent: bool) -> Result<Value, WalletError> {
+    let normalized = address.trim();
+    if normalized.is_empty() {
+        return Err(WalletError::InvalidAddress);
+    }
+
+    Ok(serde_json::json!([{
+        "address": normalized,
+        "unspent": unspent
+    }]))
 }
 
 #[derive(Clone)]
@@ -818,6 +831,21 @@ impl VrpcProvider {
         self.call("getidentity", params, TTL_GETIDENTITY).await
     }
 
+    /// getidentitieswithaddress: discover identities associated with an R-address.
+    pub async fn getidentitieswithaddress(
+        &self,
+        address: &str,
+        unspent: bool,
+    ) -> Result<Value, WalletError> {
+        let params = params_getidentitieswithaddress(address, unspent)?;
+        self.call(
+            "getidentitieswithaddress",
+            params,
+            TTL_GETIDENTITIES_WITH_ADDRESS,
+        )
+        .await
+    }
+
     /// getrawtransaction: return raw tx hex (verbosity = 0) or tx object.
     pub async fn getrawtransaction(&self, txid: &str, verbosity: u8) -> Result<Value, WalletError> {
         if txid.trim().is_empty() {
@@ -1000,6 +1028,19 @@ mod tests {
             "end": 42
         }]);
         assert_eq!(deltas, expected);
+    }
+
+    #[test]
+    fn getidentitieswithaddress_params_are_object_form_with_unspent_flag() {
+        let params = params_getidentitieswithaddress("RAutMoGh771ECTDbTq2qwwZo7MF5Tov3ka", false)
+            .expect("params");
+        assert_eq!(
+            params,
+            serde_json::json!([{
+                "address": "RAutMoGh771ECTDbTq2qwwZo7MF5Tov3ka",
+                "unspent": false
+            }])
+        );
     }
 
     #[test]

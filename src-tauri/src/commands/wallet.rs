@@ -27,7 +27,8 @@ use crate::types::wallet::WalletNetwork;
 use crate::types::{
     AccountRecord, ActiveAssetsState, ActiveWalletResponse, AddressEndpointKind, AddressResponse,
     CoinScope, CoinScopesResult, CreateWalletRequest, CreateWalletResult, GenerateMnemonicRequest,
-    ImportWalletTextRequest, MnemonicResult, WalletError, WalletListItem, WalletSecretKind,
+    ImportWalletTextRequest, LinkedIdentity, MnemonicResult, WalletError, WalletListItem,
+    WalletSecretKind,
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -44,6 +45,14 @@ struct VrpcSystemDescriptor {
     system_ticker: String,
     system_display_name: String,
     is_root: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct VrpcScopeAddress {
+    address: String,
+    address_label: String,
+    is_primary_address: bool,
+    is_read_only: bool,
 }
 
 const VRSC_MAINNET_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
@@ -85,6 +94,143 @@ fn dedupe_preserve_order(values: Vec<String>) -> Vec<String> {
     }
 
     out
+}
+
+fn ensure_identity_handle_suffix(value: &str) -> String {
+    if value.ends_with('@') {
+        return value.to_string();
+    }
+    format!("{value}@")
+}
+
+fn format_fully_qualified_identity_for_display(value: &str) -> String {
+    let with_at = ensure_identity_handle_suffix(value.trim());
+    let without_at = with_at.trim_end_matches('@');
+
+    let Some(last_dot_index) = without_at.rfind('.') else {
+        return with_at;
+    };
+    if last_dot_index == 0 {
+        return with_at;
+    }
+
+    let suffix = &without_at[last_dot_index + 1..];
+    let is_system_suffix = !suffix.is_empty()
+        && suffix
+            .chars()
+            .all(|char| char.is_ascii_uppercase() || char.is_ascii_digit());
+    if !is_system_suffix {
+        return with_at;
+    }
+
+    let without_system = without_at[..last_dot_index].trim();
+    if without_system.is_empty() {
+        return with_at;
+    }
+
+    format!("{without_system}@")
+}
+
+fn normalize_identity_scope_label(linked_identity: &LinkedIdentity) -> String {
+    let fq_name = linked_identity
+        .fully_qualified_name
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    if let Some(fq_name) = fq_name {
+        return format_fully_qualified_identity_for_display(fq_name);
+    }
+
+    let name = linked_identity
+        .name
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    if let Some(name) = name {
+        return ensure_identity_handle_suffix(name);
+    }
+
+    linked_identity.identity_address.clone()
+}
+
+fn collect_vrpc_scope_addresses(
+    primary_vrpc_address: &str,
+    linked_identities: &[LinkedIdentity],
+    watched_addresses: &[String],
+    network: WalletNetwork,
+) -> Vec<VrpcScopeAddress> {
+    let mut scope_addresses = Vec::<VrpcScopeAddress>::new();
+    let mut seen = HashSet::<String>::new();
+
+    let normalized_primary = normalize_watched_vrpc_address(primary_vrpc_address, network)
+        .unwrap_or_else(|| primary_vrpc_address.to_string());
+    seen.insert(normalized_primary.to_ascii_lowercase());
+    scope_addresses.push(VrpcScopeAddress {
+        address: normalized_primary.clone(),
+        address_label: normalized_primary.clone(),
+        is_primary_address: true,
+        is_read_only: false,
+    });
+
+    let mut linked_scope_candidates = linked_identities
+        .iter()
+        .filter_map(|linked_identity| {
+            let normalized_address =
+                normalize_watched_vrpc_address(&linked_identity.identity_address, network)?;
+            Some((
+                normalized_address,
+                normalize_identity_scope_label(linked_identity),
+            ))
+        })
+        .collect::<Vec<_>>();
+    linked_scope_candidates.sort_by(|left, right| {
+        left.1
+            .to_ascii_lowercase()
+            .cmp(&right.1.to_ascii_lowercase())
+            .then(
+                left.0
+                    .to_ascii_lowercase()
+                    .cmp(&right.0.to_ascii_lowercase()),
+            )
+    });
+
+    for (address, label) in linked_scope_candidates {
+        let key = address.to_ascii_lowercase();
+        if !seen.insert(key) {
+            continue;
+        }
+
+        scope_addresses.push(VrpcScopeAddress {
+            address: address.clone(),
+            address_label: label,
+            is_primary_address: false,
+            is_read_only: false,
+        });
+    }
+
+    let mut watched = dedupe_preserve_order(
+        watched_addresses
+            .iter()
+            .filter_map(|address| normalize_watched_vrpc_address(address, network))
+            .filter(|address| !address.eq_ignore_ascii_case(&normalized_primary))
+            .collect(),
+    );
+    watched.sort_by(|left, right| left.to_ascii_lowercase().cmp(&right.to_ascii_lowercase()));
+
+    for address in watched {
+        let key = address.to_ascii_lowercase();
+        if !seen.insert(key) {
+            continue;
+        }
+        scope_addresses.push(VrpcScopeAddress {
+            address: address.clone(),
+            address_label: address,
+            is_primary_address: false,
+            is_read_only: true,
+        });
+    }
+
+    scope_addresses
 }
 
 fn canonical_coin_id_lookup(
@@ -825,19 +971,22 @@ pub async fn get_coin_scopes(
         let watched = stronghold_store
             .load_watched_vrpc_addresses(&account_id, password_hash.as_ref(), network)
             .await?;
-
-        let mut read_only_addresses = dedupe_preserve_order(
-            watched
-                .into_iter()
-                .filter_map(|address| normalize_watched_vrpc_address(&address, network))
-                .filter(|address| !address.eq_ignore_ascii_case(&primary_vrpc_address))
-                .collect(),
+        let linked_identities = stronghold_store
+            .load_linked_identities(&account_id, password_hash.as_ref(), network)
+            .await
+            .unwrap_or_else(|error| {
+                println!(
+                    "[WALLET] Failed to load linked identities for coin scopes; using address-only fallback: {:?}",
+                    error
+                );
+                vec![]
+            });
+        let scope_addresses = collect_vrpc_scope_addresses(
+            &primary_vrpc_address,
+            &linked_identities,
+            &watched,
+            network,
         );
-        read_only_addresses
-            .sort_by(|left, right| left.to_ascii_lowercase().cmp(&right.to_ascii_lowercase()));
-
-        let mut all_addresses = vec![primary_vrpc_address.clone()];
-        all_addresses.extend(read_only_addresses);
 
         let active_coin_ids = stronghold_store
             .load_active_assets(&account_id, password_hash.as_ref(), network)
@@ -857,22 +1006,21 @@ pub async fn get_coin_scopes(
         };
 
         let mut scopes = Vec::<CoinScope>::new();
-        for address in all_addresses {
-            let is_primary_address = address.eq_ignore_ascii_case(&primary_vrpc_address);
+        for address_scope in scope_addresses {
             for system in &systems {
                 scopes.push(CoinScope {
                     channel_id: crate::core::channels::vrpc::canonical_vrpc_channel_id(
-                        &address,
+                        &address_scope.address,
                         &system.system_id,
                     ),
                     coin_id: coin.id.clone(),
-                    address: address.clone(),
-                    address_label: address.clone(),
+                    address: address_scope.address.clone(),
+                    address_label: address_scope.address_label.clone(),
                     system_id: system.system_id.clone(),
                     system_ticker: system.system_ticker.clone(),
                     system_display_name: system.system_display_name.clone(),
-                    is_primary_address,
-                    is_read_only: !is_primary_address,
+                    is_primary_address: address_scope.is_primary_address,
+                    is_read_only: address_scope.is_read_only,
                 });
             }
         }
@@ -925,10 +1073,11 @@ pub async fn list_wallets(
 #[cfg(test)]
 mod tests {
     use super::{
-        channel_id_for_non_vrpc_coin, collect_vrpc_system_descriptors, dedupe_preserve_order,
-        sanitize_active_coin_ids,
+        channel_id_for_non_vrpc_coin, collect_vrpc_scope_addresses, collect_vrpc_system_descriptors,
+        dedupe_preserve_order, sanitize_active_coin_ids,
     };
     use crate::core::coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
+    use crate::types::LinkedIdentity;
     use crate::types::wallet::WalletNetwork;
 
     const VRSC_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
@@ -978,6 +1127,50 @@ mod tests {
                 "RGamma".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn vrpc_scope_addresses_include_primary_linked_and_watched_with_expected_priority() {
+        let scope_addresses = collect_vrpc_scope_addresses(
+            "RAutMoGh771ECTDbTq2qwwZo7MF5Tov3ka",
+            &[
+                LinkedIdentity {
+                    identity_address: "i8A7LnkQfA97VQv64G4H4vbRb4vP7h4G8b".to_string(),
+                    name: Some("scam".to_string()),
+                    fully_qualified_name: Some("scam@".to_string()),
+                    status: Some("active".to_string()),
+                    system_id: Some(VRSC_SYSTEM_ID.to_string()),
+                    favorite: false,
+                },
+                LinkedIdentity {
+                    identity_address: "i8a7lnkqfa97vqv64g4h4vbrb4vp7h4g8b".to_string(),
+                    name: Some("duplicate".to_string()),
+                    fully_qualified_name: Some("duplicate@".to_string()),
+                    status: Some("active".to_string()),
+                    system_id: Some(VRSC_SYSTEM_ID.to_string()),
+                    favorite: false,
+                },
+            ],
+            &[
+                "RAutMoGh771ECTDbTq2qwwZo7MF5Tov3ka".to_string(),
+                "RWatchedAddr1111111111111111111111".to_string(),
+            ],
+            WalletNetwork::Mainnet,
+        );
+
+        assert_eq!(scope_addresses.len(), 3);
+        assert_eq!(scope_addresses[0].address, "RAutMoGh771ECTDbTq2qwwZo7MF5Tov3ka");
+        assert_eq!(scope_addresses[0].is_primary_address, true);
+        assert_eq!(scope_addresses[0].is_read_only, false);
+
+        assert_eq!(scope_addresses[1].address, "i8A7LnkQfA97VQv64G4H4vbRb4vP7h4G8b");
+        assert_eq!(scope_addresses[1].address_label, "scam@");
+        assert_eq!(scope_addresses[1].is_primary_address, false);
+        assert_eq!(scope_addresses[1].is_read_only, false);
+
+        assert_eq!(scope_addresses[2].address, "RWatchedAddr1111111111111111111111");
+        assert_eq!(scope_addresses[2].is_primary_address, false);
+        assert_eq!(scope_addresses[2].is_read_only, true);
     }
 
     #[test]
