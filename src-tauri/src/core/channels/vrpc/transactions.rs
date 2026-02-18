@@ -858,4 +858,25 @@ mod tests {
         assert!(page.has_more);
         assert_eq!(page.next_cursor.expect("cursor").end_block, 19);
     }
+
+    #[test]
+    fn extract_delta_uses_currencyvalues_when_scope_system_differs() {
+        let coin = VrpcCoinContext {
+            currency_id: "iVdex".to_string(),
+            system_id: "iVrsc".to_string(),
+            decimals: 8,
+            seconds_per_block: 60,
+        };
+        let obj = serde_json::json!({
+            "satoshis": -39278147,
+            "currencyvalues": {
+                "iVrsc": -0.39278147,
+                "iVdex": -0.1003001
+            }
+        });
+        let map = obj.as_object().expect("delta object");
+
+        let delta = extract_delta(map, &coin);
+        assert!((delta - (-0.1003001f64)).abs() < 1e-12);
+    }
 }

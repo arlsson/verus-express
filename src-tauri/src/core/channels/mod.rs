@@ -280,7 +280,8 @@ fn resolve_vrpc_coin_context(
 
     Ok(vrpc::VrpcCoinContext {
         currency_id: coin.currency_id,
-        system_id: coin.system_id,
+        // Use the channel scope system for native-vs-PBaaS balance/tx parsing.
+        system_id: system_id.to_string(),
         decimals: coin.decimals,
         seconds_per_block: coin.seconds_per_block,
     })
@@ -971,6 +972,31 @@ mod tests {
         )
         .expect("resolve context");
         assert_eq!(context.currency_id, "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd");
+    }
+
+    #[test]
+    fn resolve_vrpc_coin_context_uses_scope_system_for_native_detection() {
+        let registry = CoinRegistry::new();
+        registry
+            .add_coin(sample_vrpc_coin(
+                "vDEX",
+                "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N",
+                "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N",
+                "vDEX",
+                "vDEX",
+            ))
+            .expect("add vDEX");
+
+        let context = resolve_vrpc_coin_context(
+            &registry,
+            VRSC_SYSTEM_ID,
+            Some("vDEX"),
+            WalletNetwork::Mainnet,
+        )
+        .expect("resolve context");
+
+        assert_eq!(context.currency_id, "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N");
+        assert_eq!(context.system_id, VRSC_SYSTEM_ID);
     }
 
     #[test]

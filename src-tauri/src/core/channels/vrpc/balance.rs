@@ -35,7 +35,7 @@ pub async fn get_balances(
 fn map_balance_result(raw: &Value, coin: &VrpcCoinContext) -> BalanceResult {
     // Mobile parity: pending for VRPC balances is represented through tx state, not balance math.
     let confirmed = if coin.currency_id == coin.system_id {
-        // Native VRSC/VRSCTEST: "balance" is satoshi value.
+        // Native for the selected scope system: "balance" is satoshi value.
         if let Some(obj) = raw.as_object() {
             let sat = obj
                 .get("balance")
@@ -126,5 +126,27 @@ mod tests {
         assert_eq!(mapped.confirmed, "42.00000000");
         assert_eq!(mapped.pending, "0");
         assert_eq!(mapped.total, "42.00000000");
+    }
+
+    #[test]
+    fn scope_mismatch_for_native_chain_asset_uses_currencybalance_entry() {
+        let coin = VrpcCoinContext {
+            currency_id: "iVdex".to_string(),
+            system_id: "iVrsc".to_string(),
+            decimals: 8,
+            seconds_per_block: 60,
+        };
+        let raw = serde_json::json!({
+            "balance": 1665388586i64,
+            "currencybalance": {
+                "iVrsc": "16.65388586",
+                "iVdex": "0.29248137"
+            }
+        });
+
+        let mapped = map_balance_result(&raw, &coin);
+        assert_eq!(mapped.confirmed, "0.29248137");
+        assert_eq!(mapped.pending, "0");
+        assert_eq!(mapped.total, "0.29248137");
     }
 }
