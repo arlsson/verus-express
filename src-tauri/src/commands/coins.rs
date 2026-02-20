@@ -180,6 +180,7 @@ fn build_pbaas_coin_definition(
         compatible_channels: vec![Channel::Vrpc],
         decimals: 8,
         vrpc_endpoints: vec![vrpc_endpoint],
+        dlight_endpoints: None,
         electrum_endpoints: None,
         seconds_per_block: 60,
         mapped_to: None,
@@ -226,6 +227,7 @@ fn build_erc20_coin_definition(
         compatible_channels: vec![Channel::Erc20],
         decimals,
         vrpc_endpoints: vec![],
+        dlight_endpoints: None,
         electrum_endpoints: None,
         seconds_per_block: 12,
         mapped_to: mapped_to

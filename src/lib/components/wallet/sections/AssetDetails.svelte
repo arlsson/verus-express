@@ -15,11 +15,14 @@
   import { Button } from '$lib/components/ui/button';
   import * as ScrollArea from '$lib/components/ui/scroll-area';
   import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+  import { Spinner } from '$lib/components/ui/spinner';
   import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
+  import PrivateVerusWordmark from '$lib/components/wallet/PrivateVerusWordmark.svelte';
   import { i18nStore } from '$lib/i18n';
   import { resolveCoinPresentation } from '$lib/coins/presentation.js';
   import { coinsStore } from '$lib/stores/coins.js';
   import { balanceStore, getBalance } from '$lib/stores/balances.js';
+  import { networkStore } from '$lib/stores/network.js';
   import { ratesStore } from '$lib/stores/rates.js';
   import {
     scopesByCoinId,
@@ -32,7 +35,7 @@
   import { formatUsdAmount } from '$lib/utils/walletOverview.js';
   import { extractWalletErrorMessage, extractWalletErrorType } from '$lib/utils/walletErrors.js';
   import * as walletService from '$lib/services/walletService.js';
-  import type { CoinScope, Transaction } from '$lib/types/wallet.js';
+  import type { CoinScope, ScopeKind, Transaction, WalletEntryKind } from '$lib/types/wallet.js';
   import type { TransferEntryContext } from './transfer-wizard/types';
 
   const TRANSACTION_PAGE_SIZE = 50;
@@ -42,6 +45,9 @@
 
   type AssetDetailsProps = {
     coinId: string;
+    walletEntryKind?: WalletEntryKind;
+    scopeFilterMode?: ScopeKind;
+    entryDisplayName?: string;
     onNavigateToReceive?: () => void;
     // eslint-disable-next-line no-unused-vars
     onNavigateToSend?: (_context: TransferEntryContext) => void;
@@ -54,6 +60,9 @@
   /* eslint-disable prefer-const */
   let {
     coinId,
+    walletEntryKind = 'coin',
+    scopeFilterMode = 'transparent',
+    entryDisplayName,
     onNavigateToReceive = noop,
     onNavigateToSend = noop,
     onNavigateToConvert = noop
@@ -63,6 +72,7 @@
   const i18n = $derived($i18nStore);
   const coins = $derived($coinsStore);
   const balances = $derived($balanceStore);
+  const chainInfo = $derived($networkStore);
   const rates = $derived($ratesStore);
   const allScopesByCoinId = $derived($scopesByCoinId);
   const selectedAddressMap = $derived($selectedAddressByCoinId);
@@ -109,7 +119,10 @@
 
   const coin = $derived(coins.find((item) => item.id === coinId) ?? null);
   const coinPresentation = $derived((coin ? resolveCoinPresentation(coin) : null));
-  const allScopes = $derived(allScopesByCoinId[coinId] ?? []);
+  const coinScopes = $derived(allScopesByCoinId[coinId] ?? []);
+  const allScopes = $derived(
+    coinScopes.filter((scope) => scope.scopeKind === scopeFilterMode)
+  );
 
   const selectedAddress = $derived(selectedAddressMap[coinId] ?? '');
   const selectedSystem = $derived(selectedSystemMap[coinId] ?? '');
@@ -217,7 +230,23 @@
     formatCryptoValue(selectedAmountValue, coin?.decimals ?? 8)
   );
 
-  const canSendOrConvert = $derived(!!selectedScope && !selectedScope.isReadOnly);
+  const selectedSyncPercent = $derived(
+    selectedScope ? toFiniteNumber(chainInfo[selectedScope.channelId]?.percent) : null
+  );
+  const isShieldedSyncBlocked = $derived(
+    selectedScope?.scopeKind === 'shielded' &&
+      selectedSyncPercent !== null &&
+      selectedSyncPercent !== 100 &&
+      selectedSyncPercent !== -1
+  );
+  const selectedSyncPercentDisplay = $derived(
+    isShieldedSyncBlocked && selectedSyncPercent !== null
+      ? `${formatSyncPercent(selectedSyncPercent)}%`
+      : ''
+  );
+  const canSendOrConvert = $derived(
+    !!selectedScope && !selectedScope.isReadOnly && !isShieldedSyncBlocked
+  );
   const selectedNetworkDisplay = $derived(
     (() => {
       if (selectedScope) return networkLabelForScope(selectedScope);
@@ -233,6 +262,9 @@
       return uniqueAddresses.size <= 1;
     })()
   );
+  const useStaticAddressRow = $derived(
+    isSingleAddressExternalAsset || scopeFilterMode === 'shielded'
+  );
   const selectedFqnDisplay = $derived(
     (() => {
       const runtimeCoin = coin as (typeof coin & { fullyQualifiedName?: string | null }) | null;
@@ -247,9 +279,16 @@
       return dotted ?? candidates[0] ?? '';
     })()
   );
+  const headerDisplayName = $derived(
+    (entryDisplayName?.trim() || coinPresentation?.displayName || coin?.displayName || '')
+  );
+  const headerFqnDisplay = $derived(entryDisplayName?.trim() ? '' : selectedFqnDisplay);
+  const usePrivateMutedIcon = $derived(scopeFilterMode === 'shielded');
+  const usePrivateWordmark = $derived(walletEntryKind === 'private_verus');
 
   $effect(() => {
     coinId;
+    scopeFilterMode;
     addressSearchTerm = '';
     showScopeSheet = false;
     scopesError = '';
@@ -257,7 +296,7 @@
   });
 
   $effect(() => {
-    if (!isSingleAddressExternalAsset) return;
+    if (!useStaticAddressRow) return;
     showScopeSheet = false;
     addressSearchTerm = '';
   });
@@ -628,7 +667,8 @@
     return {
       coinId,
       channelId: scope.channelId,
-      readOnly: scope.isReadOnly
+      readOnly: scope.isReadOnly,
+      scopeKind: scope.scopeKind
     };
   }
 
@@ -666,6 +706,15 @@
     if (changePct > 0) return `+${formatted}%`;
     if (changePct < 0) return `-${formatted}%`;
     return `${formatted}%`;
+  }
+
+  function formatSyncPercent(percent: number): string {
+    const clamped = Math.max(0, Math.min(percent, 100));
+    if (clamped > 0 && clamped < 1) return '<1';
+    return i18n.formatNumber(clamped, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 1
+    });
   }
 
   function toFiniteNumber(value: unknown): number | null {
@@ -805,13 +854,18 @@
                 proto={coin.proto}
                 size={44}
                 showBadge
+                privateMuted={usePrivateMutedIcon}
                 decorative
               />
               <div class="min-w-0">
                 <p class="truncate text-lg font-semibold">
-                  {coinPresentation?.displayName ?? coin.displayName}
-                  {#if selectedFqnDisplay}
-                    <span class="text-muted-foreground ml-2 text-sm font-medium">{selectedFqnDisplay}</span>
+                  {#if usePrivateWordmark}
+                    <PrivateVerusWordmark label={headerDisplayName} />
+                  {:else}
+                    {headerDisplayName}
+                  {/if}
+                  {#if headerFqnDisplay}
+                    <span class="text-muted-foreground ml-2 text-sm font-medium">{headerFqnDisplay}</span>
                   {/if}
                 </p>
                 <div class="mt-0.5 flex items-center gap-2">
@@ -832,8 +886,22 @@
             </div>
 
             <div class="shrink-0 text-right">
-              <p class="text-foreground text-2xl leading-tight font-semibold tracking-tight">{selectedCryptoAmountDisplay}</p>
-              <p class="text-muted-foreground mt-1 text-sm leading-tight">{selectedFiatDisplay}</p>
+              {#if selectedSyncPercentDisplay}
+                <p class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
+                  <span class="inline-flex items-center justify-end gap-1.5">
+                    <Spinner class="size-4" />
+                    <span>{selectedSyncPercentDisplay}</span>
+                  </span>
+                </p>
+                <p class="text-muted-foreground mt-1 text-[11px]">
+                  {i18n.t('wallet.assetDetails.privateSyncInlineHelper')}
+                </p>
+              {:else}
+                <p class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
+                  {selectedCryptoAmountDisplay}
+                </p>
+                <p class="text-muted-foreground mt-1 text-sm leading-tight">{selectedFiatDisplay}</p>
+              {/if}
               {#if loadingSelectedBalance}
                 <p class="text-muted-foreground mt-1 text-[11px]">{i18n.t('common.loading')}</p>
               {/if}
@@ -841,7 +909,7 @@
           </div>
 
           <div class="mt-8 flex items-center gap-2">
-            {#if isSingleAddressExternalAsset}
+            {#if useStaticAddressRow}
               <div class="flex h-[52px] min-w-0 flex-1 items-center justify-between gap-2 rounded-md bg-muted/55 pl-3 pr-1.5">
                 <p class="identifier-text truncate text-sm font-medium text-foreground">
                   {truncateMiddle(selectedAddress || '—', 10, 10)}
@@ -940,7 +1008,7 @@
             </div>
           </div>
 
-          {#if !canSendOrConvert}
+          {#if !canSendOrConvert && !isShieldedSyncBlocked}
             <p class="text-muted-foreground mt-2 text-right text-[11px] leading-snug">
               {i18n.t('wallet.assetDetails.readOnlyHelper')}
             </p>

@@ -13,18 +13,21 @@ use tokio_util::sync::CancellationToken;
 
 use crate::core::auth::SessionManager;
 use crate::core::channels::btc::BtcProviderPool;
+use crate::core::channels::dlight_private;
 use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
-use crate::core::channels::{route_get_balances, route_get_transactions};
+use crate::core::channels::{route_get_balances, route_get_info, route_get_transactions};
 use crate::core::coins::Channel;
 use crate::core::coins::CoinRegistry;
 use crate::core::rates::{build_rates_http_client, coinpaprika, ecb, pbaas};
 use crate::core::updates::events::{
-    BalancesUpdatedPayload, BootstrapUpdatedPayload, RatesUpdatedPayload,
+    BalancesUpdatedPayload, BootstrapUpdatedPayload, InfoUpdatedPayload, RatesUpdatedPayload,
     TransactionsUpdatedPayload, UpdateErrorPayload,
 };
 use crate::core::updates::params::{
-    jitter_duration, BALANCE_REFRESH_SECS, RATES_REFRESH_SECS, TRANSACTION_REFRESH_SECS,
+    jitter_duration, BALANCE_REFRESH_SECS, CHAIN_INFO_REFRESH_SECS, DLIGHT_POST_SYNC_REFRESH_SECS,
+    DLIGHT_SYNC_BALANCE_REFRESH_SECS, DLIGHT_SYNC_INFO_REFRESH_SECS,
+    DLIGHT_SYNC_TRANSACTION_REFRESH_SECS, RATES_REFRESH_SECS, TRANSACTION_REFRESH_SECS,
 };
 use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
@@ -32,6 +35,7 @@ use crate::types::WalletError;
 /// Tauri event names (frontend listens via listen()).
 pub const EVENT_BALANCES_UPDATED: &str = "wallet://balances-updated";
 pub const EVENT_TRANSACTIONS_UPDATED: &str = "wallet://transactions-updated";
+pub const EVENT_INFO_UPDATED: &str = "wallet://info-updated";
 pub const EVENT_RATES_UPDATED: &str = "wallet://rates-updated";
 pub const EVENT_BOOTSTRAP_UPDATED: &str = "wallet://bootstrap-updated";
 pub const EVENT_ERROR: &str = "wallet://error";
@@ -52,6 +56,8 @@ pub struct UpdateEngineStartConfig {
 struct ChannelState {
     last_balance_fetch: Option<Instant>,
     last_tx_fetch: Option<Instant>,
+    last_info_fetch: Option<Instant>,
+    last_info_syncing: Option<bool>,
 }
 
 /// Update engine: polls VRPC, BTC, ETH and ERC20 channels when unlocked, emits Tauri events.
@@ -131,6 +137,7 @@ fn active_channels(
     is_testnet: bool,
     vrpc_address: &str,
     eth_enabled: bool,
+    dlight_scope_address: Option<&str>,
 ) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for c in coin_registry.get_all() {
@@ -143,6 +150,13 @@ fn active_channels(
                     out.push((
                         c.id.clone(),
                         format!("vrpc.{}.{}", vrpc_address, c.system_id),
+                    ));
+                }
+                Channel::DlightPrivate if dlight_scope_address.is_some() => {
+                    let scope_address = dlight_scope_address.unwrap_or(vrpc_address);
+                    out.push((
+                        c.id.clone(),
+                        format!("dlight_private.{}.{}", scope_address, c.system_id),
                     ));
                 }
                 Channel::Btc => {
@@ -268,11 +282,136 @@ fn anchor_coin_id_for_pbaas_candidate(coin: &crate::core::coins::CoinDefinition)
     }
 }
 
+async fn derive_pbaas_rates_with_provider_candidates(
+    vrpc_provider_pool: &VrpcProviderPool,
+    active_network: WalletNetwork,
+    coin: &crate::core::coins::CoinDefinition,
+    latest_rates: &HashMap<String, HashMap<String, f64>>,
+) -> Option<HashMap<String, f64>> {
+    // Prefer root-network provider first (api.verus.services / api.verustest.net),
+    // then try system-specific endpoints as fallback.
+    let mut providers = Vec::new();
+    providers.push(vrpc_provider_pool.for_network(active_network));
+    providers.extend(vrpc_provider_pool.provider_candidates(active_network, Some(&coin.system_id)));
+
+    let mut seen = HashSet::<usize>::new();
+    for provider in providers {
+        let provider_ptr = provider as *const _ as usize;
+        if !seen.insert(provider_ptr) {
+            continue;
+        }
+        if let Some(rates) = pbaas::derive_pbaas_rates(provider, coin, latest_rates).await {
+            return Some(rates);
+        }
+    }
+
+    None
+}
+
 fn emit_bootstrap_updated(app_handle: &AppHandle, in_progress: bool) {
     let payload = BootstrapUpdatedPayload { in_progress };
     if let Err(err) = app_handle.emit(EVENT_BOOTSTRAP_UPDATED, &payload) {
         println!("[UPDATE] Emit bootstrap-updated failed: {:?}", err);
     }
+}
+
+fn supports_info_polling(channel_id: &str) -> bool {
+    channel_id.starts_with("vrpc.") || channel_id.starts_with("dlight_private.")
+}
+
+fn is_dlight_channel(channel_id: &str) -> bool {
+    channel_id.starts_with("dlight_private.")
+}
+
+fn parse_env_bool(value: &str) -> Option<bool> {
+    let normalized = value.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+fn dlight_fast_sync_updates_enabled() -> bool {
+    std::env::var("DLIGHT_FAST_SYNC_UPDATES")
+        .ok()
+        .as_deref()
+        .and_then(parse_env_bool)
+        .unwrap_or(cfg!(debug_assertions))
+}
+
+fn balance_refresh_secs(channel_id: &str, state: &ChannelState) -> u64 {
+    if !is_dlight_channel(channel_id) {
+        return BALANCE_REFRESH_SECS;
+    }
+
+    if state.last_info_syncing.unwrap_or(true) {
+        DLIGHT_SYNC_BALANCE_REFRESH_SECS
+    } else {
+        DLIGHT_POST_SYNC_REFRESH_SECS
+    }
+}
+
+fn info_refresh_secs(channel_id: &str, state: &ChannelState) -> u64 {
+    if !is_dlight_channel(channel_id) {
+        return CHAIN_INFO_REFRESH_SECS;
+    }
+
+    if state.last_info_syncing.unwrap_or(true) {
+        DLIGHT_SYNC_INFO_REFRESH_SECS
+    } else {
+        DLIGHT_POST_SYNC_REFRESH_SECS
+    }
+}
+
+fn transaction_refresh_secs(channel_id: &str, state: &ChannelState) -> u64 {
+    if !is_dlight_channel(channel_id) {
+        return TRANSACTION_REFRESH_SECS;
+    }
+
+    if state.last_info_syncing.unwrap_or(true) {
+        DLIGHT_SYNC_TRANSACTION_REFRESH_SECS
+    } else {
+        DLIGHT_POST_SYNC_REFRESH_SECS
+    }
+}
+
+fn should_emit_update_error(channel_id: &str, error: &WalletError) -> bool {
+    if !is_dlight_channel(channel_id) {
+        return true;
+    }
+
+    !matches!(
+        error,
+        WalletError::NetworkError | WalletError::DlightSynchronizerNotReady
+    )
+}
+
+fn should_use_fast_loop_sleep(
+    dlight_fast_updates: bool,
+    channels: &[(String, String)],
+    channel_state: &HashMap<String, ChannelState>,
+) -> bool {
+    if !dlight_fast_updates {
+        return false;
+    }
+
+    for (coin_id, channel_id) in channels {
+        if !is_dlight_channel(channel_id) {
+            continue;
+        }
+
+        let state_key = format!("{}::{}", channel_id, coin_id);
+        let is_syncing = channel_state
+            .get(&state_key)
+            .and_then(|state| state.last_info_syncing)
+            .unwrap_or(true);
+        if is_syncing {
+            return true;
+        }
+    }
+
+    false
 }
 
 async fn run_bootstrap_balance_fetches(
@@ -496,8 +635,9 @@ async fn run_bootstrap_rate_fetches(
         derive_join_set.spawn(async move {
             let _permit = permit;
             let coin_id = coin.id.clone();
-            let resolved_rates = pbaas::derive_pbaas_rates(
-                vrpc_provider_pool.for_system(active_network, &coin.system_id),
+            let resolved_rates = derive_pbaas_rates_with_provider_candidates(
+                vrpc_provider_pool.as_ref(),
+                active_network,
                 &coin,
                 &latest_rates_snapshot,
             )
@@ -562,8 +702,13 @@ async fn run_update_loop(
     let poll_transactions = start_config.poll_transactions;
     let priority_coin_ids = normalize_priority_entries(&start_config.priority_coin_ids);
     let priority_channel_ids = normalize_priority_entries(&start_config.priority_channel_ids);
+    let dlight_fast_updates = dlight_fast_sync_updates_enabled();
     let mut bootstrap_completed = false;
     emit_bootstrap_updated(&app_handle, true);
+    println!(
+        "[UPDATE] dlight fast sync updates enabled={}",
+        dlight_fast_updates
+    );
 
     loop {
         if cancel_token.is_cancelled() {
@@ -590,15 +735,57 @@ async fn run_update_loop(
                 continue;
             }
         };
+        let account_id = match session.active_account_id() {
+            Some(value) => value.clone(),
+            None => {
+                drop(session);
+                tokio::select! {
+                    _ = cancel_token.cancelled() => break,
+                    _ = tokio::time::sleep(tokio::time::Duration::from_secs(5)) => {}
+                }
+                continue;
+            }
+        };
         let active_network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
         let is_testnet = matches!(active_network, WalletNetwork::Testnet);
+        let password_hash = session.stronghold_password_hash_for_storage().ok();
+        let stronghold_store = session.stronghold_store().clone();
         drop(session);
+
+        let dlight_scope_address = if let Some(password_hash) = password_hash {
+            match stronghold_store
+                .load_dlight_seed(&account_id, password_hash.as_ref(), active_network)
+                .await
+            {
+                Ok(seed) => seed.as_deref().and_then(|seed_value| {
+                    dlight_private::derive_scope_address(seed_value, active_network)
+                        .map_err(|error| {
+                            println!(
+                                "[UPDATE] Failed to derive dlight scope address for {}: {:?}",
+                                account_id, error
+                            );
+                            error
+                        })
+                        .ok()
+                }),
+                Err(error) => {
+                    println!(
+                        "[UPDATE] Failed to resolve dlight seed status for {}: {:?}",
+                        account_id, error
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         let raw_channels = active_channels(
             &coin_registry,
             is_testnet,
             &session_vrpc_address,
             eth_provider_pool.is_enabled(),
+            dlight_scope_address.as_deref(),
         );
         let channels = dedupe_channel_pairs(&raw_channels);
         if channels.is_empty() {
@@ -677,9 +864,14 @@ async fn run_update_loop(
 
             let needs_balance = {
                 let state = channel_state.entry(channel_state_key.clone()).or_default();
-                state.last_balance_fetch.map_or(true, |t| {
-                    now.duration_since(t).as_secs() >= BALANCE_REFRESH_SECS
-                })
+                let refresh_secs = if dlight_fast_updates {
+                    balance_refresh_secs(channel_id, state)
+                } else {
+                    BALANCE_REFRESH_SECS
+                };
+                state
+                    .last_balance_fetch
+                    .map_or(true, |t| now.duration_since(t).as_secs() >= refresh_secs)
             };
 
             if needs_balance {
@@ -711,19 +903,100 @@ async fn run_update_loop(
                             .last_balance_fetch = Some(Instant::now());
                     }
                     Err(e) => {
-                        let message = user_facing_error(&e);
-                        let _ = app_handle.emit(
-                            EVENT_ERROR,
-                            &UpdateErrorPayload {
-                                data_type: "balance".to_string(),
-                                coin_id: coin_id.clone(),
-                                channel: channel_id.clone(),
-                                message,
-                            },
-                        );
+                        if should_emit_update_error(channel_id, &e) {
+                            let message = user_facing_error(&e);
+                            let _ = app_handle.emit(
+                                EVENT_ERROR,
+                                &UpdateErrorPayload {
+                                    data_type: "balance".to_string(),
+                                    coin_id: coin_id.clone(),
+                                    channel: channel_id.clone(),
+                                    message,
+                                },
+                            );
+                        }
+                        channel_state
+                            .entry(channel_state_key.clone())
+                            .or_default()
+                            .last_balance_fetch = Some(Instant::now());
                     }
                 }
                 tokio::time::sleep(jitter_duration(2)).await;
+            }
+        }
+
+        for (coin_id, channel_id) in &channels {
+            if cancel_token.is_cancelled() {
+                return;
+            }
+            if !supports_info_polling(channel_id) {
+                continue;
+            }
+
+            let channel_state_key = format!("{}::{}", channel_id, coin_id);
+            let needs_info = {
+                let state = channel_state.entry(channel_state_key.clone()).or_default();
+                let refresh_secs = if dlight_fast_updates {
+                    info_refresh_secs(channel_id, state)
+                } else {
+                    CHAIN_INFO_REFRESH_SECS
+                };
+                state
+                    .last_info_fetch
+                    .map_or(true, |t| now.duration_since(t).as_secs() >= refresh_secs)
+            };
+
+            if needs_info {
+                match route_get_info(
+                    channel_id,
+                    Some(coin_id.as_str()),
+                    &session_manager,
+                    coin_registry.as_ref(),
+                    vrpc_provider_pool.as_ref(),
+                )
+                .await
+                {
+                    Ok(info) => {
+                        let payload = InfoUpdatedPayload {
+                            coin_id: coin_id.clone(),
+                            channel: channel_id.clone(),
+                            percent: info.percent,
+                            blocks: info.blocks,
+                            longest_chain: info.longest_chain,
+                            syncing: info.syncing,
+                            status_kind: info.status_kind.clone(),
+                            last_updated: info.last_updated,
+                            last_progress_at: info.last_progress_at,
+                            stalled: info.stalled,
+                            scan_rate_blocks_per_sec: info.scan_rate_blocks_per_sec,
+                        };
+                        if let Err(e) = app_handle.emit(EVENT_INFO_UPDATED, &payload) {
+                            println!("[UPDATE] Emit info-updated failed: {:?}", e);
+                        }
+                        let state = channel_state.entry(channel_state_key.clone()).or_default();
+                        state.last_info_fetch = Some(Instant::now());
+                        state.last_info_syncing = Some(info.syncing);
+                    }
+                    Err(e) => {
+                        if should_emit_update_error(channel_id, &e) {
+                            let message = user_facing_error(&e);
+                            let _ = app_handle.emit(
+                                EVENT_ERROR,
+                                &UpdateErrorPayload {
+                                    data_type: "info".to_string(),
+                                    coin_id: coin_id.clone(),
+                                    channel: channel_id.clone(),
+                                    message,
+                                },
+                            );
+                        }
+                        channel_state
+                            .entry(channel_state_key.clone())
+                            .or_default()
+                            .last_info_fetch = Some(Instant::now());
+                    }
+                }
+                tokio::time::sleep(jitter_duration(1)).await;
             }
         }
 
@@ -735,9 +1008,14 @@ async fn run_update_loop(
                 let channel_state_key = format!("{}::{}", channel_id, coin_id);
 
                 let state = channel_state.entry(channel_state_key.clone()).or_default();
-                let needs_tx = state.last_tx_fetch.map_or(true, |t| {
-                    now.duration_since(t).as_secs() >= TRANSACTION_REFRESH_SECS
-                });
+                let refresh_secs = if dlight_fast_updates {
+                    transaction_refresh_secs(channel_id, state)
+                } else {
+                    TRANSACTION_REFRESH_SECS
+                };
+                let needs_tx = state
+                    .last_tx_fetch
+                    .map_or(true, |t| now.duration_since(t).as_secs() >= refresh_secs);
 
                 if needs_tx {
                     match route_get_transactions(
@@ -774,16 +1052,19 @@ async fn run_update_loop(
                             state.last_tx_fetch = Some(Instant::now());
                         }
                         Err(e) => {
-                            let message = user_facing_error(&e);
-                            let _ = app_handle.emit(
-                                EVENT_ERROR,
-                                &UpdateErrorPayload {
-                                    data_type: "transactions".to_string(),
-                                    coin_id: coin_id.clone(),
-                                    channel: channel_id.clone(),
-                                    message,
-                                },
-                            );
+                            if should_emit_update_error(channel_id, &e) {
+                                let message = user_facing_error(&e);
+                                let _ = app_handle.emit(
+                                    EVENT_ERROR,
+                                    &UpdateErrorPayload {
+                                        data_type: "transactions".to_string(),
+                                        coin_id: coin_id.clone(),
+                                        channel: channel_id.clone(),
+                                        message,
+                                    },
+                                );
+                            }
+                            state.last_tx_fetch = Some(Instant::now());
                         }
                     }
                     tokio::time::sleep(jitter_duration(2)).await;
@@ -835,8 +1116,9 @@ async fn run_update_loop(
                     }
                     Err(err) => {
                         if pbaas::is_pbaas_derivation_candidate(coin) {
-                            resolved_rates = pbaas::derive_pbaas_rates(
-                                vrpc_provider_pool.for_system(active_network, &coin.system_id),
+                            resolved_rates = derive_pbaas_rates_with_provider_candidates(
+                                vrpc_provider_pool.as_ref(),
+                                active_network,
                                 coin,
                                 &latest_rates,
                             )
@@ -868,7 +1150,12 @@ async fn run_update_loop(
             }
         }
 
-        let sleep_secs = 60u64.min(BALANCE_REFRESH_SECS / 2);
+        let sleep_secs =
+            if should_use_fast_loop_sleep(dlight_fast_updates, &channels, &channel_state) {
+                1
+            } else {
+                60u64.min(BALANCE_REFRESH_SECS / 2)
+            };
         tokio::select! {
             _ = cancel_token.cancelled() => break,
             _ = tokio::time::sleep(jitter_duration(sleep_secs)) => {}
@@ -882,6 +1169,7 @@ fn user_facing_error(e: &WalletError) -> String {
         WalletError::UnsupportedChannel => "Unsupported channel".to_string(),
         WalletError::InvalidPreflight => "Invalid preflight".to_string(),
         WalletError::NetworkError => "Network error".to_string(),
+        WalletError::DlightSynchronizerNotReady => "dlight synchronizer not ready".to_string(),
         WalletError::EthNotConfigured => "Ethereum channels are not configured".to_string(),
         WalletError::OperationFailed => "Temporarily unavailable".to_string(),
         _ => "Temporarily unavailable".to_string(),
@@ -900,7 +1188,7 @@ mod tests {
     #[test]
     fn active_channels_includes_eth_and_erc20_when_eth_enabled() {
         let registry = CoinRegistry::new();
-        let channels = active_channels(&registry, false, "RtestAddress", true);
+        let channels = active_channels(&registry, false, "RtestAddress", true, None);
 
         assert!(channels
             .iter()
@@ -913,7 +1201,7 @@ mod tests {
     #[test]
     fn active_channels_omits_eth_and_erc20_when_eth_disabled() {
         let registry = CoinRegistry::new();
-        let channels = active_channels(&registry, false, "RtestAddress", false);
+        let channels = active_channels(&registry, false, "RtestAddress", false, None);
 
         assert!(!channels
             .iter()
@@ -926,7 +1214,7 @@ mod tests {
     #[test]
     fn active_channels_respects_testnet_network() {
         let registry = CoinRegistry::new();
-        let channels = active_channels(&registry, true, "RtestAddress", true);
+        let channels = active_channels(&registry, true, "RtestAddress", true, None);
 
         assert!(channels
             .iter()
@@ -946,7 +1234,10 @@ mod tests {
         );
 
         let mainnet_candidates = fiat_rate_candidates(&registry, false);
-        assert!(!mainnet_candidates.is_empty(), "mainnet rates should remain enabled");
+        assert!(
+            !mainnet_candidates.is_empty(),
+            "mainnet rates should remain enabled"
+        );
         assert!(mainnet_candidates.iter().all(|coin| !coin.is_testnet));
     }
 
@@ -1014,6 +1305,7 @@ mod tests {
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
             vrpc_endpoints: vec![],
+            dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
             mapped_to: None,
@@ -1030,6 +1322,7 @@ mod tests {
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
             vrpc_endpoints: vec![],
+            dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
             mapped_to: None,
@@ -1062,6 +1355,7 @@ mod tests {
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
             vrpc_endpoints: vec![],
+            dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
             mapped_to: None,
@@ -1078,6 +1372,7 @@ mod tests {
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
             vrpc_endpoints: vec![],
+            dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
             mapped_to: None,

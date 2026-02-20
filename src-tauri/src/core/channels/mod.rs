@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
 use crate::core::auth::SessionManager;
@@ -15,7 +16,7 @@ use crate::core::channels::btc::BtcProviderPool;
 use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::coins::Channel;
-use crate::core::coins::{CoinDefinition, CoinRegistry};
+use crate::core::coins::{CoinDefinition, CoinRegistry, Protocol};
 use crate::types::transaction::{
     BalanceResult, PreflightParams, PreflightResult, SendResult, Transaction,
     TransactionHistoryPage,
@@ -24,6 +25,7 @@ use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
 
 pub mod btc;
+pub mod dlight_private;
 pub mod eth;
 mod store;
 pub mod vrpc;
@@ -39,6 +41,19 @@ const MAX_TRANSACTION_HISTORY_PAGE_LIMIT: usize = 100;
 pub struct TransactionsFetchResult {
     pub transactions: Vec<Transaction>,
     pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChannelInfoResult {
+    pub blocks: Option<u64>,
+    pub longest_chain: Option<u64>,
+    pub syncing: bool,
+    pub percent: Option<f64>,
+    pub status_kind: Option<String>,
+    pub last_updated: Option<u64>,
+    pub last_progress_at: Option<u64>,
+    pub stalled: Option<bool>,
+    pub scan_rate_blocks_per_sec: Option<f64>,
 }
 
 #[derive(Debug, Clone)]
@@ -94,6 +109,12 @@ struct EthCursorPayload {
 fn clamp_history_limit(limit: Option<u32>) -> usize {
     let requested = limit.unwrap_or(DEFAULT_TRANSACTION_HISTORY_PAGE_LIMIT as u32);
     requested.clamp(1, MAX_TRANSACTION_HISTORY_PAGE_LIMIT as u32) as usize
+}
+
+fn hash_account_id(account_id: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(account_id.as_bytes());
+    hex::encode(hasher.finalize())
 }
 
 fn dedupe_transactions_by_txid(transactions: Vec<Transaction>) -> Vec<Transaction> {
@@ -230,6 +251,12 @@ fn coin_supports_vrpc(coin: &CoinDefinition) -> bool {
         .any(|ch| matches!(ch, Channel::Vrpc))
 }
 
+fn coin_supports_dlight(coin: &CoinDefinition) -> bool {
+    coin.compatible_channels
+        .iter()
+        .any(|ch| matches!(ch, Channel::DlightPrivate))
+}
+
 fn is_native_vrpc_system_coin(coin: &CoinDefinition) -> bool {
     coin_supports_vrpc(coin) && coin.currency_id.eq_ignore_ascii_case(&coin.system_id)
 }
@@ -296,6 +323,124 @@ fn resolve_coin_by_channel(
     coin_registry
         .find_by_id(coin_id, is_testnet)
         .ok_or(WalletError::UnsupportedChannel)
+}
+
+fn resolve_dlight_coin_context(
+    coin_registry: &CoinRegistry,
+    system_id: &str,
+    coin_id_hint: Option<&str>,
+    network: WalletNetwork,
+) -> Result<CoinDefinition, WalletError> {
+    let is_testnet = matches!(network, WalletNetwork::Testnet);
+    let root_system_id = network_root_system_id(network);
+
+    let coin = if let Some(coin_id) = coin_id_hint {
+        let hinted = coin_registry
+            .find_by_id(coin_id, is_testnet)
+            .ok_or(WalletError::UnsupportedChannel)?;
+        if !coin_supports_dlight(&hinted) || !matches!(hinted.proto, Protocol::Vrsc) {
+            return Err(WalletError::UnsupportedChannel);
+        }
+
+        let hinted_matches_scope = hinted.system_id.eq_ignore_ascii_case(system_id);
+        if !hinted_matches_scope && !is_allowed_vrpc_scope_system(coin_registry, system_id, network)
+        {
+            return Err(WalletError::UnsupportedChannel);
+        }
+        hinted
+    } else {
+        let root = coin_registry
+            .find_by_system_id(root_system_id, is_testnet)
+            .ok_or(WalletError::UnsupportedChannel)?;
+        if !coin_supports_dlight(&root) || !matches!(root.proto, Protocol::Vrsc) {
+            return Err(WalletError::UnsupportedChannel);
+        }
+        root
+    };
+
+    if coin
+        .dlight_endpoints
+        .as_ref()
+        .map(|endpoints| endpoints.is_empty())
+        .unwrap_or(true)
+    {
+        return Err(WalletError::UnsupportedChannel);
+    }
+
+    Ok(coin)
+}
+
+async fn build_dlight_runtime_request(
+    channel_id: &str,
+    coin_id_hint: Option<&str>,
+    session_manager: &Arc<Mutex<SessionManager>>,
+    coin_registry: &CoinRegistry,
+) -> Result<dlight_private::DlightRuntimeRequest, WalletError> {
+    let resolved = dlight_private::parse_dlight_channel_id(channel_id)?;
+
+    let session = session_manager.lock().await;
+    if !session.is_unlocked() {
+        return Err(WalletError::WalletLocked);
+    }
+
+    let account_id = session
+        .active_account_id()
+        .cloned()
+        .ok_or(WalletError::WalletLocked)?;
+    let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+    let password_hash = session.stronghold_password_hash_for_storage()?;
+    let stronghold_store = session.stronghold_store().clone();
+    drop(session);
+
+    // Milestone 1: only root Verus private scope is supported.
+    if !resolved
+        .system_id
+        .eq_ignore_ascii_case(network_root_system_id(network))
+    {
+        return Err(WalletError::UnsupportedChannel);
+    }
+
+    let coin =
+        resolve_dlight_coin_context(coin_registry, &resolved.system_id, coin_id_hint, network)?;
+    let endpoint = coin
+        .dlight_endpoints
+        .as_ref()
+        .and_then(|endpoints| endpoints.first())
+        .cloned()
+        .ok_or(WalletError::UnsupportedChannel)?;
+
+    let seed_material = stronghold_store
+        .load_dlight_seed(&account_id, password_hash.as_ref(), network)
+        .await?
+        .ok_or(WalletError::UnsupportedChannel)?;
+    let scope_address = dlight_private::derive_scope_address(&seed_material, network)?;
+    if !resolved.address.eq_ignore_ascii_case(&scope_address) {
+        return Err(WalletError::UnsupportedChannel);
+    }
+
+    let account_hash = hash_account_id(&account_id);
+    let runtime_key = format!(
+        "dlight:{}:{}:{}",
+        if matches!(network, WalletNetwork::Testnet) {
+            "testnet"
+        } else {
+            "mainnet"
+        },
+        account_hash,
+        coin.id.to_ascii_uppercase()
+    );
+
+    Ok(dlight_private::DlightRuntimeRequest {
+        runtime_key,
+        endpoint,
+        scope_address,
+        scope_system_id: resolved.system_id,
+        coin_id: coin.id,
+        network,
+        seed_material,
+        account_hash,
+        app_data_dir: stronghold_store.app_data_dir(),
+    })
 }
 
 /// Route preflight by channel_id prefix. VRPC and BTC use session addresses and providers.
@@ -521,6 +666,16 @@ pub async fn route_get_balances(
             )
             .await
         }
+        "dlight_private" => {
+            let request = build_dlight_runtime_request(
+                channel_id,
+                coin_id_hint,
+                session_manager,
+                coin_registry,
+            )
+            .await?;
+            dlight_private::get_balances(request).await
+        }
         "btc" => {
             let session = session_manager.lock().await;
             let (_, _, from_address) = session.get_addresses()?;
@@ -610,6 +765,20 @@ pub async fn route_get_transactions(
             Ok(TransactionsFetchResult {
                 transactions: res.transactions,
                 warning: res.warning,
+            })
+        }
+        "dlight_private" => {
+            let request = build_dlight_runtime_request(
+                channel_id,
+                coin_id_hint,
+                session_manager,
+                coin_registry,
+            )
+            .await?;
+            let transactions = dlight_private::get_transactions(request).await?;
+            Ok(TransactionsFetchResult {
+                transactions,
+                warning: None,
             })
         }
         "btc" => {
@@ -755,6 +924,27 @@ pub async fn route_get_transactions_page(
                     }),
                 has_more: res.has_more,
                 warning: res.warning,
+            }
+        }
+        "dlight_private" => {
+            if decoded_cursor.is_some() {
+                return Err(WalletError::OperationFailed);
+            }
+
+            let request = build_dlight_runtime_request(
+                channel_id,
+                coin_id_hint,
+                session_manager,
+                coin_registry,
+            )
+            .await?;
+            let transactions = dlight_private::get_transactions(request).await?;
+
+            ProtocolPageResult {
+                transactions,
+                next_cursor: None,
+                has_more: false,
+                warning: None,
             }
         }
         "btc" => {
@@ -915,6 +1105,84 @@ pub async fn route_get_transactions_page(
     })
 }
 
+/// Route chain sync info by channel_id. Currently supported for VRPC and dlight_private channels.
+pub async fn route_get_info(
+    channel_id: &str,
+    coin_id_hint: Option<&str>,
+    session_manager: &Arc<Mutex<SessionManager>>,
+    coin_registry: &CoinRegistry,
+    vrpc_provider_pool: &VrpcProviderPool,
+) -> Result<ChannelInfoResult, WalletError> {
+    let prefix = channel_id.split('.').next().unwrap_or("");
+    match prefix {
+        "vrpc" => {
+            let session = session_manager.lock().await;
+            let (session_vrpc_address, _, _) = session.get_addresses()?;
+            let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+            drop(session);
+
+            let resolved = vrpc::parse_vrpc_channel_id(channel_id, Some(&session_vrpc_address))?;
+            if !vrpc_provider_pool.has_system_provider(network, &resolved.system_id) {
+                println!(
+                    "[VRPC] Missing system-specific endpoint for {}. Falling back to network default.",
+                    resolved.system_id
+                );
+            }
+
+            let payload = vrpc_provider_pool
+                .for_system(network, &resolved.system_id)
+                .getinfo()
+                .await?;
+            let parsed = dlight_private::info_from_getinfo(&payload);
+            Ok(ChannelInfoResult {
+                blocks: parsed.blocks,
+                longest_chain: parsed.longest_chain,
+                syncing: parsed.syncing,
+                percent: parsed.percent,
+                status_kind: None,
+                last_updated: None,
+                last_progress_at: None,
+                stalled: None,
+                scan_rate_blocks_per_sec: None,
+            })
+        }
+        "dlight_private" => {
+            let request = build_dlight_runtime_request(
+                channel_id,
+                coin_id_hint,
+                session_manager,
+                coin_registry,
+            )
+            .await?;
+            let parsed = dlight_private::get_info(request).await?;
+            Ok(ChannelInfoResult {
+                blocks: parsed.blocks,
+                longest_chain: parsed.longest_chain,
+                syncing: parsed.syncing,
+                percent: parsed.percent,
+                status_kind: parsed.status_kind,
+                last_updated: parsed.last_updated,
+                last_progress_at: parsed.last_progress_at,
+                stalled: parsed.stalled,
+                scan_rate_blocks_per_sec: parsed.scan_rate_blocks_per_sec,
+            })
+        }
+        _ => Err(WalletError::UnsupportedChannel),
+    }
+}
+
+pub async fn route_get_dlight_runtime_status(
+    channel_id: &str,
+    coin_id_hint: Option<&str>,
+    session_manager: &Arc<Mutex<SessionManager>>,
+    coin_registry: &CoinRegistry,
+) -> Result<dlight_private::DlightRuntimeDiagnostics, WalletError> {
+    let request =
+        build_dlight_runtime_request(channel_id, coin_id_hint, session_manager, coin_registry)
+            .await?;
+    dlight_private::get_runtime_diagnostics(request).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -946,6 +1214,7 @@ mod tests {
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
             vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+            dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
             mapped_to: None,

@@ -7,7 +7,7 @@ mod events;
 mod params;
 
 pub use engine::{
-    UpdateEngine, UpdateEngineStartConfig, EVENT_BALANCES_UPDATED, EVENT_ERROR,
+    UpdateEngine, UpdateEngineStartConfig, EVENT_BALANCES_UPDATED, EVENT_ERROR, EVENT_INFO_UPDATED,
     EVENT_RATES_UPDATED, EVENT_TRANSACTIONS_UPDATED,
 };
 pub use events::UpdateErrorPayload;

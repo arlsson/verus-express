@@ -35,6 +35,10 @@ fn default_wallet_secret_kind() -> WalletSecretKind {
     WalletSecretKind::SeedText
 }
 
+fn default_setup_dlight_with_primary() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WalletSecretKind {
@@ -75,6 +79,8 @@ pub struct CreateWalletRequest {
     pub emoji: String,
     #[serde(default = "default_wallet_color")]
     pub color: String,
+    #[serde(default = "default_setup_dlight_with_primary")]
+    pub setup_dlight_with_primary: bool,
     // Note: No password field - will be handled separately for security
 }
 
@@ -163,6 +169,13 @@ pub struct ActiveWalletResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum ScopeKind {
+    Transparent,
+    Shielded,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CoinScope {
     pub channel_id: String,
@@ -174,6 +187,7 @@ pub struct CoinScope {
     pub system_display_name: String,
     pub is_primary_address: bool,
     pub is_read_only: bool,
+    pub scope_kind: ScopeKind,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -189,6 +203,56 @@ pub struct ActiveAssetsState {
     pub network: WalletNetwork,
     pub initialized: bool,
     pub coin_ids: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DlightSeedStatusResult {
+    pub configured: bool,
+    pub shielded_address: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DlightRuntimeStatusResult {
+    pub channel_id: String,
+    pub runtime_key: String,
+    pub status_kind: String,
+    pub percent: Option<f64>,
+    pub scanned_height: u64,
+    pub tip_height: Option<u64>,
+    pub estimated_tip_height: Option<u64>,
+    pub syncing: bool,
+    pub last_updated: u64,
+    pub last_progress_at: Option<u64>,
+    pub last_tip_probe_at: Option<u64>,
+    pub consecutive_failures: u32,
+    pub scan_rate_blocks_per_sec: Option<f64>,
+    pub stalled: bool,
+    pub last_error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum DlightSeedSetupMode {
+    ReusePrimary,
+    CreateNew,
+    ImportText,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupDlightSeedRequest {
+    pub mode: DlightSeedSetupMode,
+    pub import_text: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupDlightSeedResult {
+    pub configured: bool,
+    pub generated_seed_phrase: Option<String>,
+    pub requires_relogin: bool,
 }
 
 impl WalletMetadata {

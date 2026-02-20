@@ -31,9 +31,16 @@ pub struct TransactionsUpdatedPayload {
 #[serde(rename_all = "camelCase")]
 pub struct InfoUpdatedPayload {
     pub coin_id: String,
+    pub channel: String,
+    pub percent: Option<f64>,
     pub blocks: Option<u64>,
     pub longest_chain: Option<u64>,
     pub syncing: bool,
+    pub status_kind: Option<String>,
+    pub last_updated: Option<u64>,
+    pub last_progress_at: Option<u64>,
+    pub stalled: Option<bool>,
+    pub scan_rate_blocks_per_sec: Option<f64>,
 }
 
 /// Payload for wallet://rates-updated.

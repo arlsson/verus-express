@@ -16,12 +16,17 @@ pub enum Protocol {
 
 /// Channel used to interact with a coin (maps to Verus-Mobile channel IDs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
 pub enum Channel {
+    #[serde(rename = "vrpc")]
     Vrpc,
+    #[serde(rename = "btc")]
     Btc,
+    #[serde(rename = "eth")]
     Eth,
+    #[serde(rename = "erc20")]
     Erc20,
+    #[serde(rename = "dlight_private")]
+    DlightPrivate,
 }
 
 /// Definition of a supported coin. All fields are safe for IPC/frontend.
@@ -38,6 +43,7 @@ pub struct CoinDefinition {
     pub compatible_channels: Vec<Channel>,
     pub decimals: u8,
     pub vrpc_endpoints: Vec<String>,
+    pub dlight_endpoints: Option<Vec<String>>,
     pub electrum_endpoints: Option<Vec<String>>,
     pub seconds_per_block: u64,
     pub mapped_to: Option<String>,

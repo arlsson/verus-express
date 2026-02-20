@@ -162,6 +162,28 @@ export const en: Record<string, string> = {
   'wallet.topbar.networkSettings': 'Network Settings',
   'wallet.topbar.about': 'About',
   'wallet.topbar.lockWallet': 'Lock',
+  'wallet.private.label.mainnet': 'Verus PRIVATE',
+  'wallet.private.label.testnet': 'Verus PRIVATE Testnet',
+  'wallet.private.syncingPercent': 'Syncing {percent}%',
+  'wallet.settings.privateVerus.title': 'Private Verus',
+  'wallet.settings.privateVerus.description':
+    'Set up shielded access for {label}. You can reuse your primary 24-word seed or configure a separate private seed.',
+  'wallet.settings.privateVerus.statusConfigured': 'Private setup is configured.',
+  'wallet.settings.privateVerus.statusNotConfigured': 'Private setup is not configured yet.',
+  'wallet.settings.privateVerus.statusAddress': 'Shielded address: {address}',
+  'wallet.settings.privateVerus.statusLoadError': 'Could not load private setup status.',
+  'wallet.settings.privateVerus.reusePrimary': 'Reuse primary wallet seed',
+  'wallet.settings.privateVerus.createNew': 'Create new private seed',
+  'wallet.settings.privateVerus.importLabel': 'Import private seed or spending key',
+  'wallet.settings.privateVerus.importPlaceholder':
+    'Paste a 24-word mnemonic or secret-extended-key-main…',
+  'wallet.settings.privateVerus.importAction': 'Import private seed',
+  'wallet.settings.privateVerus.settingUp': 'Setting up private wallet…',
+  'wallet.settings.privateVerus.generatedSeedTitle': 'New private seed phrase',
+  'wallet.settings.privateVerus.setupSuccess': 'Private setup completed.',
+  'wallet.settings.privateVerus.setupSuccessRelogin':
+    'Private setup completed. Lock and unlock your wallet to activate private channels.',
+  'wallet.settings.privateVerus.setupError': 'Could not complete private setup.',
 
   'wallet.overview.mainWallet': 'Main Wallet',
   'wallet.overview.available': 'Available:',
@@ -201,6 +223,9 @@ export const en: Record<string, string> = {
   'wallet.assetDetails.readOnly': 'Read-only',
   'wallet.assetDetails.readOnlyHelper':
     'Send and convert are only available from your primary address.',
+  'wallet.assetDetails.privateSyncInlineHelper': 'Shielded balance still syncing',
+  'wallet.assetDetails.privateSyncHelper':
+    'Private transfers are unavailable while shielded sync is in progress.',
   'wallet.assetDetails.transactions': 'Transaction history',
   'wallet.assetDetails.connectedToScope': 'Connected to {address} on {network}',
   'wallet.assetDetails.loadingTransactions': 'Loading transactions…',
@@ -446,6 +471,10 @@ export const en: Record<string, string> = {
     'You can change this security setting in Settings.',
   'wallet.transfer.review.refresh': 'Refresh review',
   'wallet.transfer.reviewUnavailable': 'Review data is unavailable. Try preflight again.',
+  'wallet.transfer.privateSyncBlocked':
+    'Private Verus is still syncing ({percent}%). Sending is available when sync reaches 100%.',
+  'wallet.transfer.privateSyncBlockedUnknown':
+    'Private Verus is still syncing. Sending is available when sync reaches 100%.',
   'wallet.transfer.saveRecipient.title': 'Save recipient',
   'wallet.transfer.saveRecipient.description':
     'Save this address to your address book so you can reuse it later.',
@@ -728,6 +757,9 @@ export const en: Record<string, string> = {
   'walletCreation.security.item2': 'Never screenshot or store it digitally.',
   'walletCreation.security.item3': 'Keep it offline in a safe place.',
   'walletCreation.security.item4': 'Never share it with anyone.',
+  'walletCreation.security.privateVerusToggle': 'Set up Private Verus with this wallet seed',
+  'walletCreation.security.privateVerusHint':
+    'Recommended. You can still set this up later in Settings if you skip it now.',
 
   'walletCreation.backup.generating': 'Generating your secure 24-word backup…',
   'walletCreation.backup.groupLabel': 'Words {start}-{end}',

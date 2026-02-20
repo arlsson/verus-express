@@ -43,7 +43,7 @@ export interface ActiveAssetsState {
 }
 
 export type Protocol = 'vrsc' | 'btc' | 'eth' | 'erc20';
-export type Channel = 'vrpc' | 'btc' | 'eth' | 'erc20';
+export type Channel = 'vrpc' | 'btc' | 'eth' | 'erc20' | 'dlight_private';
 
 export interface CoinDefinition {
   id: string;
@@ -56,10 +56,23 @@ export interface CoinDefinition {
   compatibleChannels: Channel[];
   decimals: number;
   vrpcEndpoints: string[];
+  dlightEndpoints?: string[] | null;
   electrumEndpoints?: string[] | null;
   secondsPerBlock: number;
   mappedTo?: string | null;
   isTestnet: boolean;
+}
+
+export type ScopeKind = 'transparent' | 'shielded';
+
+export type WalletEntryKind = 'coin' | 'private_verus';
+
+export interface WalletEntrySelection {
+  walletEntryKind: WalletEntryKind;
+  coinId: string;
+  baseCoinId?: string;
+  scopeFilterMode: ScopeKind;
+  displayName?: string;
 }
 
 export interface CoinScope {
@@ -72,6 +85,7 @@ export interface CoinScope {
   systemDisplayName: string;
   isPrimaryAddress: boolean;
   isReadOnly: boolean;
+  scopeKind: ScopeKind;
 }
 
 export interface CoinScopesResult {
@@ -463,7 +477,50 @@ export type GuardSendResult = IdentitySendResult;
 
 /** Placeholder for wallet://info-updated (Module 7). */
 export interface ChainInfo {
+  channel?: string;
+  percent?: number;
   blocks?: number;
   longestChain?: number;
   syncing?: boolean;
+  statusKind?: string;
+  lastUpdated?: number;
+  lastProgressAt?: number;
+  stalled?: boolean;
+  scanRateBlocksPerSec?: number;
+}
+
+export interface DlightSeedStatusResult {
+  configured: boolean;
+  shieldedAddress?: string | null;
+}
+
+export interface DlightRuntimeStatusResult {
+  channelId: string;
+  runtimeKey: string;
+  statusKind: string;
+  percent?: number | null;
+  scannedHeight: number;
+  tipHeight?: number | null;
+  estimatedTipHeight?: number | null;
+  syncing: boolean;
+  lastUpdated: number;
+  lastProgressAt?: number | null;
+  lastTipProbeAt?: number | null;
+  consecutiveFailures: number;
+  scanRateBlocksPerSec?: number | null;
+  stalled: boolean;
+  lastError?: string | null;
+}
+
+export type DlightSeedSetupMode = 'reuse_primary' | 'create_new' | 'import_text';
+
+export interface SetupDlightSeedRequest {
+  mode: DlightSeedSetupMode;
+  importText?: string | null;
+}
+
+export interface SetupDlightSeedResult {
+  configured: boolean;
+  generatedSeedPhrase?: string | null;
+  requiresRelogin: boolean;
 }

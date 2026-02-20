@@ -45,3 +45,7 @@ blake2b_simd = "1.0"
 ethers = { version = "2.0", default-features = false, features = ["rustls"] }  # ETH/ERC20 channel support
 dotenvy = "0.15"
 base64 = "0.22"
+zcash_client_backend = { version = "0.21.0", default-features = false, features = ["lightwalletd-tonic-transport", "lightwalletd-tonic-tls-webpki-roots", "unstable"] }
+zcash_protocol = { version = "0.7.2", default-features = false }
+zip32 = { version = "0.2", default-features = false }
+tonic = { version = "0.14.5", default-features = false, features = ["transport", "tls-webpki-roots"] }

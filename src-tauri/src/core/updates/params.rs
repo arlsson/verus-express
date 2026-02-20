@@ -15,6 +15,14 @@ pub const TRANSACTION_REFRESH_SECS: u64 = 300;
 /// Chain info: fixed 30s for first version (full lifecycle deferred).
 pub const CHAIN_INFO_REFRESH_SECS: u64 = 30;
 
+/// Dlight-only cadence while private sync is active.
+pub const DLIGHT_SYNC_BALANCE_REFRESH_SECS: u64 = 5;
+pub const DLIGHT_SYNC_INFO_REFRESH_SECS: u64 = 3;
+pub const DLIGHT_SYNC_TRANSACTION_REFRESH_SECS: u64 = 15;
+
+/// Dlight cadence after sync completes.
+pub const DLIGHT_POST_SYNC_REFRESH_SECS: u64 = 30;
+
 /// Fiat rates: parity with mobile defaults.
 pub const RATES_EXPIRE_SECS: u64 = 60;
 pub const RATES_REFRESH_SECS: u64 = 300;

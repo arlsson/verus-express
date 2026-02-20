@@ -49,6 +49,7 @@
   let allVerificationFieldsFilled = $state(false);
   let verifyStepRef: any = $state(null);
   let backupCanContinue = $state(false);
+  let setupDlightWithPrimary = $state(true);
   let canCreateWallet = $state(false);
   let createLoading = $state(false);
   let createError = $state('');
@@ -89,7 +90,8 @@
           seed_phrase: seedPhrase,
           network: walletData.network,
           emoji: walletData.emoji,
-          color: walletData.color
+          color: walletData.color,
+          setup_dlight_with_primary: setupDlightWithPrimary
         },
         password: walletData.password
       });
@@ -181,6 +183,7 @@
     verificationIndices = [];
     securityAccepted = false;
     backupCanContinue = false;
+    setupDlightWithPrimary = true;
     createdWalletId = '';
     openWalletError = '';
     openWalletLoading = false;
@@ -235,7 +238,7 @@
           {i18n.t('walletCreation.step3.title')}
         </h1>
       </div>
-      <SecurityStep bind:securityAccepted />
+      <SecurityStep bind:securityAccepted bind:setupPrivateVerus={setupDlightWithPrimary} />
     {:else if currentStep === 3}
       <div class="space-y-3 text-center">
         <h1 class="text-foreground text-2xl font-semibold tracking-tight leading-tight">

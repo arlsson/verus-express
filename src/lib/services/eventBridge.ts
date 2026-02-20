@@ -44,9 +44,15 @@ interface InfoUpdatedPayload {
   coinId?: string;
   channel?: string;
   channelId?: string;
+  percent?: number;
   blocks?: number;
   longestChain?: number;
   syncing?: boolean;
+  statusKind?: string;
+  lastUpdated?: number;
+  lastProgressAt?: number;
+  stalled?: boolean;
+  scanRateBlocksPerSec?: number;
 }
 
 interface RatesUpdatedPayload {
@@ -64,6 +70,18 @@ interface UpdateErrorPayload {
   coinId?: string;
   channel?: string;
   message?: string;
+}
+
+function shouldSuppressWalletError(payload: UpdateErrorPayload): boolean {
+  const channel = (payload.channel ?? '').toLowerCase();
+  if (!channel.startsWith('dlight_private.')) return false;
+
+  const message = (payload.message ?? '').toLowerCase();
+  return (
+    message.includes('dlight synchronizer not ready') ||
+    message.includes('network error') ||
+    message.includes('temporarily unavailable')
+  );
 }
 
 function normalizeChannelKey(key: string): string {
@@ -88,8 +106,8 @@ function txKey(p: TransactionsUpdatedPayload): string {
 }
 
 function infoKey(p: InfoUpdatedPayload): string {
+  if (p.channel) return p.channel;
   if (p.channelId) return p.channelId;
-  if (p.coinId && p.channel) return `${p.channel}.${p.coinId}`;
   return p.coinId ?? p.channel ?? 'unknown';
 }
 
@@ -137,9 +155,16 @@ export async function setupWalletEventBridge(): Promise<() => void> {
     const p = event.payload;
     const key = normalizeChannelKey(infoKey(p));
     const value: ChainInfo = {
+      channel: p.channel ?? p.channelId,
+      percent: p.percent,
       blocks: p.blocks,
       longestChain: p.longestChain,
-      syncing: p.syncing
+      syncing: p.syncing,
+      statusKind: p.statusKind,
+      lastUpdated: p.lastUpdated,
+      lastProgressAt: p.lastProgressAt,
+      stalled: p.stalled,
+      scanRateBlocksPerSec: p.scanRateBlocksPerSec
     };
     networkStore.update((m) => ({ ...m, [key]: value }));
   });
@@ -167,6 +192,8 @@ export async function setupWalletEventBridge(): Promise<() => void> {
 
   const unError = await listen<UpdateErrorPayload>(ERROR, (event) => {
     const p = event.payload;
+    if (shouldSuppressWalletError(p)) return;
+
     const channel = p.channel ? normalizeChannelKey(p.channel) : '';
     const type = p.dataType ?? 'wallet';
     const message = p.message ?? 'Temporarily unavailable';

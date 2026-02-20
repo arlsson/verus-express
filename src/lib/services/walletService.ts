@@ -8,6 +8,10 @@ import type {
   ActiveAssetsState,
   BalanceResult,
   CoinScopesResult,
+  DlightRuntimeStatusResult,
+  DlightSeedStatusResult,
+  SetupDlightSeedRequest,
+  SetupDlightSeedResult,
   Transaction,
   TransactionHistoryPage,
   WalletNetwork
@@ -93,6 +97,31 @@ export async function getActiveAssets(): Promise<ActiveAssetsState> {
 
 export async function setActiveAssets(coinIds: string[]): Promise<ActiveAssetsState> {
   return invoke<ActiveAssetsState>('set_active_assets', { coin_ids: coinIds });
+}
+
+export async function getDlightSeedStatus(): Promise<DlightSeedStatusResult> {
+  return invoke<DlightSeedStatusResult>('get_dlight_seed_status');
+}
+
+export async function setupDlightSeed(
+  request: SetupDlightSeedRequest
+): Promise<SetupDlightSeedResult> {
+  return invoke<SetupDlightSeedResult>('setup_dlight_seed', {
+    request: {
+      mode: request.mode,
+      import_text: request.importText ?? null
+    }
+  });
+}
+
+export async function getDlightRuntimeStatus(
+  channelId: string,
+  coinId?: string
+): Promise<DlightRuntimeStatusResult> {
+  return invoke<DlightRuntimeStatusResult>('get_dlight_runtime_status', {
+    channel_id: channelId,
+    ...(coinId ? { coin_id: coinId } : {})
+  });
 }
 
 export async function readClipboardText(): Promise<string> {

@@ -12,6 +12,8 @@ use crate::types::WalletError;
 /// Trusted VRPC allowlist (per backend architecture plan).
 const VRPC_MAINNET: &str = "https://api.verus.services/";
 const VRPC_TESTNET: &str = "https://api.verustest.net/";
+const DLIGHT_MAINNET: &[&str] = &["lightwallet.verus.services:8120"];
+const DLIGHT_TESTNET: &[&str] = &["lightwalletd.verustest.net:8125"];
 
 /// Default Electrum allowlist for BTC (well-known public servers).
 const ELECTRUM_MAINNET: &[&str] = &["https://electrum.blockstream.info"];
@@ -204,9 +206,15 @@ impl CoinRegistry {
                 display_name: "Verus".to_string(),
                 coin_paprika_id: Some("vrsc-verus-coin".to_string()),
                 proto: Protocol::Vrsc,
-                compatible_channels: vec![Channel::Vrpc],
+                compatible_channels: vec![Channel::Vrpc, Channel::DlightPrivate],
                 decimals: 8,
                 vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+                dlight_endpoints: Some(
+                    DLIGHT_MAINNET
+                        .iter()
+                        .map(|endpoint| endpoint.to_string())
+                        .collect(),
+                ),
                 electrum_endpoints: None,
                 seconds_per_block: 60,
                 mapped_to: None,
@@ -221,9 +229,15 @@ impl CoinRegistry {
                 display_name: "Verus Testnet".to_string(),
                 coin_paprika_id: None,
                 proto: Protocol::Vrsc,
-                compatible_channels: vec![Channel::Vrpc],
+                compatible_channels: vec![Channel::Vrpc, Channel::DlightPrivate],
                 decimals: 8,
                 vrpc_endpoints: vec![VRPC_TESTNET.to_string()],
+                dlight_endpoints: Some(
+                    DLIGHT_TESTNET
+                        .iter()
+                        .map(|endpoint| endpoint.to_string())
+                        .collect(),
+                ),
                 electrum_endpoints: None,
                 seconds_per_block: 60,
                 mapped_to: None,
@@ -241,6 +255,7 @@ impl CoinRegistry {
                 compatible_channels: vec![Channel::Btc],
                 decimals: 8,
                 vrpc_endpoints: vec![],
+                dlight_endpoints: None,
                 electrum_endpoints: Some(
                     ELECTRUM_MAINNET.iter().map(|s| (*s).to_string()).collect(),
                 ),
@@ -260,6 +275,7 @@ impl CoinRegistry {
                 compatible_channels: vec![Channel::Btc],
                 decimals: 8,
                 vrpc_endpoints: vec![],
+                dlight_endpoints: None,
                 electrum_endpoints: Some(
                     ELECTRUM_TESTNET.iter().map(|s| (*s).to_string()).collect(),
                 ),
@@ -279,6 +295,7 @@ impl CoinRegistry {
                 compatible_channels: vec![Channel::Eth],
                 decimals: 18,
                 vrpc_endpoints: vec![],
+                dlight_endpoints: None,
                 electrum_endpoints: None,
                 seconds_per_block: 12,
                 mapped_to: None,
@@ -296,6 +313,7 @@ impl CoinRegistry {
                 compatible_channels: vec![Channel::Eth],
                 decimals: 18,
                 vrpc_endpoints: vec![],
+                dlight_endpoints: None,
                 electrum_endpoints: None,
                 seconds_per_block: 12,
                 mapped_to: None,
@@ -313,6 +331,7 @@ impl CoinRegistry {
                 compatible_channels: vec![Channel::Erc20],
                 decimals: 6,
                 vrpc_endpoints: vec![],
+                dlight_endpoints: None,
                 electrum_endpoints: None,
                 seconds_per_block: 12,
                 mapped_to: Some("ETH".to_string()),
@@ -345,6 +364,7 @@ mod tests {
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
             vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+            dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
             mapped_to: None,
@@ -387,6 +407,7 @@ mod tests {
             compatible_channels: vec![Channel::Erc20],
             decimals: 6,
             vrpc_endpoints: vec![],
+            dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 12,
             mapped_to: Some("ETH".to_string()),
@@ -411,6 +432,7 @@ mod tests {
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
             vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+            dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
             mapped_to: None,
@@ -429,6 +451,7 @@ mod tests {
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
             vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+            dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
             mapped_to: None,

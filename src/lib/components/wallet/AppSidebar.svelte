@@ -27,7 +27,8 @@
     | 'identity'
     | 'address-book'
     | 'apps'
-    | 'activity';
+    | 'activity'
+    | 'settings';
 
   interface WalletData {
     name: string;
@@ -139,7 +140,14 @@
       <Sidebar.GroupContent>
         <Sidebar.Menu>
           <Sidebar.MenuItem>
-            <button type="button" class={settingsButtonClass} aria-label={i18n.t('wallet.topbar.settings')}>
+            <button
+              type="button"
+              class={settingsButtonClass}
+              aria-label={i18n.t('wallet.topbar.settings')}
+              onclick={() => {
+                activeSection = 'settings';
+              }}
+            >
               <SettingsIcon class="size-4" />
               <span>{i18n.t('wallet.topbar.settings')}</span>
             </button>

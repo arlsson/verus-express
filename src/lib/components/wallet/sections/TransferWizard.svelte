@@ -28,6 +28,7 @@
   import { coinsStore } from '$lib/stores/coins.js';
   import { walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { balanceStore, getBalance } from '$lib/stores/balances.js';
+  import { networkStore } from '$lib/stores/network.js';
   import { ratesStore } from '$lib/stores/rates.js';
   import { transactionStore } from '$lib/stores/transactions.js';
   import { addressBookStore, upsertAddressBookContact } from '$lib/stores/addressBook.js';
@@ -152,6 +153,7 @@
   const coins = $derived($coinsStore);
   const walletChannels = $derived($walletChannelsStore);
   const balances = $derived($balanceStore);
+  const chainInfoByChannel = $derived($networkStore);
   const rates = $derived($ratesStore);
   const addressBookContacts = $derived($addressBookStore);
   const stepCopy = $derived(getTransferStepCopy(i18n.t));
@@ -260,6 +262,26 @@
   );
 
   const selectedChannelId = $derived(selectedCoinOption?.channelId ?? null);
+  const selectedChannelInfo = $derived(
+    selectedChannelId ? chainInfoByChannel[selectedChannelId] ?? null : null
+  );
+  const selectedShieldedSyncPercent = $derived(
+    selectedChannelId?.startsWith('dlight_private.')
+      ? toOptionalFiniteNumber(selectedChannelInfo?.percent)
+      : null
+  );
+  const isShieldedSyncBlocked = $derived(
+    selectedShieldedSyncPercent !== null &&
+      selectedShieldedSyncPercent !== 100 &&
+      selectedShieldedSyncPercent !== -1
+  );
+  const shieldedSyncBlockedHelper = $derived(
+    isShieldedSyncBlocked && selectedShieldedSyncPercent !== null
+      ? i18n.t('wallet.transfer.privateSyncBlocked', {
+          percent: formatSyncPercent(selectedShieldedSyncPercent)
+        })
+      : ''
+  );
 
   const selectedChannelPrefix = $derived(selectedChannelId?.split('.')[0] ?? '');
   const selectedSourceSystemId = $derived(
@@ -882,6 +904,7 @@
 
   const primaryDisabled = $derived(
     isBusy ||
+      isShieldedSyncBlocked ||
       (currentStep === 'details' &&
         (!selectedCoin ||
           !selectedChannelId ||
@@ -1733,6 +1756,28 @@
     return 0;
   }
 
+  function toOptionalFiniteNumber(value: unknown): number | null {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+
+    if (typeof value === 'string') {
+      const parsed = Number(value.trim());
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+  }
+
+  function formatSyncPercent(percent: number): string {
+    const clamped = Math.max(0, Math.min(percent, 100));
+    if (clamped > 0 && clamped < 1) return '<1';
+    return i18n.formatNumber(clamped, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 1
+    });
+  }
+
   function formatSheetBalance(value: string): string {
     const numeric = toFiniteNumber(value);
     return i18n.formatNumber(numeric, {
@@ -2335,6 +2380,10 @@
   }
 
   async function runPreflight() {
+    if (isShieldedSyncBlocked) {
+      transferError = shieldedSyncBlockedHelper || i18n.t('wallet.transfer.privateSyncBlockedUnknown');
+      return;
+    }
     if (!selectedCoin || !selectedChannelId || !activeTargetOption || !recipientValid) return;
 
     preflighting = true;
@@ -2382,6 +2431,10 @@
   }
 
   async function broadcast() {
+    if (isShieldedSyncBlocked) {
+      transferError = shieldedSyncBlockedHelper || i18n.t('wallet.transfer.privateSyncBlockedUnknown');
+      return;
+    }
     if (!activePreflight) return;
 
     sending = true;
@@ -2582,6 +2635,11 @@
     {#if transferError}
       <div class="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
         {transferError}
+      </div>
+    {/if}
+    {#if shieldedSyncBlockedHelper}
+      <div class="rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/35 dark:bg-amber-500/12 dark:text-amber-200">
+        {shieldedSyncBlockedHelper}
       </div>
     {/if}
 

@@ -1,3 +1,5 @@
+import type { ScopeKind } from '$lib/types/wallet';
+
 export type TransferStepId = 'details' | 'recipient' | 'review' | 'success';
 
 export type WizardOperationalStepId = Exclude<TransferStepId, 'success'>;
@@ -16,4 +18,5 @@ export type TransferEntryContext = {
   coinId: string;
   channelId: string;
   readOnly: boolean;
+  scopeKind: ScopeKind;
 };

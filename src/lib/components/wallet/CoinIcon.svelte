@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { resolveCoinPresentationById, type CoinGeneratedIcon, type CoinIcon as ResolvedIcon } from '$lib/coins/presentation.js';
+  import { resolveCoinPresentationById } from '$lib/coins/presentation.js';
+  import type { CoinGeneratedIcon, CoinIcon as ResolvedIcon } from '$lib/coins/presentation.js';
   import type { Protocol } from '$lib/types/wallet.js';
 
   interface CoinIconProps {
@@ -9,6 +10,7 @@
     size?: number;
     showBadge?: boolean;
     decorative?: boolean;
+    privateMuted?: boolean;
     class?: string;
   }
 
@@ -19,7 +21,11 @@
   const size = $derived(props.size ?? 28);
   const showBadge = $derived(props.showBadge ?? false);
   const decorative = $derived(props.decorative ?? false);
+  const privateMuted = $derived(props.privateMuted ?? false);
   const className = $derived(props.class ?? '');
+  const iconSurfaceClass = $derived(
+    privateMuted ? 'coin-icon-surface coin-icon-surface--private-muted' : 'coin-icon-surface'
+  );
 
   const resolved = $derived(resolveCoinPresentationById(coinId, proto));
   const presentation = $derived(
@@ -79,7 +85,7 @@
 >
   {#if mainIcon.kind === 'asset'}
     <img
-      class="h-full w-full object-contain"
+      class={`${iconSurfaceClass} h-full w-full object-contain`}
       src={mainIcon.dark}
       alt={decorative ? '' : iconAlt}
       aria-hidden={decorative}
@@ -88,7 +94,7 @@
     />
   {:else if mainIcon.kind === 'fiat-symbol'}
     <div
-      class="text-foreground border-border/30 bg-muted/25 flex h-full w-full items-center justify-center rounded-full border text-[11px] font-semibold"
+      class={`${iconSurfaceClass} text-foreground border-border/30 bg-muted/25 flex h-full w-full items-center justify-center rounded-full border text-[11px] font-semibold`}
       aria-hidden={decorative}
       title={decorative ? undefined : iconAlt}
     >
@@ -96,7 +102,7 @@
     </div>
   {:else}
     <div
-      class="border-border/30 grid h-full w-full grid-cols-4 overflow-hidden rounded-full border"
+      class={`${iconSurfaceClass} border-border/30 grid h-full w-full grid-cols-4 overflow-hidden rounded-full border`}
       aria-hidden={decorative}
       title={decorative ? undefined : iconAlt}
     >
@@ -134,3 +140,24 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .coin-icon-surface--private-muted {
+    filter: grayscale(1) saturate(0.05);
+    opacity: 0.72;
+    -webkit-mask-image: linear-gradient(
+      145deg,
+      rgba(0, 0, 0, 1) 0%,
+      rgba(0, 0, 0, 0.62) 46%,
+      rgba(0, 0, 0, 0.1) 78%,
+      rgba(0, 0, 0, 0) 100%
+    );
+    mask-image: linear-gradient(
+      145deg,
+      rgba(0, 0, 0, 1) 0%,
+      rgba(0, 0, 0, 0.62) 46%,
+      rgba(0, 0, 0, 0.1) 78%,
+      rgba(0, 0, 0, 0) 100%
+    );
+  }
+</style>

@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::core::address_book::manager as address_book_manager;
 use crate::core::auth::SessionManager;
 use crate::core::channels::btc::BtcProviderPool;
+use crate::core::channels::dlight_private;
 use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::coins::Channel;
@@ -23,12 +24,13 @@ use crate::core::crypto::wif_encoding::decode_wif_unchecked_network;
 use crate::core::updates::UpdateEngineStartConfig;
 use crate::core::wallet::WalletManager;
 use crate::core::{GuardSessionManager, PreflightStore, UpdateEngine};
-use crate::types::wallet::WalletNetwork;
+use crate::types::wallet::{DlightSeedSetupMode, ScopeKind, WalletNetwork};
 use crate::types::{
     AccountRecord, ActiveAssetsState, ActiveWalletResponse, AddressEndpointKind, AddressResponse,
-    CoinScope, CoinScopesResult, CreateWalletRequest, CreateWalletResult, GenerateMnemonicRequest,
-    ImportWalletTextRequest, LinkedIdentity, MnemonicResult, WalletError, WalletListItem,
-    WalletSecretKind,
+    CoinScope, CoinScopesResult, CreateWalletRequest, CreateWalletResult,
+    DlightRuntimeStatusResult, DlightSeedStatusResult, GenerateMnemonicRequest,
+    ImportWalletTextRequest, LinkedIdentity, MnemonicResult, SetupDlightSeedRequest,
+    SetupDlightSeedResult, WalletError, WalletListItem, WalletSecretKind,
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -512,6 +514,25 @@ fn classify_import_text(import_text: &str) -> Result<(WalletSecretKind, String),
     Ok((WalletSecretKind::SeedText, trimmed.to_string()))
 }
 
+async fn is_valid_24_word_mnemonic(
+    wallet_manager: &WalletManager,
+    seed: &str,
+) -> Result<bool, WalletError> {
+    let normalized = seed.trim();
+    if normalized.is_empty() {
+        return Ok(false);
+    }
+    if normalized.split_whitespace().count() != 24 {
+        return Ok(false);
+    }
+    wallet_manager.validate_mnemonic(normalized).await
+}
+
+fn is_probable_dlight_spending_key(seed: &str) -> bool {
+    let normalized = seed.trim();
+    normalized.starts_with("secret-extended-key-")
+}
+
 /// Create a new wallet with Stronghold encryption
 #[tauri::command(rename_all = "snake_case")]
 pub async fn create_wallet(
@@ -543,10 +564,22 @@ pub async fn create_wallet(
 
     // Store seed in Stronghold
     let session = session_manager.lock().await;
-    session
-        .stronghold_store()
+    let stronghold_store = session.stronghold_store().clone();
+    stronghold_store
         .store_seed(&account_id, &request.seed_phrase, &password, &app_handle)
         .await?;
+    if request.setup_dlight_with_primary {
+        let password_hash =
+            crate::core::auth::stronghold_store::StrongholdStore::hash_password(&password);
+        stronghold_store
+            .store_dlight_seed(
+                &account_id,
+                password_hash.as_slice(),
+                request.network,
+                Some(&request.seed_phrase),
+            )
+            .await?;
+    }
     drop(session);
 
     // Create account hash
@@ -736,6 +769,7 @@ pub async fn lock_wallet(
     println!("[WALLET] Lock wallet requested");
 
     update_engine.stop().await;
+    dlight_private::stop_all_runtimes().await;
 
     let mut session = session_manager.lock().await;
     session.lock();
@@ -939,6 +973,154 @@ pub async fn set_active_assets(
     })
 }
 
+/// Returns whether a dlight seed is configured for the active account/network.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_dlight_seed_status(
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<DlightSeedStatusResult, WalletError> {
+    let session = session_manager.lock().await;
+    if !session.is_unlocked() {
+        return Err(WalletError::WalletLocked);
+    }
+
+    let account_id = session
+        .active_account_id()
+        .cloned()
+        .ok_or(WalletError::WalletLocked)?;
+    let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+    let password_hash = session.stronghold_password_hash_for_storage()?;
+    let stronghold_store = session.stronghold_store().clone();
+    drop(session);
+
+    let seed = stronghold_store
+        .load_dlight_seed(&account_id, password_hash.as_ref(), network)
+        .await?;
+    let shielded_address = seed.as_deref().and_then(|value| {
+        dlight_private::derive_scope_address(value, network)
+            .map_err(|error| {
+                println!(
+                    "[WALLET] Failed to derive dlight shielded address for status lookup: {:?}",
+                    error
+                );
+                error
+            })
+            .ok()
+    });
+
+    Ok(DlightSeedStatusResult {
+        configured: seed.is_some() && shielded_address.is_some(),
+        shielded_address,
+    })
+}
+
+/// Sets up dlight seed storage for the active account/network.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn setup_dlight_seed(
+    request: SetupDlightSeedRequest,
+    wallet_manager: State<'_, WalletManager>,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<SetupDlightSeedResult, WalletError> {
+    let session = session_manager.lock().await;
+    if !session.is_unlocked() {
+        return Err(WalletError::WalletLocked);
+    }
+
+    let account_id = session
+        .active_account_id()
+        .cloned()
+        .ok_or(WalletError::WalletLocked)?;
+    let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+    let password_hash = session.stronghold_password_hash_for_storage()?;
+    let stronghold_store = session.stronghold_store().clone();
+    let reuse_primary_seed = if matches!(request.mode, DlightSeedSetupMode::ReusePrimary) {
+        Some(session.active_seed_material()?)
+    } else {
+        None
+    };
+    drop(session);
+
+    let mut generated_seed_phrase: Option<String> = None;
+    let seed_to_store = match request.mode {
+        DlightSeedSetupMode::ReusePrimary => {
+            let seed = reuse_primary_seed.ok_or(WalletError::InvalidSeedPhrase)?;
+            if !is_valid_24_word_mnemonic(wallet_manager.inner(), seed.as_str()).await? {
+                return Err(WalletError::InvalidSeedPhrase);
+            }
+            seed.to_string()
+        }
+        DlightSeedSetupMode::CreateNew => {
+            let seed = wallet_manager.generate_mnemonic(24).await?;
+            generated_seed_phrase = Some(seed.clone());
+            seed
+        }
+        DlightSeedSetupMode::ImportText => {
+            let imported = request.import_text.unwrap_or_default().trim().to_string();
+            if imported.is_empty() {
+                return Err(WalletError::InvalidImportText);
+            }
+            if is_probable_dlight_spending_key(&imported) {
+                imported
+            } else if is_valid_24_word_mnemonic(wallet_manager.inner(), &imported).await? {
+                imported
+            } else {
+                return Err(WalletError::InvalidImportText);
+            }
+        }
+    };
+    // Validate and normalize z-address derivation before persisting.
+    let _ = dlight_private::derive_scope_address(&seed_to_store, network)?;
+
+    stronghold_store
+        .store_dlight_seed(
+            &account_id,
+            password_hash.as_ref(),
+            network,
+            Some(seed_to_store.as_str()),
+        )
+        .await?;
+
+    Ok(SetupDlightSeedResult {
+        configured: true,
+        generated_seed_phrase,
+        requires_relogin: true,
+    })
+}
+
+/// Returns runtime diagnostics for a dlight channel. Intended for support/debug visibility.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_dlight_runtime_status(
+    channel_id: String,
+    coin_id: Option<String>,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+    coin_registry: State<'_, Arc<CoinRegistry>>,
+) -> Result<DlightRuntimeStatusResult, WalletError> {
+    let diagnostics = crate::core::channels::route_get_dlight_runtime_status(
+        &channel_id,
+        coin_id.as_deref(),
+        session_manager.inner(),
+        coin_registry.as_ref(),
+    )
+    .await?;
+
+    Ok(DlightRuntimeStatusResult {
+        channel_id,
+        runtime_key: diagnostics.runtime_key,
+        status_kind: diagnostics.status_kind,
+        percent: diagnostics.percent,
+        scanned_height: diagnostics.scanned_height,
+        tip_height: diagnostics.tip_height,
+        estimated_tip_height: diagnostics.estimated_tip_height,
+        syncing: diagnostics.syncing,
+        last_updated: diagnostics.last_updated,
+        last_progress_at: diagnostics.last_progress_at,
+        last_tip_probe_at: diagnostics.last_tip_probe_at,
+        consecutive_failures: diagnostics.consecutive_failures,
+        scan_rate_blocks_per_sec: diagnostics.scan_rate_blocks_per_sec,
+        stalled: diagnostics.stalled,
+        last_error: diagnostics.last_error,
+    })
+}
+
 /// Get available subwallet scopes for a coin.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_coin_scopes(
@@ -1021,7 +1203,43 @@ pub async fn get_coin_scopes(
                     system_display_name: system.system_display_name.clone(),
                     is_primary_address: address_scope.is_primary_address,
                     is_read_only: address_scope.is_read_only,
+                    scope_kind: ScopeKind::Transparent,
                 });
+            }
+        }
+
+        if coin_supports_channel(&coin, Channel::DlightPrivate) {
+            let dlight_seed = stronghold_store
+                .load_dlight_seed(&account_id, password_hash.as_ref(), network)
+                .await?;
+            if let Some(seed) = dlight_seed {
+                match dlight_private::derive_scope_address(&seed, network) {
+                    Ok(shielded_address) => {
+                        if let Some(system) = systems.iter().find(|system| system.is_root) {
+                            scopes.push(CoinScope {
+                                channel_id: dlight_private::canonical_dlight_channel_id(
+                                    &shielded_address,
+                                    &system.system_id,
+                                ),
+                                coin_id: coin.id.clone(),
+                                address: shielded_address.clone(),
+                                address_label: "Shielded wallet".to_string(),
+                                system_id: system.system_id.clone(),
+                                system_ticker: system.system_ticker.clone(),
+                                system_display_name: system.system_display_name.clone(),
+                                is_primary_address: true,
+                                is_read_only: false,
+                                scope_kind: ScopeKind::Shielded,
+                            });
+                        }
+                    }
+                    Err(error) => {
+                        println!(
+                            "[WALLET] Failed to derive dlight shielded address for scopes: {:?}",
+                            error
+                        );
+                    }
+                }
             }
         }
 
@@ -1045,6 +1263,7 @@ pub async fn get_coin_scopes(
             system_display_name: coin.display_name.clone(),
             is_primary_address: true,
             is_read_only: false,
+            scope_kind: ScopeKind::Transparent,
         }],
     })
 }
@@ -1073,12 +1292,12 @@ pub async fn list_wallets(
 #[cfg(test)]
 mod tests {
     use super::{
-        channel_id_for_non_vrpc_coin, collect_vrpc_scope_addresses, collect_vrpc_system_descriptors,
-        dedupe_preserve_order, sanitize_active_coin_ids,
+        channel_id_for_non_vrpc_coin, collect_vrpc_scope_addresses,
+        collect_vrpc_system_descriptors, dedupe_preserve_order, sanitize_active_coin_ids,
     };
     use crate::core::coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
-    use crate::types::LinkedIdentity;
     use crate::types::wallet::WalletNetwork;
+    use crate::types::LinkedIdentity;
 
     const VRSC_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
     const VETH_SYSTEM_ID: &str = "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X";
@@ -1102,6 +1321,7 @@ mod tests {
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
             vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+            dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
             mapped_to: None,
@@ -1159,16 +1379,25 @@ mod tests {
         );
 
         assert_eq!(scope_addresses.len(), 3);
-        assert_eq!(scope_addresses[0].address, "RAutMoGh771ECTDbTq2qwwZo7MF5Tov3ka");
+        assert_eq!(
+            scope_addresses[0].address,
+            "RAutMoGh771ECTDbTq2qwwZo7MF5Tov3ka"
+        );
         assert_eq!(scope_addresses[0].is_primary_address, true);
         assert_eq!(scope_addresses[0].is_read_only, false);
 
-        assert_eq!(scope_addresses[1].address, "i8A7LnkQfA97VQv64G4H4vbRb4vP7h4G8b");
+        assert_eq!(
+            scope_addresses[1].address,
+            "i8A7LnkQfA97VQv64G4H4vbRb4vP7h4G8b"
+        );
         assert_eq!(scope_addresses[1].address_label, "scam@");
         assert_eq!(scope_addresses[1].is_primary_address, false);
         assert_eq!(scope_addresses[1].is_read_only, false);
 
-        assert_eq!(scope_addresses[2].address, "RWatchedAddr1111111111111111111111");
+        assert_eq!(
+            scope_addresses[2].address,
+            "RWatchedAddr1111111111111111111111"
+        );
         assert_eq!(scope_addresses[2].is_primary_address, false);
         assert_eq!(scope_addresses[2].is_read_only, true);
     }
@@ -1346,6 +1575,7 @@ mod tests {
             compatible_channels: vec![Channel::Btc, Channel::Eth],
             decimals: 8,
             vrpc_endpoints: vec![],
+            dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 600,
             mapped_to: None,

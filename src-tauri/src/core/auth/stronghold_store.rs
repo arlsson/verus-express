@@ -21,6 +21,8 @@ const ACTIVE_ASSETS_RECORD_KEY: &[u8] = b"active_assets_v1";
 const ACTIVE_ASSETS_SCHEMA_VERSION: u8 = 1;
 const LINKED_IDENTITIES_RECORD_KEY: &[u8] = b"linked_identities_v1";
 const LINKED_IDENTITIES_SCHEMA_VERSION: u8 = 1;
+const DLIGHT_SEED_RECORD_KEY: &[u8] = b"dlight_seed_v1";
+const DLIGHT_SEED_SCHEMA_VERSION: u8 = 1;
 const MAX_LINKED_IDENTITIES: usize = 100;
 const MAX_FAVORITE_LINKED_IDENTITIES: usize = 2;
 
@@ -76,12 +78,31 @@ struct LinkedIdentitiesSnapshot {
     testnet: Vec<LinkedIdentity>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DlightSeedSnapshot {
+    schema_version: u8,
+    #[serde(default)]
+    mainnet: Option<String>,
+    #[serde(default)]
+    testnet: Option<String>,
+}
+
 impl Default for LinkedIdentitiesSnapshot {
     fn default() -> Self {
         Self {
             schema_version: LINKED_IDENTITIES_SCHEMA_VERSION,
             mainnet: vec![],
             testnet: vec![],
+        }
+    }
+}
+
+impl Default for DlightSeedSnapshot {
+    fn default() -> Self {
+        Self {
+            schema_version: DLIGHT_SEED_SCHEMA_VERSION,
+            mainnet: None,
+            testnet: None,
         }
     }
 }
@@ -117,6 +138,14 @@ impl StrongholdStore {
         Ok(Self { base_path })
     }
 
+    /// Returns the app data directory root used by this store.
+    pub fn app_data_dir(&self) -> PathBuf {
+        self.base_path
+            .parent()
+            .map(|path| path.to_path_buf())
+            .unwrap_or_else(|| self.base_path.clone())
+    }
+
     fn account_snapshot_path(&self, account_id: &str) -> PathBuf {
         let account_dir = self.base_path.join("accounts").join(account_id);
         let _ = std::fs::create_dir_all(&account_dir);
@@ -145,6 +174,12 @@ impl StrongholdStore {
         let account_dir = self.base_path.join("accounts").join(account_id);
         let _ = std::fs::create_dir_all(&account_dir);
         account_dir.join("linked_identities.snapshot.stronghold")
+    }
+
+    fn dlight_seed_snapshot_path(&self, account_id: &str) -> PathBuf {
+        let account_dir = self.base_path.join("accounts").join(account_id);
+        let _ = std::fs::create_dir_all(&account_dir);
+        account_dir.join("dlight_seed.snapshot.stronghold")
     }
 
     async fn load_watched_vrpc_addresses_snapshot(
@@ -254,6 +289,41 @@ impl StrongholdStore {
 
         serde_json::from_slice::<LinkedIdentitiesSnapshot>(&payload).map_err(|e| {
             println!("[AUTH] Parse linked identities snapshot failed: {}", e);
+            WalletError::OperationFailed
+        })
+    }
+
+    async fn load_dlight_seed_snapshot(
+        &self,
+        account_id: &str,
+        password_hash: &[u8],
+    ) -> Result<DlightSeedSnapshot, WalletError> {
+        let path = self.dlight_seed_snapshot_path(account_id);
+        if !path.exists() {
+            return Ok(DlightSeedSnapshot::default());
+        }
+
+        let snapshot_path = SnapshotPath::from_path(&path);
+        let keyprovider = Self::keyprovider_from_hash(password_hash)?;
+        let stronghold = Stronghold::default();
+        let client = stronghold
+            .load_client_from_snapshot(account_id.as_bytes(), &keyprovider, &snapshot_path)
+            .map_err(|e| {
+                println!("[AUTH] Load dlight seed snapshot failed: {}", e);
+                WalletError::OperationFailed
+            })?;
+
+        let bytes = client.store().get(DLIGHT_SEED_RECORD_KEY).map_err(|e| {
+            println!("[AUTH] Read dlight seed record failed: {}", e);
+            WalletError::OperationFailed
+        })?;
+
+        let Some(payload) = bytes else {
+            return Ok(DlightSeedSnapshot::default());
+        };
+
+        serde_json::from_slice::<DlightSeedSnapshot>(&payload).map_err(|e| {
+            println!("[AUTH] Parse dlight seed snapshot failed: {}", e);
             WalletError::OperationFailed
         })
     }
@@ -707,6 +777,75 @@ impl StrongholdStore {
             .commit_with_keyprovider(&snapshot_path, &keyprovider)
             .map_err(|e| {
                 println!("[AUTH] Commit linked identities snapshot failed: {}", e);
+                WalletError::OperationFailed
+            })?;
+
+        Ok(())
+    }
+
+    pub async fn load_dlight_seed(
+        &self,
+        account_id: &str,
+        password_hash: &[u8],
+        network: WalletNetwork,
+    ) -> Result<Option<String>, WalletError> {
+        let snapshot = self
+            .load_dlight_seed_snapshot(account_id, password_hash)
+            .await?;
+        let seed = match network {
+            WalletNetwork::Mainnet => snapshot.mainnet,
+            WalletNetwork::Testnet => snapshot.testnet,
+        };
+
+        Ok(seed
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()))
+    }
+
+    pub async fn store_dlight_seed(
+        &self,
+        account_id: &str,
+        password_hash: &[u8],
+        network: WalletNetwork,
+        seed: Option<&str>,
+    ) -> Result<(), WalletError> {
+        let path = self.dlight_seed_snapshot_path(account_id);
+        let snapshot_path = SnapshotPath::from_path(&path);
+        let keyprovider = Self::keyprovider_from_hash(password_hash)?;
+
+        let mut snapshot = self
+            .load_dlight_seed_snapshot(account_id, password_hash)
+            .await?;
+        snapshot.schema_version = DLIGHT_SEED_SCHEMA_VERSION;
+
+        let normalized_seed = seed
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        match network {
+            WalletNetwork::Mainnet => snapshot.mainnet = normalized_seed,
+            WalletNetwork::Testnet => snapshot.testnet = normalized_seed,
+        }
+
+        let stronghold = Stronghold::default();
+        let client = Self::get_or_create_client(
+            &stronghold,
+            &snapshot_path,
+            account_id,
+            &keyprovider,
+            path.exists(),
+        )?;
+        let payload = serde_json::to_vec(&snapshot).map_err(|_| WalletError::OperationFailed)?;
+        client
+            .store()
+            .insert(DLIGHT_SEED_RECORD_KEY.to_vec(), payload, None)
+            .map_err(|e| {
+                println!("[AUTH] Store dlight seed failed: {}", e);
+                WalletError::OperationFailed
+            })?;
+        stronghold
+            .commit_with_keyprovider(&snapshot_path, &keyprovider)
+            .map_err(|e| {
+                println!("[AUTH] Commit dlight seed snapshot failed: {}", e);
                 WalletError::OperationFailed
             })?;
 

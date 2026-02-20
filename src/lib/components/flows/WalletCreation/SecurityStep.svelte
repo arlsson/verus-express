@@ -9,7 +9,13 @@
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { i18nStore } from '$lib/i18n';
 
-  let { securityAccepted = $bindable(false) }: { securityAccepted: boolean } = $props();
+  let {
+    securityAccepted = $bindable(false),
+    setupPrivateVerus = $bindable(true)
+  }: {
+    securityAccepted: boolean;
+    setupPrivateVerus: boolean;
+  } = $props();
   const i18n = $derived($i18nStore);
 </script>
 
@@ -48,5 +54,20 @@
     <span class="text-sm leading-5 text-foreground">
       {i18n.t('walletCreation.step3.checkbox')}
     </span>
+  </label>
+
+  <label
+    for="security-private-verus"
+    class="flex cursor-pointer items-start gap-3 rounded-lg border border-border/60 bg-muted/20 px-4 py-3"
+  >
+    <Checkbox id="security-private-verus" bind:checked={setupPrivateVerus} class="mt-0.5" />
+    <div class="space-y-1">
+      <span class="text-sm leading-5 text-foreground">
+        {i18n.t('walletCreation.security.privateVerusToggle')}
+      </span>
+      <p class="text-muted-foreground text-xs leading-5">
+        {i18n.t('walletCreation.security.privateVerusHint')}
+      </p>
+    </div>
   </label>
 </div>

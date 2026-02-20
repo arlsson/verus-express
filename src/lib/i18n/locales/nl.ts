@@ -165,6 +165,28 @@ export const nl: Record<string, string> = {
   'wallet.topbar.networkSettings': 'Netwerkinstellingen',
   'wallet.topbar.about': 'Over',
   'wallet.topbar.lockWallet': 'Lock',
+  'wallet.private.label.mainnet': 'Verus PRIVATE',
+  'wallet.private.label.testnet': 'Verus PRIVATE Testnet',
+  'wallet.private.syncingPercent': 'Synchroniseren {percent}%',
+  'wallet.settings.privateVerus.title': 'Private Verus',
+  'wallet.settings.privateVerus.description':
+    'Stel shielded toegang in voor {label}. Je kunt je primaire 24-woorden-seed hergebruiken of een aparte private seed instellen.',
+  'wallet.settings.privateVerus.statusConfigured': 'Private setup is geconfigureerd.',
+  'wallet.settings.privateVerus.statusNotConfigured': 'Private setup is nog niet geconfigureerd.',
+  'wallet.settings.privateVerus.statusAddress': 'Shielded adres: {address}',
+  'wallet.settings.privateVerus.statusLoadError': 'Kon de status van private setup niet laden.',
+  'wallet.settings.privateVerus.reusePrimary': 'Primaire wallet-seed hergebruiken',
+  'wallet.settings.privateVerus.createNew': 'Nieuwe private seed maken',
+  'wallet.settings.privateVerus.importLabel': 'Private seed of spending key importeren',
+  'wallet.settings.privateVerus.importPlaceholder':
+    'Plak een 24-woorden-herstelzin of secret-extended-key-main…',
+  'wallet.settings.privateVerus.importAction': 'Private seed importeren',
+  'wallet.settings.privateVerus.settingUp': 'Private wallet instellen…',
+  'wallet.settings.privateVerus.generatedSeedTitle': 'Nieuwe private seedzin',
+  'wallet.settings.privateVerus.setupSuccess': 'Private setup voltooid.',
+  'wallet.settings.privateVerus.setupSuccessRelogin':
+    'Private setup voltooid. Vergrendel en ontgrendel je wallet om private kanalen te activeren.',
+  'wallet.settings.privateVerus.setupError': 'Kon private setup niet voltooien.',
 
   'wallet.overview.mainWallet': 'Hoofdwallet',
   'wallet.overview.available': 'Beschikbaar:',
@@ -204,6 +226,9 @@ export const nl: Record<string, string> = {
   'wallet.assetDetails.readOnly': 'Alleen lezen',
   'wallet.assetDetails.readOnlyHelper':
     'Versturen en omwisselen is alleen beschikbaar vanaf je primaire adres.',
+  'wallet.assetDetails.privateSyncInlineHelper': 'Shielded saldo synchroniseert nog',
+  'wallet.assetDetails.privateSyncHelper':
+    'Private transfers zijn niet beschikbaar terwijl shielded synchronisatie nog bezig is.',
   'wallet.assetDetails.transactions': 'Transactiegeschiedenis',
   'wallet.assetDetails.connectedToScope': 'Gekoppeld aan {address} op {network}',
   'wallet.assetDetails.loadingTransactions': 'Transacties laden…',
@@ -457,6 +482,10 @@ export const nl: Record<string, string> = {
   'wallet.transfer.review.refresh': 'Controle vernieuwen',
   'wallet.transfer.reviewUnavailable':
     'Reviewgegevens zijn niet beschikbaar. Voer preflight opnieuw uit.',
+  'wallet.transfer.privateSyncBlocked':
+    'Private Verus synchroniseert nog ({percent}%). Verzenden is beschikbaar zodra de synchronisatie 100% bereikt.',
+  'wallet.transfer.privateSyncBlockedUnknown':
+    'Private Verus synchroniseert nog. Verzenden is beschikbaar zodra de synchronisatie 100% bereikt.',
   'wallet.transfer.saveRecipient.title': 'Ontvanger opslaan',
   'wallet.transfer.saveRecipient.description':
     'Sla dit adres op in je adresboek zodat je het later opnieuw kunt gebruiken.',
@@ -749,6 +778,9 @@ export const nl: Record<string, string> = {
   'walletCreation.security.item2': 'Maak nooit screenshots en bewaar het niet digitaal.',
   'walletCreation.security.item3': 'Bewaar het offline op een veilige plek.',
   'walletCreation.security.item4': 'Deel het nooit met iemand.',
+  'walletCreation.security.privateVerusToggle': 'Private Verus instellen met deze wallet-seed',
+  'walletCreation.security.privateVerusHint':
+    'Aanbevolen. Als je dit nu overslaat, kun je het later nog instellen in Instellingen.',
 
   'walletCreation.backup.generating': 'Je veilige 24-woorden-backup wordt gegenereerd…',
   'walletCreation.backup.groupLabel': 'Woorden {start}-{end}',

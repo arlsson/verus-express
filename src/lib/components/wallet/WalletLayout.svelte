@@ -17,9 +17,11 @@
   import Apps from './sections/Apps.svelte';
   import Activity from './sections/Activity.svelte';
   import AddressBook from './sections/AddressBook.svelte';
+  import Settings from './sections/Settings.svelte';
   import { dismissWalletError, walletErrorsStore } from '$lib/stores/walletErrors.js';
   import { i18nStore } from '$lib/i18n';
   import type { TransferEntryContext } from './sections/transfer-wizard/types';
+  import type { WalletEntrySelection } from '$lib/types/wallet';
 
   interface WalletData {
     name: string;
@@ -36,11 +38,12 @@
     | 'identity'
     | 'apps'
     | 'activity'
-    | 'address-book';
+    | 'address-book'
+    | 'settings';
 
   const { walletData }: { walletData: WalletData } = $props();
   let activeSection = $state<SectionId>('overview');
-  let activeAssetDetailsCoinId = $state<string | null>(null);
+  let activeAssetDetailsEntry = $state<WalletEntrySelection | null>(null);
   let transferEntryContext = $state<TransferEntryContext | null>(null);
   const walletErrors = $derived($walletErrorsStore);
   const latestError = $derived(walletErrors.latest);
@@ -63,7 +66,7 @@
         bind:activeSection
         {walletData}
         onSelectOverview={() => {
-          activeAssetDetailsCoinId = null;
+          activeAssetDetailsEntry = null;
           transferEntryContext = null;
           activeSection = 'overview';
         }}
@@ -89,9 +92,12 @@
           : 'flex-1 min-h-0 overflow-auto'}
       >
         {#if activeSection === 'overview'}
-          {#if activeAssetDetailsCoinId}
+          {#if activeAssetDetailsEntry}
             <AssetDetails
-              coinId={activeAssetDetailsCoinId}
+              coinId={activeAssetDetailsEntry.coinId}
+              walletEntryKind={activeAssetDetailsEntry.walletEntryKind}
+              scopeFilterMode={activeAssetDetailsEntry.scopeFilterMode}
+              entryDisplayName={activeAssetDetailsEntry.displayName}
               onNavigateToReceive={() => {
                 activeSection = 'receive';
               }}
@@ -107,8 +113,8 @@
           {:else}
             <Overview
               {walletData}
-              onOpenAssetDetails={(coinId) => {
-                activeAssetDetailsCoinId = coinId;
+              onOpenAssetDetails={(entry) => {
+                activeAssetDetailsEntry = entry;
               }}
               onNavigateToSend={() => {
                 transferEntryContext = null;
@@ -149,6 +155,8 @@
           <Activity />
         {:else if activeSection === 'address-book'}
           <AddressBook />
+        {:else if activeSection === 'settings'}
+          <Settings walletNetwork={walletData.network ?? 'mainnet'} />
         {/if}
       </main>
     </Sidebar.Inset>

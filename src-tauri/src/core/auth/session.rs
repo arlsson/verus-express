@@ -19,6 +19,7 @@ pub struct SessionManager {
     timeout_duration: Duration,
     derived_keys: HashMap<String, DerivedKeys>, // account_id -> keys
     active_network: Option<WalletNetwork>,
+    active_seed_material: Option<Zeroizing<String>>,
     stronghold_password_hash: Option<Zeroizing<Vec<u8>>>,
     stronghold_store: StrongholdStore,
 }
@@ -34,6 +35,7 @@ impl SessionManager {
             timeout_duration: Duration::from_secs(0),
             derived_keys: HashMap::new(),
             active_network: None,
+            active_seed_material: None,
             stronghold_password_hash: None,
             stronghold_store,
         }
@@ -75,6 +77,7 @@ impl SessionManager {
         self.derived_keys.insert(account_id.clone(), keys);
         self.active_account_id = Some(account_id);
         self.active_network = Some(wallet_network);
+        self.active_seed_material = Some(Zeroizing::new(seed));
         self.stronghold_password_hash =
             Some(Zeroizing::new(StrongholdStore::hash_password(&password)));
         self.is_unlocked = true;
@@ -94,6 +97,7 @@ impl SessionManager {
         self.derived_keys.clear();
         self.active_account_id = None;
         self.active_network = None;
+        self.active_seed_material = None;
         self.stronghold_password_hash = None;
         self.is_unlocked = false;
         self.unlocked_at = None;
@@ -157,6 +161,18 @@ impl SessionManager {
     /// Returns the selected wallet network for the active session.
     pub fn active_network(&self) -> Option<WalletNetwork> {
         self.active_network
+    }
+
+    /// Returns the active seed text while unlocked (used for optional secondary seed setup).
+    pub fn active_seed_material(&self) -> Result<Zeroizing<String>, WalletError> {
+        if !self.is_unlocked || self.is_expired() {
+            return Err(WalletError::WalletLocked);
+        }
+        let seed = self
+            .active_seed_material
+            .as_ref()
+            .ok_or(WalletError::WalletLocked)?;
+        Ok(Zeroizing::new(seed.to_string()))
     }
 
     /// Set session timeout duration

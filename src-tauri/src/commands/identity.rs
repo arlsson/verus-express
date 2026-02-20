@@ -118,8 +118,9 @@ fn resolve_identity_display_name(
         return Some(friendly);
     }
 
-    let identity_fqn = first_non_empty_field(identity, &["fullyqualifiedname", "fullyQualifiedName"])
-        .or_else(|| payload_fully_qualified_name.and_then(normalize_non_empty));
+    let identity_fqn =
+        first_non_empty_field(identity, &["fullyqualifiedname", "fullyQualifiedName"])
+            .or_else(|| payload_fully_qualified_name.and_then(normalize_non_empty));
 
     if let Some(identity_fqn) = identity_fqn {
         return format_fully_qualified_name_for_display(&identity_fqn);
@@ -186,7 +187,8 @@ fn map_identity_lookup_error(err: WalletError) -> WalletError {
 
 fn parse_getidentity_payload(raw: Value) -> Result<ParsedGetIdentityPayload, WalletError> {
     let status = value_as_non_empty_string(raw.get("status"));
-    let fully_qualified_name = first_non_empty_field(&raw, &["fullyqualifiedname", "fullyQualifiedName"]);
+    let fully_qualified_name =
+        first_non_empty_field(&raw, &["fullyqualifiedname", "fullyQualifiedName"]);
     let friendly_name = first_non_empty_field(&raw, &["friendlyname", "friendlyName"]);
     let Some(identity) = raw.get("identity").cloned() else {
         return Err(WalletError::IdentityNotFound);
@@ -1040,7 +1042,10 @@ mod tests {
         )
         .expect("details");
 
-        assert_eq!(details.fully_qualified_name.as_deref(), Some("shoes.valuid@"));
+        assert_eq!(
+            details.fully_qualified_name.as_deref(),
+            Some("shoes.valuid@")
+        );
     }
 
     #[test]

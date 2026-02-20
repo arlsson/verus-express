@@ -66,6 +66,9 @@ pub enum WalletError {
     #[error("Unsupported network for this operation")]
     UnsupportedNetwork,
 
+    #[error("dlight synchronizer not ready")]
+    DlightSynchronizerNotReady,
+
     #[error("Ethereum channels are not configured")]
     EthNotConfigured,
 

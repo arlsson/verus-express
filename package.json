@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "wipe": "./scripts/wipe-wallets.sh",
+    "wipez": "./scripts/wipe-dlight.sh",
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
