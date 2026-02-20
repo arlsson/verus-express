@@ -2,7 +2,7 @@
   "provenance": {
     "source_repo": "valu-mobile",
     "source_path": "node_modules/@bitgo/utxo-lib/src/{transaction.js,transaction_builder.js,smart_transaction_signatures.js}",
-    "source_branch": "newsend2",
+    "source_branch": "newsend3",
     "captured_at": "2026-02-12"
   },
   "vectors": {

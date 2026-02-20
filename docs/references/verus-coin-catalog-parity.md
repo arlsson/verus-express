@@ -6,7 +6,7 @@ last_reviewed: 2026-02-14
 # Verus coin catalog parity
 
 This document defines how desktop `lite-wallet` imports coin display metadata and
-iconography from `valu-mobile` (`newsend2`) without changing backend operational
+iconography from `valu-mobile` (`newsend3`) without changing backend operational
 coin registry scope.
 
 ## Source inputs
@@ -65,7 +65,7 @@ for the active account + network:
 
 ## Expected parity invariants
 
-Current baseline (from `valu-mobile` `newsend2`):
+Current baseline (from `valu-mobile` `newsend3`):
 
 - `87` total coin entries.
 - `85` direct logo mappings.

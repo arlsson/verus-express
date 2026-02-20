@@ -16,7 +16,13 @@ const VRSC_COIN_ID: &str = "VRSC";
 const VRSCTEST_COIN_ID: &str = "VRSCTEST";
 
 pub fn is_pbaas_derivation_candidate(coin: &CoinDefinition) -> bool {
-    coin.proto == Protocol::Vrsc && coin.currency_id != coin.system_id
+    if coin.proto != Protocol::Vrsc {
+        return false;
+    }
+
+    let currency_id = coin.currency_id.trim();
+    !currency_id.eq_ignore_ascii_case(VRSC_SYSTEM_ID)
+        && !currency_id.eq_ignore_ascii_case(VRSCTEST_SYSTEM_ID)
 }
 
 pub async fn derive_pbaas_rates(
@@ -162,5 +168,51 @@ mod tests {
         });
         let latest_rates = HashMap::new();
         assert!(derive_from_currency_result(&coin, &currency_result, &latest_rates).is_none());
+    }
+
+    #[test]
+    fn pbaas_derivation_candidate_includes_root_system_currency() {
+        let mut coin = sample_pbaas_coin();
+        coin.currency_id = "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N".to_string();
+        coin.system_id = "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N".to_string();
+
+        assert!(is_pbaas_derivation_candidate(&coin));
+    }
+
+    #[test]
+    fn pbaas_derivation_candidate_excludes_anchor_currencies() {
+        let mut vrsc = sample_pbaas_coin();
+        vrsc.currency_id = VRSC_SYSTEM_ID.to_string();
+        vrsc.system_id = VRSC_SYSTEM_ID.to_string();
+
+        let mut vrsctest = sample_pbaas_coin();
+        vrsctest.currency_id = VRSCTEST_SYSTEM_ID.to_string();
+        vrsctest.system_id = VRSCTEST_SYSTEM_ID.to_string();
+
+        assert!(!is_pbaas_derivation_candidate(&vrsc));
+        assert!(!is_pbaas_derivation_candidate(&vrsctest));
+    }
+
+    #[test]
+    fn derive_from_currency_result_supports_root_system_currency() {
+        let mut coin = sample_pbaas_coin();
+        coin.currency_id = "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N".to_string();
+        coin.system_id = "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N".to_string();
+
+        let currency_result = serde_json::json!({
+          "bestcurrencystate": {
+            "currencies": {
+              "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV": {
+                "lastconversionprice": 1.0
+              }
+            }
+          }
+        });
+        let latest_rates =
+            HashMap::from([("VRSC".to_string(), HashMap::from([("USD".to_string(), 2.4)]))]);
+
+        let derived = derive_from_currency_result(&coin, &currency_result, &latest_rates)
+            .expect("derived rates");
+        assert_eq!(derived.get("USD"), Some(&2.4));
     }
 }

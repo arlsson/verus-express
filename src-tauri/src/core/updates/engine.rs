@@ -37,8 +37,6 @@ pub const EVENT_BOOTSTRAP_UPDATED: &str = "wallet://bootstrap-updated";
 pub const EVENT_ERROR: &str = "wallet://error";
 const BOOTSTRAP_BALANCE_CONCURRENCY: usize = 4;
 const BOOTSTRAP_RATE_CONCURRENCY: usize = 3;
-const VRSC_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
-const VRSCTEST_SYSTEM_ID: &str = "iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq";
 const VRSC_COIN_ID: &str = "VRSC";
 const VRSCTEST_COIN_ID: &str = "VRSCTEST";
 
@@ -163,6 +161,21 @@ fn active_channels(
     out
 }
 
+fn fiat_rate_candidates(
+    coin_registry: &CoinRegistry,
+    is_testnet: bool,
+) -> Vec<crate::core::coins::CoinDefinition> {
+    if is_testnet {
+        return Vec::new();
+    }
+
+    coin_registry
+        .get_all()
+        .into_iter()
+        .filter(|coin| !coin.is_testnet)
+        .collect()
+}
+
 fn normalize_priority_entries(entries: &[String]) -> HashSet<String> {
     entries
         .iter()
@@ -230,9 +243,8 @@ fn prioritized_rate_coins(
             continue;
         }
 
-        if let Some(anchor_coin_id) = anchor_coin_id_for_system_id(&coin.system_id) {
-            anchor_coin_keys.insert(anchor_coin_id.to_ascii_lowercase());
-        }
+        let anchor_coin_id = anchor_coin_id_for_pbaas_candidate(coin);
+        anchor_coin_keys.insert(anchor_coin_id.to_ascii_lowercase());
     }
     prioritized_coin_keys.extend(anchor_coin_keys);
 
@@ -248,11 +260,11 @@ fn prioritized_rate_coins(
     prioritized
 }
 
-fn anchor_coin_id_for_system_id(system_id: &str) -> Option<&'static str> {
-    match system_id {
-        VRSC_SYSTEM_ID => Some(VRSC_COIN_ID),
-        VRSCTEST_SYSTEM_ID => Some(VRSCTEST_COIN_ID),
-        _ => None,
+fn anchor_coin_id_for_pbaas_candidate(coin: &crate::core::coins::CoinDefinition) -> &'static str {
+    if coin.is_testnet {
+        VRSCTEST_COIN_ID
+    } else {
+        VRSC_COIN_ID
     }
 }
 
@@ -485,7 +497,7 @@ async fn run_bootstrap_rate_fetches(
             let _permit = permit;
             let coin_id = coin.id.clone();
             let resolved_rates = pbaas::derive_pbaas_rates(
-                vrpc_provider_pool.for_network(active_network),
+                vrpc_provider_pool.for_system(active_network, &coin.system_id),
                 &coin,
                 &latest_rates_snapshot,
             )
@@ -623,11 +635,7 @@ async fn run_update_loop(
             .await;
             let balance_bootstrap_elapsed = balance_bootstrap_started_at.elapsed();
 
-            let rate_coins = coin_registry
-                .get_all()
-                .into_iter()
-                .filter(|coin| coin.is_testnet == is_testnet)
-                .collect::<Vec<_>>();
+            let rate_coins = fiat_rate_candidates(coin_registry.as_ref(), is_testnet);
             let prioritized_coins =
                 prioritized_rate_coins(&rate_coins, &prioritized_channels, &priority_coin_ids);
 
@@ -783,11 +791,7 @@ async fn run_update_loop(
             }
         }
 
-        let rate_coins = coin_registry
-            .get_all()
-            .into_iter()
-            .filter(|coin| coin.is_testnet == is_testnet)
-            .collect::<Vec<_>>();
+        let rate_coins = fiat_rate_candidates(coin_registry.as_ref(), is_testnet);
 
         let needs_any_rates = rate_coins.iter().any(|coin| {
             coin_rates_state.get(&coin.id).map_or(true, |t| {
@@ -832,7 +836,7 @@ async fn run_update_loop(
                     Err(err) => {
                         if pbaas::is_pbaas_derivation_candidate(coin) {
                             resolved_rates = pbaas::derive_pbaas_rates(
-                                vrpc_provider_pool.for_network(active_network),
+                                vrpc_provider_pool.for_system(active_network, &coin.system_id),
                                 coin,
                                 &latest_rates,
                             )
@@ -887,7 +891,8 @@ fn user_facing_error(e: &WalletError) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        active_channels, dedupe_channel_pairs, partition_bootstrap_channels, prioritized_rate_coins,
+        active_channels, dedupe_channel_pairs, fiat_rate_candidates, partition_bootstrap_channels,
+        prioritized_rate_coins,
     };
     use crate::core::coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
     use std::collections::HashSet;
@@ -929,6 +934,20 @@ mod tests {
         assert!(!channels
             .iter()
             .any(|(coin_id, _)| coin_id == "ETH" || coin_id == "USDC"));
+    }
+
+    #[test]
+    fn fiat_rate_candidates_skip_testnet() {
+        let registry = CoinRegistry::new();
+        let testnet_candidates = fiat_rate_candidates(&registry, true);
+        assert!(
+            testnet_candidates.is_empty(),
+            "testnet should not fetch fiat rates"
+        );
+
+        let mainnet_candidates = fiat_rate_candidates(&registry, false);
+        assert!(!mainnet_candidates.is_empty(), "mainnet rates should remain enabled");
+        assert!(mainnet_candidates.iter().all(|coin| !coin.is_testnet));
     }
 
     #[test]
@@ -1027,6 +1046,54 @@ mod tests {
             .collect::<HashSet<_>>();
 
         assert!(prioritized_ids.contains(&pure.id));
+        assert!(prioritized_ids.contains(&vrsc.id));
+    }
+
+    #[test]
+    fn prioritized_rate_coins_adds_vrsc_anchor_for_prioritized_root_pbaas_system() {
+        let vrsc = CoinDefinition {
+            id: "VRSC".to_string(),
+            currency_id: "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV".to_string(),
+            system_id: "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV".to_string(),
+            display_ticker: "VRSC".to_string(),
+            display_name: "Verus".to_string(),
+            coin_paprika_id: Some("vrsc-verus-coin".to_string()),
+            proto: Protocol::Vrsc,
+            compatible_channels: vec![Channel::Vrpc],
+            decimals: 8,
+            vrpc_endpoints: vec![],
+            electrum_endpoints: None,
+            seconds_per_block: 60,
+            mapped_to: None,
+            is_testnet: false,
+        };
+        let vdex = CoinDefinition {
+            id: "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N".to_string(),
+            currency_id: "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N".to_string(),
+            system_id: "iHog9UCTrn95qpUBFCZ7kKz7qWdMA8MQ6N".to_string(),
+            display_ticker: "vDEX".to_string(),
+            display_name: "vDEX".to_string(),
+            coin_paprika_id: None,
+            proto: Protocol::Vrsc,
+            compatible_channels: vec![Channel::Vrpc],
+            decimals: 8,
+            vrpc_endpoints: vec![],
+            electrum_endpoints: None,
+            seconds_per_block: 60,
+            mapped_to: None,
+            is_testnet: false,
+        };
+        let rate_coins = vec![vrsc.clone(), vdex.clone()];
+        let prioritized_channels = vec![(vdex.id.clone(), "vrpc.Raddr.iSystem".to_string())];
+
+        let prioritized =
+            prioritized_rate_coins(&rate_coins, &prioritized_channels, &HashSet::new());
+        let prioritized_ids = prioritized
+            .into_iter()
+            .map(|coin| coin.id)
+            .collect::<HashSet<_>>();
+
+        assert!(prioritized_ids.contains(&vdex.id));
         assert!(prioritized_ids.contains(&vrsc.id));
     }
 }

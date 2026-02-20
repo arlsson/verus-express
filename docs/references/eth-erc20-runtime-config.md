@@ -25,14 +25,14 @@ from both workspace root and `src-tauri/` into process env before config evaluat
 Default behavior without overrides:
 
 - Mainnet RPC: `https://mainnet.infura.io/v3/{INFURA_PROJECT_ID}`
-- Testnet RPC: `https://goerli.infura.io/v3/{INFURA_PROJECT_ID}`
+- Testnet RPC: `https://sepolia.infura.io/v3/{INFURA_PROJECT_ID}`
 - Etherscan mainnet: `https://api.etherscan.io/v2/api`
 - Etherscan testnet: `https://api.etherscan.io/v2/api`
 
 History requests include explicit Etherscan chain IDs:
 
 - Mainnet: `chainid=1`
-- Testnet (Goerli parity): `chainid=5`
+- Testnet (Sepolia): `chainid=11155111`
 
 ## Startup validation behavior
 

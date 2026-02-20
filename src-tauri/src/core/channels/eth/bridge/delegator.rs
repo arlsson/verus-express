@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn chain_id_resolves_expected_network_contracts() {
         let mainnet = delegator_contract_for_chain_id(1).expect("mainnet");
-        let testnet = delegator_contract_for_chain_id(5).expect("testnet");
+        let testnet = delegator_contract_for_chain_id(11155111).expect("testnet");
         assert_ne!(mainnet, testnet);
     }
 }

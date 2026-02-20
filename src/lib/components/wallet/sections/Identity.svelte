@@ -11,6 +11,7 @@
   import VerusIdAtIcon from '$lib/components/icons/VerusIdAtIcon.svelte';
   import SearchInput from '$lib/components/common/SearchInput.svelte';
   import { Button } from '$lib/components/ui/button';
+  import * as ScrollArea from '$lib/components/ui/scroll-area';
   import { i18nStore } from '$lib/i18n';
   import * as identityLinkService from '$lib/services/identityLinkService.js';
   import type { IdentityDetails, LinkedIdentity } from '$lib/types/wallet.js';
@@ -20,6 +21,10 @@
   import LinkIdentitySheet from './identity/LinkIdentitySheet.svelte';
   import LinkedIdentityCard from './identity/LinkedIdentityCard.svelte';
   import LinkedIdentityRow from './identity/LinkedIdentityRow.svelte';
+
+  /* eslint-disable prefer-const */
+  let { walletNetwork = 'mainnet' }: { walletNetwork?: 'mainnet' | 'testnet' } = $props();
+  /* eslint-enable prefer-const */
 
   const i18n = $derived($i18nStore);
 
@@ -78,26 +83,16 @@
   const nonFavoriteIdentities = $derived(sortedLinkedIdentities.filter((identity) => !identity.favorite));
 
   const filteredFavoriteIdentities = $derived(
-    compactMode
-      ? favoriteIdentities.filter((identity) => identityMatchesQuery(identity, listDebouncedSearch.trim().toLowerCase()))
-      : favoriteIdentities
+    favoriteIdentities.filter((identity) => identityMatchesQuery(identity, listDebouncedSearch.trim().toLowerCase()))
   );
   const filteredNonFavoriteIdentities = $derived(
-    compactMode
-      ? nonFavoriteIdentities.filter((identity) => identityMatchesQuery(identity, listDebouncedSearch.trim().toLowerCase()))
-      : nonFavoriteIdentities
+    nonFavoriteIdentities.filter((identity) => identityMatchesQuery(identity, listDebouncedSearch.trim().toLowerCase()))
   );
   const hasVisibleIdentities = $derived(
     filteredFavoriteIdentities.length + filteredNonFavoriteIdentities.length > 0
   );
 
   $effect(() => {
-    if (!compactMode) {
-      listSearchInput = '';
-      listDebouncedSearch = '';
-      return () => {};
-    }
-
     const query = listSearchInput;
     const timer = setTimeout(() => {
       listDebouncedSearch = query;
@@ -285,18 +280,18 @@
         </Button>
       </div>
     {:else}
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <h2 class="text-xl font-semibold text-foreground">{i18n.t('wallet.identity.title')}</h2>
-          <p class="mt-1 text-sm text-muted-foreground">
-            {i18n.t('wallet.identity.list.description', { count: linkedIdentities.length })}
-          </p>
+      <div class="flex min-w-0 items-center gap-3">
+        <div class="min-w-0 flex-[3]">
+          <SearchInput
+            bind:value={listSearchInput}
+            placeholder={i18n.t('wallet.identity.list.searchPlaceholder')}
+          />
         </div>
 
         <Button
           variant="secondary"
           size="lg"
-          class="h-10 gap-1.5 rounded-md px-3"
+          class="h-10 min-w-[12rem] flex-1 justify-center gap-1.5 rounded-md px-3"
           onclick={() => (linkSheetOpen = true)}
         >
           <PlusIcon class="size-4" />
@@ -304,76 +299,82 @@
         </Button>
       </div>
 
-      {#if compactMode}
-        <div class="mt-4 max-w-md">
-          <SearchInput bind:value={listSearchInput} placeholder={i18n.t('wallet.identity.list.searchPlaceholder')} />
-        </div>
-      {/if}
-
       {#if !hasVisibleIdentities}
         <p class="mt-4 rounded-lg bg-muted/55 px-3 py-2.5 text-sm text-muted-foreground dark:bg-muted/50">
           {i18n.t('wallet.identity.sheet.emptySearch')}
         </p>
       {:else}
-        {#if filteredFavoriteIdentities.length > 0}
-          <section class="mt-4">
-            <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <StarIcon class="size-3.5 fill-current text-amber-500" />
-              <span>{i18n.t('wallet.identity.list.favorites')}</span>
-            </div>
+        <div class="mt-4 min-h-0 flex-1">
+          <ScrollArea.Root class="h-full" type="scroll">
+            <ScrollArea.Viewport class="h-full pr-1">
+              {#if filteredFavoriteIdentities.length > 0}
+                <section>
+                  <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <StarIcon class="size-3.5 fill-current text-amber-500" />
+                    <span>{i18n.t('wallet.identity.list.favorites')}</span>
+                    <span class="text-[11px] text-muted-foreground/80">{favoriteIdentities.length}/2</span>
+                  </div>
 
-            <div class={`${compactMode ? 'mt-2 space-y-2' : 'mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3'}`}>
-              {#each filteredFavoriteIdentities as identity (identity.identityAddress)}
-                {#if compactMode}
-                  <LinkedIdentityRow
-                    {identity}
-                    onSelect={(selected) => openIdentityDetails(selected.identityAddress)}
-                    onToggleFavorite={toggleFavorite}
-                  />
-                {:else}
-                  <LinkedIdentityCard
-                    {identity}
-                    onSelect={(selected) => openIdentityDetails(selected.identityAddress)}
-                    onToggleFavorite={toggleFavorite}
-                  />
-                {/if}
-              {/each}
-            </div>
-          </section>
-        {/if}
+                  <div class={`${compactMode ? 'mt-2 space-y-2' : 'mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3'}`}>
+                    {#each filteredFavoriteIdentities as identity (identity.identityAddress)}
+                      {#if compactMode}
+                        <LinkedIdentityRow
+                          {identity}
+                          onSelect={(selected) => openIdentityDetails(selected.identityAddress)}
+                          onToggleFavorite={toggleFavorite}
+                        />
+                      {:else}
+                        <LinkedIdentityCard
+                          {identity}
+                          onSelect={(selected) => openIdentityDetails(selected.identityAddress)}
+                          onToggleFavorite={toggleFavorite}
+                        />
+                      {/if}
+                    {/each}
+                  </div>
+                </section>
+              {/if}
 
-        {#if filteredNonFavoriteIdentities.length > 0}
-          <section class={`${filteredFavoriteIdentities.length > 0 ? 'mt-5' : 'mt-4'}`}>
-            {#if filteredFavoriteIdentities.length > 0}
-              <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {i18n.t('wallet.identity.list.all')}
-              </p>
-            {/if}
+              {#if filteredNonFavoriteIdentities.length > 0}
+                <section class={`${filteredFavoriteIdentities.length > 0 ? 'mt-5' : ''}`}>
+                  {#if filteredFavoriteIdentities.length > 0}
+                    <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {i18n.t('wallet.identity.list.all')}
+                    </p>
+                  {/if}
 
-            <div class={`${filteredFavoriteIdentities.length > 0 ? 'mt-2' : ''} ${compactMode
-              ? 'space-y-2'
-              : 'grid gap-3 md:grid-cols-2 xl:grid-cols-3'}`}>
-              {#each filteredNonFavoriteIdentities as identity (identity.identityAddress)}
-                {#if compactMode}
-                  <LinkedIdentityRow
-                    {identity}
-                    onSelect={(selected) => openIdentityDetails(selected.identityAddress)}
-                    onToggleFavorite={toggleFavorite}
-                  />
-                {:else}
-                  <LinkedIdentityCard
-                    {identity}
-                    onSelect={(selected) => openIdentityDetails(selected.identityAddress)}
-                    onToggleFavorite={toggleFavorite}
-                  />
-                {/if}
-              {/each}
-            </div>
-          </section>
-        {/if}
+                  <div class={`${filteredFavoriteIdentities.length > 0 ? 'mt-2' : ''} ${compactMode
+                    ? 'space-y-2'
+                    : 'grid gap-3 md:grid-cols-2 xl:grid-cols-3'}`}>
+                    {#each filteredNonFavoriteIdentities as identity (identity.identityAddress)}
+                      {#if compactMode}
+                        <LinkedIdentityRow
+                          {identity}
+                          onSelect={(selected) => openIdentityDetails(selected.identityAddress)}
+                          onToggleFavorite={toggleFavorite}
+                        />
+                      {:else}
+                        <LinkedIdentityCard
+                          {identity}
+                          onSelect={(selected) => openIdentityDetails(selected.identityAddress)}
+                          onToggleFavorite={toggleFavorite}
+                        />
+                      {/if}
+                    {/each}
+                  </div>
+                </section>
+              {/if}
+            </ScrollArea.Viewport>
+            <ScrollArea.Scrollbar orientation="vertical" />
+          </ScrollArea.Root>
+        </div>
       {/if}
     {/if}
   </div>
 {/if}
 
-<LinkIdentitySheet bind:isOpen={linkSheetOpen} onLinkedChange={applyLinkedIdentities} />
+<LinkIdentitySheet
+  bind:isOpen={linkSheetOpen}
+  onLinkedChange={applyLinkedIdentities}
+  allowManualLinkEntry={walletNetwork === 'testnet'}
+/>

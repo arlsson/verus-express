@@ -9,6 +9,9 @@ use crate::core::channels::eth::config::EthChannelConfig;
 use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
 
+const ETHEREUM_MAINNET_CHAIN_ID: u64 = 1;
+const ETHEREUM_SEPOLIA_CHAIN_ID: u64 = 11155111;
+
 #[derive(Debug, Clone)]
 pub struct EthNetworkProvider {
     pub chain_id: u64,
@@ -68,12 +71,12 @@ impl EthProviderPool {
 
         Self {
             mainnet: Some(EthNetworkProvider {
-                chain_id: 1,
+                chain_id: ETHEREUM_MAINNET_CHAIN_ID,
                 rpc_provider: mainnet_rpc,
                 history_provider: history_client.clone(),
             }),
             testnet: Some(EthNetworkProvider {
-                chain_id: 5,
+                chain_id: ETHEREUM_SEPOLIA_CHAIN_ID,
                 rpc_provider: testnet_rpc,
                 history_provider: history_client,
             }),
@@ -388,8 +391,8 @@ impl EtherscanHistoryClient {
 
 fn chain_id_for_network(network: WalletNetwork) -> u64 {
     match network {
-        WalletNetwork::Mainnet => 1,
-        WalletNetwork::Testnet => 5,
+        WalletNetwork::Mainnet => ETHEREUM_MAINNET_CHAIN_ID,
+        WalletNetwork::Testnet => ETHEREUM_SEPOLIA_CHAIN_ID,
     }
 }
 
@@ -469,7 +472,7 @@ mod tests {
             Some("0xtoken"),
         );
 
-        assert_eq!(query_value(&query, "chainid").as_deref(), Some("5"));
+        assert_eq!(query_value(&query, "chainid").as_deref(), Some("11155111"));
         assert_eq!(query_value(&query, "action").as_deref(), Some("tokentx"));
         assert_eq!(
             query_value(&query, "contractAddress").as_deref(),

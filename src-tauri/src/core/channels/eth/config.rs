@@ -3,7 +3,7 @@ use std::env;
 use crate::types::WalletError;
 
 const DEFAULT_MAINNET_INFURA_URL: &str = "https://mainnet.infura.io/v3/{project_id}";
-const DEFAULT_TESTNET_INFURA_URL: &str = "https://goerli.infura.io/v3/{project_id}";
+const DEFAULT_TESTNET_INFURA_URL: &str = "https://sepolia.infura.io/v3/{project_id}";
 const DEFAULT_ETHERSCAN_MAINNET_URL: &str = "https://api.etherscan.io/v2/api";
 const DEFAULT_ETHERSCAN_TESTNET_URL: &str = "https://api.etherscan.io/v2/api";
 

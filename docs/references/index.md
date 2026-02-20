@@ -10,7 +10,7 @@ External references and source repos used for parity or implementation checks.
 ## Repositories
 
 - `valu-mobile` parity source: `/Users/maxtheyse/dev/valu-mobile` (branch:
-  `newsend2`)
+  `newsend3`)
 - Rust identity signing parity report:
   [`./verus-identity-rust-parity.md`](./verus-identity-rust-parity.md)
 - Verus coin catalog parity and sync workflow:

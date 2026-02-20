@@ -6,7 +6,7 @@ last_reviewed: 2026-02-12
 # Verus/PBaaS core parity matrix
 
 This matrix tracks the in-scope backend/API transaction parity scenarios against
-`valu-mobile` (`newsend2`).
+`valu-mobile` (`newsend3`).
 
 ## Scenario IDs
 

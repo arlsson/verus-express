@@ -33,7 +33,7 @@
 
 - Bridge paths are normalized into via options.
 - Receive-asset sheet uses mobile parity shaping from
-  `valu-mobile` branch `newsend2`:
+  `valu-mobile` branch `newsend3`:
   - prelaunch destinations hidden
   - options grouped by canonical asset keys
   - fixed popular ordering (`VRSC`, `USDC`, `ETH`, `TBTC`, `DAI`)

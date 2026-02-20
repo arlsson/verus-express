@@ -4,6 +4,7 @@
   import SearchInput from '$lib/components/common/SearchInput.svelte';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import * as ScrollArea from '$lib/components/ui/scroll-area';
   import { i18nStore } from '$lib/i18n';
   import * as identityLinkService from '$lib/services/identityLinkService.js';
@@ -19,10 +20,15 @@
   type LinkIdentitySheetProps = {
     isOpen?: boolean;
     onLinkedChange?: typeof noop;
+    allowManualLinkEntry?: boolean;
   };
 
   /* eslint-disable prefer-const */
-  let { isOpen = $bindable(false), onLinkedChange = noop }: LinkIdentitySheetProps = $props();
+  let {
+    isOpen = $bindable(false),
+    onLinkedChange = noop,
+    allowManualLinkEntry = false
+  }: LinkIdentitySheetProps = $props();
   /* eslint-enable prefer-const */
 
   const i18n = $derived($i18nStore);
@@ -33,6 +39,8 @@
   let sheetError = $state('');
   let candidates = $state<LinkableIdentity[]>([]);
   let busyIdentityAddress = $state<string | null>(null);
+  let manualIdentityInput = $state('');
+  let manualLinkBusy = $state(false);
 
   const filteredCandidates = $derived(
     (() => {
@@ -68,6 +76,8 @@
       debouncedSearch = '';
       sheetError = '';
       busyIdentityAddress = null;
+      manualIdentityInput = '';
+      manualLinkBusy = false;
       return;
     }
 
@@ -114,7 +124,7 @@
   }
 
   async function handleLink(candidate: LinkableIdentity) {
-    if (candidate.linked || busyIdentityAddress) return;
+    if (candidate.linked || busyIdentityAddress || manualLinkBusy) return;
 
     busyIdentityAddress = candidate.identityAddress;
     sheetError = '';
@@ -134,6 +144,32 @@
       sheetError = mapSheetError(error, 'wallet.identity.sheet.errorLink');
     } finally {
       busyIdentityAddress = null;
+    }
+  }
+
+  async function handleManualLink() {
+    const identityAddress = manualIdentityInput.trim();
+    if (!identityAddress || manualLinkBusy || busyIdentityAddress) return;
+
+    manualLinkBusy = true;
+    sheetError = '';
+
+    try {
+      const updatedLinked = await identityLinkService.linkIdentity({
+        identityAddress
+      });
+
+      onLinkedChange(updatedLinked);
+      manualIdentityInput = '';
+      candidates = candidates.map((entry) =>
+        entry.identityAddress.toLowerCase() === identityAddress.toLowerCase()
+          ? { ...entry, linked: true }
+          : entry
+      );
+    } catch (error) {
+      sheetError = mapSheetError(error, 'wallet.identity.sheet.errorLink');
+    } finally {
+      manualLinkBusy = false;
     }
   }
 </script>
@@ -157,6 +193,39 @@
           placeholder={i18n.t('wallet.identity.sheet.searchPlaceholder')}
           inputClass="focus-visible:ring-0 focus-visible:ring-transparent"
         />
+
+        {#if allowManualLinkEntry}
+          <div class="mt-3 rounded-lg bg-muted/35 p-2.5 dark:bg-muted/28">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {i18n.t('wallet.identity.sheet.manualTitle')}
+            </p>
+            <p class="mt-1 text-xs text-muted-foreground">
+              {i18n.t('wallet.identity.sheet.manualDescription')}
+            </p>
+            <div class="mt-2 flex items-center gap-2">
+              <Input
+                bind:value={manualIdentityInput}
+                placeholder={i18n.t('wallet.identity.sheet.manualPlaceholder')}
+                class="h-9"
+                disabled={manualLinkBusy || busyIdentityAddress !== null}
+                onkeydown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void handleManualLink();
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                class="h-9 shrink-0 px-3"
+                disabled={!manualIdentityInput.trim() || manualLinkBusy || busyIdentityAddress !== null}
+                onclick={handleManualLink}
+              >
+                {manualLinkBusy ? i18n.t('wallet.identity.sheet.linking') : i18n.t('wallet.identity.sheet.manualLink')}
+              </Button>
+            </div>
+          </div>
+        {/if}
 
         {#if sheetError}
           <div class="mt-2 space-y-2 rounded-md bg-destructive/12 px-2.5 py-2 text-xs text-destructive">

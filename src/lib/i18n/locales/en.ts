@@ -526,6 +526,11 @@ export const en: Record<string, string> = {
   'wallet.identity.sheet.loading': 'Searching identities for this wallet address…',
   'wallet.identity.sheet.empty': 'No linkable VerusIDs were found for this wallet address.',
   'wallet.identity.sheet.emptySearch': 'No identities match your search.',
+  'wallet.identity.sheet.manualTitle': 'Manual link',
+  'wallet.identity.sheet.manualDescription':
+    'On testnet, you can link a VerusID manually by entering its handle or i-address.',
+  'wallet.identity.sheet.manualPlaceholder': 'Enter handle or i-address',
+  'wallet.identity.sheet.manualLink': 'Link',
   'wallet.identity.sheet.link': 'Link identity',
   'wallet.identity.sheet.linking': 'Linking identity…',
   'wallet.identity.sheet.alreadyLinked': 'Already linked',

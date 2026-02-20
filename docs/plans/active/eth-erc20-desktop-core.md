@@ -51,7 +51,7 @@ Deliver desktop ETH and ERC20 core parity with `valu-mobile` for balances, histo
 ## Decisions
 
 - Use Rust-native Ethereum integration (`ethers` crate) rather than a JS sidecar to preserve backend signing boundary and avoid extra runtime complexity.
-- Keep goerli as default ETH testnet parity target, with env override support.
+- Keep Sepolia as default ETH testnet target, with env override support.
 - Use Etherscan for normalized ETH/ERC20 history parity and Infura-compatible RPC for balances/fees/send.
 
 ## Verification

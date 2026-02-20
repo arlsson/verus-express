@@ -1,6 +1,6 @@
 //
 // Verus-Mobile v1 key derivation implementation
-// Security: Implements exact parity with Verus-Mobile newsend2 branch (sha256+iguana clamp)
+// Security: Implements exact parity with Verus-Mobile newsend3 branch (sha256+iguana clamp)
 // Last Updated: Added Bitcoin P2PKH address (same key, version byte 0x00) for Verus-Mobile parity
 
 use crate::core::crypto::eth_keys::derive_eth_address;

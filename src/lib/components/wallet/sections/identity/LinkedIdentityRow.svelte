@@ -3,7 +3,7 @@
   import StarIcon from '@lucide/svelte/icons/star';
   import { i18nStore } from '$lib/i18n';
   import type { LinkedIdentity } from '$lib/types/wallet.js';
-  import { formatIdentityDisplayName, truncateIdentityAddress } from '$lib/utils/identityDisplay';
+  import { formatIdentityDisplayName } from '$lib/utils/identityDisplay';
   import IdentityAvatar from './IdentityAvatar.svelte';
 
   const noop = (identity: LinkedIdentity): void => {
@@ -22,10 +22,6 @@
 
   const i18n = $derived($i18nStore);
   const displayName = $derived(formatIdentityDisplayName(identity));
-  const truncatedAddress = $derived(truncateIdentityAddress(identity.identityAddress, 10, 10));
-  const truncatedSystem = $derived(
-    identity.systemId ? truncateIdentityAddress(identity.systemId, 6, 6) : ''
-  );
 </script>
 
 <div class="hover:bg-muted/45 dark:hover:bg-muted/35 flex w-full items-center gap-2 rounded-lg bg-muted/20 px-3 py-2.5 transition-colors">
@@ -37,14 +33,9 @@
     <IdentityAvatar seed={identity.identityAddress} label={displayName} class="size-8 text-[10px]" />
     <div class="min-w-0">
       <p class="truncate text-sm font-semibold text-foreground">{displayName}</p>
-      <p class="truncate font-mono text-xs text-muted-foreground">{truncatedAddress}</p>
-      {#if identity.status || truncatedSystem}
-        <p class="mt-0.5 truncate text-[11px] text-muted-foreground">
-          {identity.status ? identity.status.toUpperCase() : ''}
-          {#if identity.status && truncatedSystem}
-            <span class="px-1">•</span>
-          {/if}
-          {truncatedSystem}
+      {#if identity.status}
+        <p class="mt-0.5 truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {identity.status}
         </p>
       {/if}
     </div>

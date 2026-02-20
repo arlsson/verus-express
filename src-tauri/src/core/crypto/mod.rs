@@ -160,7 +160,7 @@ mod tests {
     }
 
     // TODO: Test Verus-Mobile v1 parity (VRSC, ETH, BTC)
-    // Add known test vectors from Verus-Mobile newsend2 branch:
+    // Add known test vectors from Verus-Mobile newsend3 branch:
     // - Seed phrase
     // - Expected WIF
     // - Expected VRSC address

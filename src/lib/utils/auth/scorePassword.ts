@@ -1,6 +1,6 @@
 /**
  * Password scoring algorithm matching Verus-Mobile
- * Based on: https://github.com/Meyse/Verus-Mobile/blob/newsend2/src/utils/auth/scorePassword.js
+ * Based on: https://github.com/Meyse/Verus-Mobile/blob/newsend3/src/utils/auth/scorePassword.js
  * 
  * Scores password 0-100 based on unique characters and character variation
  * Last Updated: Created to match Verus-Mobile password strength requirements

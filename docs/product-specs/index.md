@@ -21,7 +21,7 @@ requirements.
 
 ## Scope notes
 
-- Parity documents track behavior versus `valu-mobile` (`newsend2`).
+- Parity documents track behavior versus `valu-mobile` (`newsend3`).
 - Component matrix tracks implementation status in this repo.
 
 ## Gaps to fill next

@@ -142,7 +142,7 @@
             }}
           />
         {:else if activeSection === 'identity'}
-          <Identity />
+          <Identity walletNetwork={walletData.network ?? 'mainnet'} />
         {:else if activeSection === 'apps'}
           <Apps />
         {:else if activeSection === 'activity'}
