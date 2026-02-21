@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { listen } from '@tauri-apps/api/event';
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
   import ArrowLeftRightIcon from '@lucide/svelte/icons/arrow-left-right';
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
@@ -72,9 +73,12 @@
     BridgeCapabilitiesResult,
     BridgeConversionPathQuote,
     BridgeExportFeeEstimateResult,
+    DlightRuntimeStatusResult,
     BridgeTransferPreflightResult,
     PreflightResult,
-    SendResult
+    SendResult,
+    TxSendProgressEventPayload,
+    TxSendProgressStage
   } from '$lib/types/wallet.js';
   import type { AddressBookContact, AddressEndpointKind } from '$lib/types/addressBook';
   import type {
@@ -240,6 +244,9 @@
   let loadingTargets = $state(false);
   let preflighting = $state(false);
   let sending = $state(false);
+  let sendStage = $state<TxSendProgressStage | null>(null);
+  let sendStageStartedAt = $state<number | null>(null);
+  let sendStageTick = $state(0);
   let targetsError = $state('');
   let transferError = $state('');
 
@@ -260,6 +267,7 @@
   let saveRecipientName = $state('');
   let saveRecipientError = $state('');
   let savingRecipient = $state(false);
+  let savedRecipientOnSuccess = $state(false);
 
   const selectedCoin = $derived(selectedCoinOption?.coin ?? null);
 
@@ -276,13 +284,24 @@
       ? toOptionalFiniteNumber(selectedChannelInfo?.percent)
       : null
   );
+  const selectedShieldedStatusKind = $derived(
+    selectedChannelId?.startsWith('dlight_private.')
+      ? selectedChannelInfo?.statusKind?.toLowerCase() ?? null
+      : null
+  );
   const isShieldedSyncBlocked = $derived(
-    selectedShieldedSyncPercent !== null &&
-      selectedShieldedSyncPercent !== 100 &&
-      selectedShieldedSyncPercent !== -1
+    selectedShieldedStatusKind === 'initializing' ||
+      selectedShieldedStatusKind === 'syncing' ||
+      selectedShieldedStatusKind === 'error' ||
+      (selectedShieldedStatusKind === null &&
+        selectedShieldedSyncPercent !== null &&
+        selectedShieldedSyncPercent !== 100 &&
+        selectedShieldedSyncPercent !== -1)
   );
   const shieldedSyncBlockedHelper = $derived(
-    isShieldedSyncBlocked && selectedShieldedSyncPercent !== null
+    isShieldedSyncBlocked && selectedShieldedStatusKind === 'error'
+      ? i18n.t('wallet.transfer.error.network')
+      : isShieldedSyncBlocked && selectedShieldedSyncPercent !== null
       ? i18n.t('wallet.transfer.privateSyncBlocked', {
           percent: formatSyncPercent(selectedShieldedSyncPercent)
         })
@@ -964,12 +983,21 @@
         : i18n.t('wallet.transfer.prepareReview')
       : currentStep === 'review'
         ? sending
-          ? i18n.t('wallet.transfer.sendingNow')
+          ? sendStageLabel(sendStage)
           : i18n.t('wallet.transfer.sendNow')
         : i18n.t('common.continue')
   );
+  const sendStageElapsedMs = $derived(
+    sendStageStartedAt === null ? 0 : Date.now() - sendStageStartedAt + sendStageTick * 0
+  );
+  const sendStageExceededThreshold = $derived(
+    sending && sendStageStartedAt !== null && sendStageElapsedMs > 25_000
+  );
+  const sendStageGuidance = $derived(
+    sendStageExceededThreshold ? sendStageGuidanceLabel(sendStage) : ''
+  );
 
-  const showSummaryAside = $derived(currentStep !== 'review');
+  const showSummaryAside = $derived(currentStep !== 'review' && currentStep !== 'success');
 
   const warningsSummary = $derived(activePreflight?.warnings.map((warning) => warning.message) ?? []);
 
@@ -1551,20 +1579,67 @@
     };
   });
 
+  function isTxSendProgressStage(value: unknown): value is TxSendProgressStage {
+    return (
+      value === 'syncing_spend_state' ||
+      value === 'loading_prover' ||
+      value === 'building_proof' ||
+      value === 'broadcasting'
+    );
+  }
+
   onMount(() => {
+    let disposed = false;
+    let unlistenTxSendProgress: (() => void) | null = null;
+    const tickInterval = setInterval(() => {
+      if (!sending || sendStageStartedAt === null) return;
+      sendStageTick = Date.now();
+    }, 1000);
+
     void (async () => {
       try {
         addresses = await walletService.getAddresses();
       } catch {
         addresses = null;
       }
+
+      try {
+        const unlisten = await listen<TxSendProgressEventPayload>(
+          'wallet://tx-send-progress',
+          (event) => {
+            const stageValue = event.payload?.stage;
+            if (!isTxSendProgressStage(stageValue)) return;
+
+            const payloadChannel = event.payload?.channel?.trim();
+            if (payloadChannel && selectedChannelId && payloadChannel !== selectedChannelId) return;
+
+            sendStage = stageValue;
+            sendStageStartedAt = Date.now();
+            sendStageTick = Date.now();
+          }
+        );
+        if (disposed) {
+          unlisten();
+        } else {
+          unlistenTxSendProgress = unlisten;
+        }
+      } catch {
+        // Best-effort progress updates only.
+      }
     })();
+
+    return () => {
+      disposed = true;
+      clearInterval(tickInterval);
+      if (unlistenTxSendProgress) unlistenTxSendProgress();
+    };
   });
 
   $effect(() => {
     destinationAddress;
     unsavedRecipientConfirmed = false;
     saveRecipientError = '';
+    savedRecipientOnSuccess = false;
   });
 
   $effect(() => {
@@ -1673,6 +1748,8 @@
         ]
       });
       upsertAddressBookContact(saved);
+      savedRecipientOnSuccess = true;
+      saveRecipientError = '';
     } catch (error) {
       saveRecipientError = mapAddressBookError(error);
     } finally {
@@ -1827,7 +1904,8 @@
   function formatSyncPercent(percent: number): string {
     const clamped = Math.max(0, Math.min(percent, 100));
     if (clamped > 0 && clamped < 1) return '<1';
-    return i18n.formatNumber(clamped, {
+    const floored = Math.floor(clamped * 10) / 10;
+    return i18n.formatNumber(floored, {
       minimumFractionDigits: 0,
       maximumFractionDigits: 1
     });
@@ -2318,6 +2396,7 @@
   function mapWalletError(error: unknown): string {
     const errorType = extractWalletErrorType(error);
     const rawMessage = extractWalletErrorMessage(error);
+    if (errorType === 'InvalidPreflight') return i18n.t('wallet.transfer.reviewUnavailable');
     if (errorType === 'BridgeNotImplemented') return i18n.t('wallet.transfer.error.bridgeNotImplemented');
     if (errorType === 'BridgeRouteInvalid') return i18n.t('wallet.transfer.error.bridgeRouteInvalid');
     if (errorType === 'BridgeUnsupportedDestinationCombination') {
@@ -2331,6 +2410,12 @@
     if (errorType === 'DlightSynchronizerNotReady') {
       return shieldedSyncBlockedHelper || i18n.t('wallet.transfer.privateSyncBlockedUnknown');
     }
+    if (errorType === 'DlightProverUnavailable') {
+      return i18n.t('wallet.transfer.error.dlightProverUnavailable');
+    }
+    if (errorType === 'DlightSpendCacheNotReady') {
+      return i18n.t('wallet.transfer.error.dlightSpendCacheNotReady');
+    }
     if (errorType === 'UnsupportedChannel') return i18n.t('wallet.transfer.error.unsupportedChannel');
     if (errorType === 'InvalidAddress') return i18n.t('wallet.transfer.error.invalidAddress');
     if (errorType === 'InsufficientFunds') return i18n.t('wallet.transfer.error.insufficientFunds');
@@ -2343,6 +2428,82 @@
     if (rawMessage) return rawMessage;
     if (error instanceof Error && error.message) return error.message;
     return i18n.t('common.unknownError');
+  }
+
+  async function getSelectedDlightRuntimeStatus(): Promise<DlightRuntimeStatusResult | null> {
+    if (!selectedChannelId || !selectedChannelId.startsWith('dlight_private.')) return null;
+    if (!selectedCoin) return null;
+    return walletService.getDlightRuntimeStatus(selectedChannelId, selectedCoin.id);
+  }
+
+  async function ensureDlightSpendReady(): Promise<boolean> {
+    if (!selectedChannelId || !selectedChannelId.startsWith('dlight_private.')) return true;
+
+    try {
+      const status = await getSelectedDlightRuntimeStatus();
+      if (!status) return true;
+
+      const statusKind = status.statusKind.trim().toLowerCase();
+      const spendCacheReady = status.spendCacheReady === true;
+      const spendCachePercentText =
+        typeof status.spendCachePercent === 'number' && Number.isFinite(status.spendCachePercent)
+          ? formatSyncPercent(status.spendCachePercent)
+          : null;
+      if (statusKind !== 'synced') {
+        if (!spendCacheReady) {
+          transferError =
+            spendCachePercentText !== null
+              ? i18n.t('wallet.transfer.privateSpendCacheBlocked', { percent: spendCachePercentText })
+              : i18n.t('wallet.transfer.error.dlightSpendCacheNotReady');
+          return false;
+        }
+        const percentText =
+          typeof status.percent === 'number' && Number.isFinite(status.percent)
+            ? formatSyncPercent(status.percent)
+            : null;
+        transferError =
+          percentText !== null
+            ? i18n.t('wallet.transfer.privateSyncBlocked', { percent: percentText })
+            : shieldedSyncBlockedHelper || i18n.t('wallet.transfer.privateSyncBlockedUnknown');
+        return false;
+      }
+
+      if (!spendCacheReady) {
+        transferError =
+          spendCachePercentText !== null
+            ? i18n.t('wallet.transfer.privateSpendCacheBlocked', { percent: spendCachePercentText })
+            : i18n.t('wallet.transfer.error.dlightSpendCacheNotReady');
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('[TransferWizard] dlight runtime status check failed', {
+        type: extractWalletErrorType(error),
+        message: extractWalletErrorMessage(error),
+        error
+      });
+      transferError = mapWalletError(error);
+      return false;
+    }
+  }
+
+  function sendStageLabel(stage: TxSendProgressStage | null): string {
+    if (stage === 'syncing_spend_state') return i18n.t('wallet.transfer.sendStage.syncingSpendState');
+    if (stage === 'loading_prover') return i18n.t('wallet.transfer.sendStage.loadingProver');
+    if (stage === 'building_proof') return i18n.t('wallet.transfer.sendStage.buildingProof');
+    if (stage === 'broadcasting') return i18n.t('wallet.transfer.sendStage.broadcasting');
+    return i18n.t('wallet.transfer.sendingNow');
+  }
+
+  function sendStageGuidanceLabel(stage: TxSendProgressStage | null): string {
+    if (stage === 'syncing_spend_state') {
+      return i18n.t('wallet.transfer.sendStageHint.syncingSpendState');
+    }
+    if (stage === 'loading_prover') return i18n.t('wallet.transfer.sendStageHint.loadingProver');
+    if (stage === 'building_proof') return i18n.t('wallet.transfer.sendStageHint.buildingProof');
+    if (stage === 'broadcasting') return i18n.t('wallet.transfer.sendStageHint.broadcasting');
+    return '';
   }
 
   function normalizeSummarySecondary(primary: string, secondary: string | null | undefined): string | undefined {
@@ -2422,6 +2583,7 @@
       return;
     }
     if (!selectedCoin || !selectedChannelId || !activeTargetOption || !recipientValid) return;
+    if (!(await ensureDlightSpendReady())) return;
 
     preflighting = true;
     transferError = '';
@@ -2469,14 +2631,20 @@
   }
 
   async function broadcast() {
+    if (sending) return;
     if (isShieldedSyncBlocked) {
       transferError = shieldedSyncBlockedHelper || i18n.t('wallet.transfer.privateSyncBlockedUnknown');
       return;
     }
     if (!activePreflight) return;
+    if (!(await ensureDlightSpendReady())) return;
 
     sending = true;
+    sendStage = null;
+    sendStageStartedAt = null;
+    sendStageTick = Date.now();
     transferError = '';
+    savedRecipientOnSuccess = false;
 
     try {
       sendResult = await sendTransaction({ preflightId: activePreflight.preflightId });
@@ -2491,9 +2659,14 @@
         message: extractWalletErrorMessage(error),
         error
       });
+      // Preflight ids are single-use on the backend; always force a fresh preflight after send failure.
+      clearPreflightState();
+      currentStep = 'recipient';
       transferError = mapWalletError(error);
     } finally {
       sending = false;
+      sendStage = null;
+      sendStageStartedAt = null;
     }
   }
 
@@ -2619,7 +2792,7 @@
 
   {#snippet footer()}
     {#if currentStep === 'success'}
-      <div class="flex justify-end md:hidden">
+      <div class="flex justify-end">
         <Button onclick={handleDone}>
           {i18n.t('common.done')}
         </Button>
@@ -2673,6 +2846,11 @@
     {#if transferError}
       <div class="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
         {transferError}
+      </div>
+    {/if}
+    {#if !transferError && sendStageGuidance}
+      <div class="rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/35 dark:bg-amber-500/12 dark:text-amber-200">
+        {sendStageGuidance}
       </div>
     {/if}
     {#if shieldedSyncBlockedHelper}
@@ -3221,36 +3399,92 @@
 
     {#if currentStep === 'success'}
       <Card.Root class="border-0 bg-transparent py-0 shadow-none">
-        <Card.Content class="px-0 py-6 text-center">
-          <CheckCircle2Icon class="mx-auto mb-4 h-12 w-12 text-emerald-600 dark:text-emerald-400" />
-          <h3 class="text-lg font-semibold">{i18n.t('wallet.transfer.step.success.title')}</h3>
-          <p class="text-muted-foreground mt-1 text-sm">{i18n.t('wallet.transfer.step.success.description')}</p>
-          {#if sendResult}
-            <p class="identifier-text mt-3 break-all text-xs">{sendResult.txid}</p>
-            <p class="text-muted-foreground mt-2 text-sm">
-              {i18n.t('wallet.send.sentSummary', { value: sendResult.value, address: sendResult.toAddress })}
-            </p>
+        <Card.Content class="px-0 py-6">
+          <div class="mx-auto w-full max-w-[430px] space-y-4">
+            <div class="space-y-1 text-center">
+              <CheckCircle2Icon class="mx-auto mb-4 h-12 w-12 text-emerald-600 dark:text-emerald-400" />
+              <h3 class="text-lg font-semibold">{i18n.t('wallet.transfer.step.success.title')}</h3>
+              <p class="text-muted-foreground text-sm">{i18n.t('wallet.transfer.step.success.description')}</p>
+            </div>
 
-            {#if !isSavedRecipient}
-              <div class="mt-4 rounded-md border border-border/70 p-3 text-left">
-                <p class="text-sm font-medium">{i18n.t('wallet.transfer.saveRecipient.title')}</p>
-                <p class="text-muted-foreground mt-1 text-xs">{i18n.t('wallet.transfer.saveRecipient.description')}</p>
-                <Input
-                  class="mt-3"
-                  bind:value={saveRecipientName}
-                  placeholder={i18n.t('wallet.transfer.saveRecipient.namePlaceholder')}
-                />
-                {#if saveRecipientError}
-                  <p class="text-destructive mt-2 text-xs">{saveRecipientError}</p>
-                {/if}
-                <Button class="mt-3 h-8" onclick={saveRecipientFromSuccess} disabled={savingRecipient}>
-                  {savingRecipient
-                    ? i18n.t('wallet.transfer.saveRecipient.saving')
-                    : i18n.t('wallet.transfer.saveRecipient.save')}
-                </Button>
-              </div>
+            {#if sendResult}
+              {@const sentValueWithTicker = selectedCoinPresentation?.displayTicker?.trim()
+                ? `${sendResult.value} ${selectedCoinPresentation.displayTicker.trim()}`
+                : sendResult.value}
+              <dl class="space-y-1 rounded-lg bg-muted/35 px-2.5 py-2 text-left dark:bg-muted/40">
+                <div class="flex items-start justify-between gap-3">
+                  <dt class="text-muted-foreground text-[11px]">{i18n.t('wallet.transfer.summary.amount')}</dt>
+                  <dd class="text-right text-[13px] font-medium tabular-nums">{sentValueWithTicker}</dd>
+                </div>
+                <div class="flex items-start justify-between gap-3">
+                  <dt class="text-muted-foreground mt-0.5 text-[11px]">{i18n.t('wallet.transfer.summary.recipient')}</dt>
+                  <dd class="min-w-0 text-right">
+                    {#if matchedSavedRecipient}
+                      <p class="truncate text-[13px] font-medium">{matchedSavedRecipient.contact.displayName}</p>
+                      <p class="text-muted-foreground identifier-text mt-0.5 text-[10px]">{sendResult.toAddress}</p>
+                    {:else}
+                      <p class="identifier-text text-[13px] font-medium break-all">{sendResult.toAddress}</p>
+                    {/if}
+                  </dd>
+                </div>
+                <div class="flex items-start justify-between gap-3">
+                  <dt class="text-muted-foreground mt-0.5 text-[11px]">{i18n.t('wallet.transfer.step.success.txidLabel')}</dt>
+                  <dd class="identifier-text text-[11px] leading-5 break-all">{sendResult.txid}</dd>
+                </div>
+              </dl>
+
+              {#if !isSavedRecipient}
+                <div class="bg-muted/35 mx-auto w-full max-w-[380px] rounded-md p-3 text-left dark:bg-muted/40">
+                  <p class="text-sm font-medium">{i18n.t('wallet.transfer.saveRecipient.title')}</p>
+                  <p class="text-muted-foreground mt-1 text-xs">{i18n.t('wallet.transfer.saveRecipient.description')}</p>
+                  <div class="mt-3 w-full max-w-64">
+                    <Input
+                      class="h-8 px-3 text-sm"
+                      bind:value={saveRecipientName}
+                      placeholder={i18n.t('wallet.transfer.saveRecipient.namePlaceholder')}
+                    />
+                  </div>
+                  {#if saveRecipientError}
+                    <p class="text-destructive mt-2 text-xs">{saveRecipientError}</p>
+                  {/if}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    class="mt-3"
+                    onclick={saveRecipientFromSuccess}
+                    disabled={savingRecipient}
+                  >
+                    {savingRecipient
+                      ? i18n.t('wallet.transfer.saveRecipient.saving')
+                      : i18n.t('wallet.transfer.saveRecipient.save')}
+                  </Button>
+                </div>
+              {:else if savedRecipientOnSuccess}
+                <div class="rounded-md bg-emerald-500/12 px-3 py-2.5 text-left dark:bg-emerald-400/12">
+                  <div class="flex items-start gap-2">
+                    <CheckCircle2Icon class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <div class="space-y-0.5">
+                      <p class="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                        {i18n.t('wallet.transfer.step.success.savedRecipientTitle')}
+                      </p>
+                      {#if matchedSavedRecipient}
+                        <p class="text-[11px] text-emerald-900/85 dark:text-emerald-200/90">
+                          {i18n.t('wallet.transfer.review.savedRecipient', {
+                            contact: matchedSavedRecipient.contact.displayName,
+                            endpoint: matchedSavedRecipient.endpoint.label
+                          })}
+                        </p>
+                      {:else}
+                        <p class="text-[11px] text-emerald-900/85 dark:text-emerald-200/90">
+                          {i18n.t('wallet.transfer.step.success.savedRecipientDescription')}
+                        </p>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              {/if}
             {/if}
-          {/if}
+          </div>
         </Card.Content>
       </Card.Root>
     {/if}

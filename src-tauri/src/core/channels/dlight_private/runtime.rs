@@ -46,6 +46,14 @@ const STALLED_SYNC_THRESHOLD_SECS: u64 = 90;
 const FATAL_RETRY_BUDGET: u32 = 10;
 const SYNC_LOOP_SLEEP_SYNCING_SECS: u64 = 4;
 const SYNC_LOOP_SLEEP_SYNCED_SECS: u64 = 30;
+const CONTINUITY_REWIND_BLOCKS: u64 = 20;
+
+#[derive(Debug)]
+enum SyncRangeError {
+    Continuity { at_height: u64 },
+    TreeSizeUnknown { at_height: u64 },
+    Wallet(WalletError),
+}
 
 #[derive(Debug, Clone, Copy)]
 struct VerusConsensusParams {
@@ -242,7 +250,8 @@ struct RuntimeContext {
 pub struct RuntimeHandle {
     snapshot: Arc<Mutex<RuntimeSnapshot>>,
     cancel_token: CancellationToken,
-    task: JoinHandle<()>,
+    runtime_task: JoinHandle<()>,
+    spend_cache_task: JoinHandle<()>,
 }
 
 fn runtime_registry() -> &'static Mutex<HashMap<String, Arc<RuntimeHandle>>> {
@@ -752,7 +761,7 @@ async fn sync_range(
     prior_block_metadata: &mut Option<BlockMetadata>,
     cancel_token: &CancellationToken,
     network: WalletNetwork,
-) -> Result<(), WalletError> {
+) -> Result<(), SyncRangeError> {
     let verus_params = verus_scan_params(network);
     let mut compact_blocks = Vec::<CompactBlock>::new();
 
@@ -770,13 +779,14 @@ async fn sync_range(
     let mut stream = client
         .get_block_range(block_range)
         .await
-        .map_err(|_| WalletError::NetworkError)?
+        .map_err(|_| SyncRangeError::Wallet(WalletError::NetworkError))?
         .into_inner();
 
-    while let Some(compact_block) = stream
-        .message()
-        .await
-        .map_err(|_| WalletError::NetworkError)?
+    while let Some(compact_block) =
+        tokio::time::timeout(Duration::from_secs(DIAL_RPC_TIMEOUT_SECS), stream.message())
+            .await
+            .map_err(|_| SyncRangeError::Wallet(WalletError::NetworkError))?
+            .map_err(|_| SyncRangeError::Wallet(WalletError::NetworkError))?
     {
         if cancel_token.is_cancelled() {
             break;
@@ -784,7 +794,8 @@ async fn sync_range(
         compact_blocks.push(compact_block);
     }
 
-    let scanning_keys = build_scanning_keys_from_seed(seed_material, network)?;
+    let scanning_keys = build_scanning_keys_from_seed(seed_material, network)
+        .map_err(SyncRangeError::Wallet)?;
 
     for compact_block in compact_blocks {
         maybe_seed_prior_metadata_for_sapling_activation(
@@ -811,10 +822,18 @@ async fn sync_range(
                     scan_error.is_continuity_error(),
                     scan_error
                 );
+                let scan_error_debug = format!("{scan_error:?}");
                 if scan_error.is_continuity_error() {
-                    return Err(WalletError::OperationFailed);
+                    return Err(SyncRangeError::Continuity {
+                        at_height: compact_block.height,
+                    });
                 }
-                return Err(WalletError::OperationFailed);
+                if scan_error_debug.contains("TreeSizeUnknown") {
+                    return Err(SyncRangeError::TreeSizeUnknown {
+                        at_height: compact_block.height,
+                    });
+                }
+                return Err(SyncRangeError::Wallet(WalletError::OperationFailed));
             }
         };
 
@@ -829,6 +848,73 @@ async fn sync_range(
     }
 
     Ok(())
+}
+
+fn sync_state_maps_to_vectors(
+    state: &mut StoredRuntimeState,
+    notes_by_nullifier: &HashMap<String, StoredNote>,
+    txs_by_txid: &HashMap<String, StoredTransaction>,
+) {
+    state.notes = notes_by_nullifier.values().cloned().collect();
+    state.transactions = txs_by_txid.values().cloned().collect();
+}
+
+fn persist_runtime_state(paths: &super::store::DlightStoragePaths, state: &StoredRuntimeState) {
+    let _ = save_state(paths, state);
+    let _ = save_block_meta(
+        paths,
+        &StoredBlockMeta {
+            schema_version: STORAGE_SCHEMA_VERSION,
+            scanned_height: state.scanned_height,
+            sapling_tree_size: state.sapling_tree_size,
+            block_hash_hex: state.block_hash_hex.clone(),
+            last_updated: state.last_updated,
+        },
+    );
+}
+
+fn rewind_runtime_state_after_continuity(
+    state: &mut StoredRuntimeState,
+    notes_by_nullifier: &mut HashMap<String, StoredNote>,
+    txs_by_txid: &mut HashMap<String, StoredTransaction>,
+    birthday_floor: u64,
+) -> u64 {
+    let rewind_to = state
+        .scanned_height
+        .saturating_sub(CONTINUITY_REWIND_BLOCKS)
+        .max(birthday_floor);
+
+    notes_by_nullifier.retain(|_, note| note.received_height <= rewind_to);
+    for note in notes_by_nullifier.values_mut() {
+        if note.spent_height.is_some_and(|height| height > rewind_to) {
+            note.spent_height = None;
+        }
+    }
+    txs_by_txid.retain(|_, tx| tx.block_height <= rewind_to);
+
+    state.scanned_height = rewind_to;
+    state.sapling_tree_size = None;
+    state.block_hash_hex = None;
+    state.last_updated = unix_timestamp_secs();
+    sync_state_maps_to_vectors(state, notes_by_nullifier, txs_by_txid);
+
+    rewind_to
+}
+
+fn reset_runtime_state_to_birthday(
+    state: &mut StoredRuntimeState,
+    notes_by_nullifier: &mut HashMap<String, StoredNote>,
+    txs_by_txid: &mut HashMap<String, StoredTransaction>,
+    birthday_floor: u64,
+) -> u64 {
+    notes_by_nullifier.clear();
+    txs_by_txid.clear();
+    state.scanned_height = birthday_floor;
+    state.sapling_tree_size = None;
+    state.block_hash_hex = None;
+    state.last_updated = unix_timestamp_secs();
+    sync_state_maps_to_vectors(state, notes_by_nullifier, txs_by_txid);
+    birthday_floor
 }
 
 async fn run_sync_loop(
@@ -975,36 +1061,109 @@ async fn run_sync_loop(
                         )
                         .await;
 
-                        if let Err(error) = sync_result {
-                            eprintln!(
-                                "[dlight_private] sync range failed start={} end={} scanned_height={} error={:?}",
-                                current,
-                                end,
-                                stored_state.scanned_height,
-                                error
-                            );
-                            consecutive_failures = consecutive_failures.saturating_add(1);
-                            cycle_error = Some(error.to_string());
+                        match sync_result {
+                            Err(SyncRangeError::Continuity { at_height }) => {
+                                let rewind_to = rewind_runtime_state_after_continuity(
+                                    &mut stored_state,
+                                    &mut notes_by_nullifier,
+                                    &mut txs_by_txid,
+                                    birthday_floor,
+                                );
+                                prior_block_metadata = None;
+                                persist_runtime_state(&paths, &stored_state);
+                                eprintln!(
+                                    "[dlight_private] continuity mismatch at height={} rewinding to {}",
+                                    at_height, rewind_to
+                                );
+                                cycle_error = Some(format!(
+                                    "continuity mismatch at height {at_height}; rewound to {rewind_to}"
+                                ));
+                                consecutive_failures = 0;
+                                retry_count = 0;
+                                last_progress_at = Some(unix_timestamp_secs());
+                                progress_rate_started_at = Instant::now();
 
-                            let degraded_or_fatal_status =
-                                if consecutive_failures >= FATAL_RETRY_BUDGET {
-                                    RuntimeStatusKind::Error
-                                } else {
-                                    RuntimeStatusKind::Syncing
-                                };
-                            let mut guard = snapshot.lock().expect("runtime snapshot lock");
-                            *guard = snapshot_from_state(
-                                &stored_state,
-                                chain_tip_height,
-                                estimated_tip_height,
-                                degraded_or_fatal_status,
-                                cycle_error.clone(),
-                                last_progress_at,
-                                last_tip_probe_at,
-                                consecutive_failures,
-                                scan_rate_blocks_per_sec,
-                            );
-                            break;
+                                let mut guard = snapshot.lock().expect("runtime snapshot lock");
+                                *guard = snapshot_from_state(
+                                    &stored_state,
+                                    chain_tip_height,
+                                    estimated_tip_height,
+                                    RuntimeStatusKind::Syncing,
+                                    cycle_error.clone(),
+                                    last_progress_at,
+                                    last_tip_probe_at,
+                                    consecutive_failures,
+                                    scan_rate_blocks_per_sec,
+                                );
+                                break;
+                            }
+                            Err(SyncRangeError::TreeSizeUnknown { at_height }) => {
+                                let reset_to = reset_runtime_state_to_birthday(
+                                    &mut stored_state,
+                                    &mut notes_by_nullifier,
+                                    &mut txs_by_txid,
+                                    birthday_floor,
+                                );
+                                prior_block_metadata = None;
+                                persist_runtime_state(&paths, &stored_state);
+                                eprintln!(
+                                    "[dlight_private] tree size unknown at height={} resetting to birthday floor {}",
+                                    at_height, reset_to
+                                );
+                                cycle_error = Some(format!(
+                                    "tree size unknown at height {at_height}; reset to {reset_to}"
+                                ));
+                                consecutive_failures = 0;
+                                retry_count = 0;
+                                last_progress_at = Some(unix_timestamp_secs());
+                                progress_rate_started_at = Instant::now();
+
+                                let mut guard = snapshot.lock().expect("runtime snapshot lock");
+                                *guard = snapshot_from_state(
+                                    &stored_state,
+                                    chain_tip_height,
+                                    estimated_tip_height,
+                                    RuntimeStatusKind::Syncing,
+                                    cycle_error.clone(),
+                                    last_progress_at,
+                                    last_tip_probe_at,
+                                    consecutive_failures,
+                                    scan_rate_blocks_per_sec,
+                                );
+                                break;
+                            }
+                            Err(SyncRangeError::Wallet(error)) => {
+                                eprintln!(
+                                    "[dlight_private] sync range failed start={} end={} scanned_height={} error={:?}",
+                                    current,
+                                    end,
+                                    stored_state.scanned_height,
+                                    error
+                                );
+                                consecutive_failures = consecutive_failures.saturating_add(1);
+                                cycle_error = Some(error.to_string());
+
+                                let degraded_or_fatal_status =
+                                    if consecutive_failures >= FATAL_RETRY_BUDGET {
+                                        RuntimeStatusKind::Error
+                                    } else {
+                                        RuntimeStatusKind::Syncing
+                                    };
+                                let mut guard = snapshot.lock().expect("runtime snapshot lock");
+                                *guard = snapshot_from_state(
+                                    &stored_state,
+                                    chain_tip_height,
+                                    estimated_tip_height,
+                                    degraded_or_fatal_status,
+                                    cycle_error.clone(),
+                                    last_progress_at,
+                                    last_tip_probe_at,
+                                    consecutive_failures,
+                                    scan_rate_blocks_per_sec,
+                                );
+                                break;
+                            }
+                            Ok(()) => {}
                         }
 
                         if stored_state.scanned_height > pre_sync_height {
@@ -1018,21 +1177,13 @@ async fn run_sync_loop(
                             progress_rate_started_at = Instant::now();
                         }
 
-                        stored_state.notes = notes_by_nullifier.values().cloned().collect();
-                        stored_state.transactions = txs_by_txid.values().cloned().collect();
-                        stored_state.last_updated = unix_timestamp_secs();
-
-                        let _ = save_state(&paths, &stored_state);
-                        let _ = save_block_meta(
-                            &paths,
-                            &StoredBlockMeta {
-                                schema_version: STORAGE_SCHEMA_VERSION,
-                                scanned_height: stored_state.scanned_height,
-                                sapling_tree_size: stored_state.sapling_tree_size,
-                                block_hash_hex: stored_state.block_hash_hex.clone(),
-                                last_updated: stored_state.last_updated,
-                            },
+                        sync_state_maps_to_vectors(
+                            &mut stored_state,
+                            &notes_by_nullifier,
+                            &txs_by_txid,
                         );
+                        stored_state.last_updated = unix_timestamp_secs();
+                        persist_runtime_state(&paths, &stored_state);
 
                         {
                             let mut guard = snapshot.lock().expect("runtime snapshot lock");
@@ -1053,20 +1204,9 @@ async fn run_sync_loop(
                     }
                 }
 
-                stored_state.notes = notes_by_nullifier.values().cloned().collect();
-                stored_state.transactions = txs_by_txid.values().cloned().collect();
+                sync_state_maps_to_vectors(&mut stored_state, &notes_by_nullifier, &txs_by_txid);
                 stored_state.last_updated = unix_timestamp_secs();
-                let _ = save_state(&paths, &stored_state);
-                let _ = save_block_meta(
-                    &paths,
-                    &StoredBlockMeta {
-                        schema_version: STORAGE_SCHEMA_VERSION,
-                        scanned_height: stored_state.scanned_height,
-                        sapling_tree_size: stored_state.sapling_tree_size,
-                        block_hash_hex: stored_state.block_hash_hex.clone(),
-                        last_updated: stored_state.last_updated,
-                    },
-                );
+                persist_runtime_state(&paths, &stored_state);
 
                 {
                     let mut guard = snapshot.lock().expect("runtime snapshot lock");
@@ -1169,16 +1309,22 @@ pub fn ensure_runtime(request: &DlightRuntimeRequest) -> Arc<RuntimeHandle> {
     let snapshot = Arc::new(Mutex::new(RuntimeSnapshot::default()));
     let cancel_token = CancellationToken::new();
     let child_token = cancel_token.child_token();
+    let spend_child_token = cancel_token.child_token();
     let runtime_snapshot = Arc::clone(&snapshot);
+    let spend_request = request.clone();
 
-    let task = tokio::spawn(async move {
+    let runtime_task = tokio::spawn(async move {
         run_sync_loop(context, runtime_snapshot, child_token).await;
+    });
+    let spend_cache_task = tokio::spawn(async move {
+        super::spend_sync::run_spend_cache_loop(spend_request, spend_child_token).await;
     });
 
     let handle = Arc::new(RuntimeHandle {
         snapshot,
         cancel_token,
-        task,
+        runtime_task,
+        spend_cache_task,
     });
 
     if let Ok(mut registry) = runtime_registry().lock() {
@@ -1205,7 +1351,8 @@ pub async fn stop_runtime(runtime_key: &str) {
 
     if let Some(handle) = handle {
         handle.cancel_token.cancel();
-        handle.task.abort();
+        handle.runtime_task.abort();
+        handle.spend_cache_task.abort();
     }
 }
 
@@ -1223,6 +1370,7 @@ pub async fn stop_all_runtimes() {
 
     for handle in handles {
         handle.cancel_token.cancel();
-        handle.task.abort();
+        handle.runtime_task.abort();
+        handle.spend_cache_task.abort();
     }
 }

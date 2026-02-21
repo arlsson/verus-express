@@ -202,6 +202,129 @@ pub fn mark_endpoint_used(snapshot: &mut AddressBookSnapshot, endpoint_id: &str)
     false
 }
 
+fn sapling_payment_address_hrp(_network: WalletNetwork) -> &'static str {
+    // Parity policy: use zs-addresses on both mainnet and testnet.
+    mainnet::HRP_SAPLING_PAYMENT_ADDRESS
+}
+
+fn migrate_legacy_testnet_zs(value: &str, network: WalletNetwork) -> Option<String> {
+    let normalized = value.trim().to_ascii_lowercase();
+    if !normalized.starts_with(testnet::HRP_SAPLING_PAYMENT_ADDRESS) {
+        return None;
+    }
+
+    let decoded =
+        decode_payment_address(testnet::HRP_SAPLING_PAYMENT_ADDRESS, normalized.as_str()).ok()?;
+    Some(encode_payment_address(
+        sapling_payment_address_hrp(network),
+        &decoded,
+    ))
+}
+
+fn normalize_or_migrate_zs_endpoint(
+    endpoint: &AddressBookEndpoint,
+    network: WalletNetwork,
+) -> Option<String> {
+    normalize_destination_address(AddressEndpointKind::Zs, &endpoint.address, network)
+        .ok()
+        .or_else(|| migrate_legacy_testnet_zs(&endpoint.address, network))
+        .or_else(|| {
+            normalize_destination_address(
+                AddressEndpointKind::Zs,
+                &endpoint.normalized_address,
+                network,
+            )
+            .ok()
+        })
+        .or_else(|| migrate_legacy_testnet_zs(&endpoint.normalized_address, network))
+}
+
+pub fn migrate_legacy_zs_snapshot(
+    snapshot: &mut AddressBookSnapshot,
+    network: WalletNetwork,
+) -> bool {
+    let mut changed = false;
+
+    for contact in &mut snapshot.contacts {
+        for endpoint in &mut contact.endpoints {
+            if endpoint.kind != AddressEndpointKind::Zs {
+                continue;
+            }
+
+            let Some(canonical) = normalize_or_migrate_zs_endpoint(endpoint, network) else {
+                continue;
+            };
+
+            if endpoint.address != canonical || endpoint.normalized_address != canonical {
+                endpoint.address = canonical.clone();
+                endpoint.normalized_address = canonical;
+                changed = true;
+            }
+        }
+    }
+
+    let mut best_zs_endpoint_id_by_key = HashMap::<String, (String, u64, u64)>::new();
+    for contact in &snapshot.contacts {
+        for endpoint in &contact.endpoints {
+            if endpoint.kind != AddressEndpointKind::Zs {
+                continue;
+            }
+
+            let key = endpoint_unique_key(endpoint.kind.clone(), &endpoint.normalized_address);
+            let should_replace = match best_zs_endpoint_id_by_key.get(&key) {
+                None => true,
+                Some((best_id, best_updated_at, best_created_at)) => {
+                    endpoint.updated_at > *best_updated_at
+                        || (endpoint.updated_at == *best_updated_at
+                            && endpoint.created_at > *best_created_at)
+                        || (endpoint.updated_at == *best_updated_at
+                            && endpoint.created_at == *best_created_at
+                            && endpoint.id.as_str() < best_id.as_str())
+                }
+            };
+
+            if should_replace {
+                best_zs_endpoint_id_by_key.insert(
+                    key,
+                    (
+                        endpoint.id.clone(),
+                        endpoint.updated_at,
+                        endpoint.created_at,
+                    ),
+                );
+            }
+        }
+    }
+
+    for contact in &mut snapshot.contacts {
+        let before = contact.endpoints.len();
+        contact.endpoints.retain(|endpoint| {
+            if endpoint.kind != AddressEndpointKind::Zs {
+                return true;
+            }
+
+            let key = endpoint_unique_key(endpoint.kind.clone(), &endpoint.normalized_address);
+            best_zs_endpoint_id_by_key
+                .get(&key)
+                .map(|(best_id, _, _)| endpoint.id == *best_id)
+                .unwrap_or(true)
+        });
+        if contact.endpoints.len() != before {
+            changed = true;
+        }
+    }
+
+    let contacts_before = snapshot.contacts.len();
+    snapshot
+        .contacts
+        .retain(|contact| !contact.endpoints.is_empty());
+    if snapshot.contacts.len() != contacts_before {
+        changed = true;
+    }
+
+    changed
+}
+
 pub fn normalize_destination_address(
     kind: AddressEndpointKind,
     address: &str,
@@ -260,10 +383,7 @@ pub fn normalize_destination_address(
             Ok(trimmed.to_string())
         }
         AddressEndpointKind::Zs => {
-            let hrp = match network {
-                WalletNetwork::Mainnet => mainnet::HRP_SAPLING_PAYMENT_ADDRESS,
-                WalletNetwork::Testnet => testnet::HRP_SAPLING_PAYMENT_ADDRESS,
-            };
+            let hrp = sapling_payment_address_hrp(network);
             let normalized = trimmed.to_ascii_lowercase();
             let decoded = decode_payment_address(hrp, normalized.as_str())
                 .map_err(|_| WalletError::InvalidAddress)?;
@@ -388,14 +508,115 @@ mod tests {
     fn normalize_zs_testnet_accepts_valid_address() {
         let normalized = normalize_destination_address(
             AddressEndpointKind::Zs,
-            "ztestsapling1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75ss7jnk",
+            "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z",
             WalletNetwork::Testnet,
         )
         .expect("valid testnet sapling address");
 
         assert_eq!(
             normalized,
-            "ztestsapling1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75ss7jnk"
+            "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z"
+        );
+    }
+
+    #[test]
+    fn normalize_zs_testnet_rejects_legacy_prefix() {
+        let result = normalize_destination_address(
+            AddressEndpointKind::Zs,
+            "ztestsapling1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75ss7jnk",
+            WalletNetwork::Testnet,
+        );
+        assert!(matches!(result, Err(WalletError::InvalidAddress)));
+    }
+
+    #[test]
+    fn migrate_legacy_zs_snapshot_converts_and_deduplicates() {
+        let mut snapshot = AddressBookSnapshot {
+            schema_version: 1,
+            contacts: vec![
+                AddressBookContact {
+                    id: "legacy-contact".to_string(),
+                    display_name: "Legacy".to_string(),
+                    note: None,
+                    created_at: 10,
+                    updated_at: 10,
+                    endpoints: vec![AddressBookEndpoint {
+                        id: "legacy-endpoint".to_string(),
+                        kind: AddressEndpointKind::Zs,
+                        address: "ztestsapling1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75ss7jnk".to_string(),
+                        normalized_address: "ztestsapling1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75ss7jnk".to_string(),
+                        label: "Legacy".to_string(),
+                        last_used_at: None,
+                        created_at: 10,
+                        updated_at: 10,
+                    }],
+                },
+                AddressBookContact {
+                    id: "current-contact".to_string(),
+                    display_name: "Current".to_string(),
+                    note: None,
+                    created_at: 20,
+                    updated_at: 20,
+                    endpoints: vec![AddressBookEndpoint {
+                        id: "current-endpoint".to_string(),
+                        kind: AddressEndpointKind::Zs,
+                        address: "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z".to_string(),
+                        normalized_address: "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z".to_string(),
+                        label: "Current".to_string(),
+                        last_used_at: None,
+                        created_at: 20,
+                        updated_at: 20,
+                    }],
+                },
+            ],
+        };
+
+        let changed = migrate_legacy_zs_snapshot(&mut snapshot, WalletNetwork::Testnet);
+        assert!(changed);
+        assert_eq!(snapshot.contacts.len(), 1);
+        assert_eq!(snapshot.contacts[0].id, "current-contact");
+        assert_eq!(snapshot.contacts[0].endpoints.len(), 1);
+        assert_eq!(snapshot.contacts[0].endpoints[0].id, "current-endpoint");
+        assert_eq!(
+            snapshot.contacts[0].endpoints[0].address,
+            "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z"
+        );
+    }
+
+    #[test]
+    fn migrate_legacy_zs_snapshot_converts_when_unique() {
+        let mut snapshot = AddressBookSnapshot {
+            schema_version: 1,
+            contacts: vec![AddressBookContact {
+                id: "legacy-contact".to_string(),
+                display_name: "Legacy".to_string(),
+                note: None,
+                created_at: 10,
+                updated_at: 10,
+                endpoints: vec![AddressBookEndpoint {
+                    id: "legacy-endpoint".to_string(),
+                    kind: AddressEndpointKind::Zs,
+                    address: "ztestsapling1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75ss7jnk".to_string(),
+                    normalized_address: "ztestsapling1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75ss7jnk".to_string(),
+                    label: "Legacy".to_string(),
+                    last_used_at: None,
+                    created_at: 10,
+                    updated_at: 10,
+                }],
+            }],
+        };
+
+        let changed = migrate_legacy_zs_snapshot(&mut snapshot, WalletNetwork::Testnet);
+        assert!(changed);
+        assert_eq!(snapshot.contacts.len(), 1);
+        assert_eq!(snapshot.contacts[0].endpoints.len(), 1);
+        assert_eq!(
+            snapshot.contacts[0].endpoints[0].address,
+            "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z"
+        );
+        assert_eq!(
+            snapshot.contacts[0].endpoints[0].normalized_address,
+            "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z"
         );
     }
 }

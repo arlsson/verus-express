@@ -59,6 +59,15 @@ pub struct BootstrapUpdatedPayload {
     pub in_progress: bool,
 }
 
+/// Payload for wallet://tx-send-progress.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TxSendProgressPayload {
+    pub channel: String,
+    pub coin_id: String,
+    pub stage: String,
+}
+
 /// Payload for wallet://error. Message must be user-facing, no internal details.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

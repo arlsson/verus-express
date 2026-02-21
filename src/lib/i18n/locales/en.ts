@@ -302,7 +302,7 @@ export const en: Record<string, string> = {
   'wallet.send.sending': 'Sending transaction…',
   'wallet.send.sentTitle': 'Sent',
   'wallet.send.sentDescription': 'Transaction broadcast',
-  'wallet.send.sentSummary': '{value} sent to {address}',
+  'wallet.send.sentSummary': '{value} sent to',
   'wallet.send.emptyDescription': 'Select a coin and enter recipient and amount.',
 
   'wallet.transfer.sendTitle': 'Send',
@@ -335,6 +335,10 @@ export const en: Record<string, string> = {
     'Check fees, route details, and warnings before broadcast.',
   'wallet.transfer.step.success.title': 'Transfer sent',
   'wallet.transfer.step.success.description': 'Your transaction was broadcast successfully.',
+  'wallet.transfer.step.success.txidLabel': 'Transaction id',
+  'wallet.transfer.step.success.savedRecipientTitle': 'Recipient saved',
+  'wallet.transfer.step.success.savedRecipientDescription':
+    'This address is now in your address book.',
   'wallet.transfer.youSend': 'You send',
   'wallet.transfer.youReceive': 'You receive',
   'wallet.transfer.doConversion': 'Do conversion',
@@ -428,7 +432,7 @@ export const en: Record<string, string> = {
   'wallet.transfer.max': 'Max',
   'wallet.transfer.estimatedReceive': 'Estimated receive: {value} {ticker}',
   'wallet.transfer.recipientLabel': 'Recipient',
-  'wallet.transfer.recipientPlaceholderVrpc': 'R-address, i-address, or handle@',
+  'wallet.transfer.recipientPlaceholderVrpc': 'R-address, i-address, zs-address, or handle@',
   'wallet.transfer.recipientPlaceholderEth': '0x…',
   'wallet.transfer.recipientPlaceholderBtc': 'bc1…',
   'wallet.transfer.recipientPlaceholderDlight': 'zs-address, R-address, or i-address',
@@ -453,6 +457,18 @@ export const en: Record<string, string> = {
   'wallet.transfer.prepareReview': 'Review',
   'wallet.transfer.sendNow': 'Send now',
   'wallet.transfer.sendingNow': 'Broadcasting…',
+  'wallet.transfer.sendStage.syncingSpendState': 'Syncing spend state…',
+  'wallet.transfer.sendStage.loadingProver': 'Loading prover…',
+  'wallet.transfer.sendStage.buildingProof': 'Building proof…',
+  'wallet.transfer.sendStage.broadcasting': 'Broadcasting…',
+  'wallet.transfer.sendStageHint.syncingSpendState':
+    'Still syncing private spend state. If this keeps taking too long, retry once your private sync is healthy.',
+  'wallet.transfer.sendStageHint.loadingProver':
+    'Loading proving parameters is taking longer than expected. Verify Sapling params are installed correctly.',
+  'wallet.transfer.sendStageHint.buildingProof':
+    'Proof generation is taking longer than expected. Keep the app open and try again if this does not complete.',
+  'wallet.transfer.sendStageHint.broadcasting':
+    'Broadcast is taking longer than expected. Endpoint latency may be high; retry if no txid appears.',
   'wallet.transfer.routeSectionTitle': 'Route',
   'wallet.transfer.warningsTitle': 'Warnings',
   'wallet.transfer.noWarnings': 'No warnings.',
@@ -479,6 +495,8 @@ export const en: Record<string, string> = {
     'Private Verus is still syncing ({percent}%). Sending is available when sync reaches 100%.',
   'wallet.transfer.privateSyncBlockedUnknown':
     'Private Verus is still syncing. Sending is available when sync reaches 100%.',
+  'wallet.transfer.privateSpendCacheBlocked':
+    'Private spend cache is still syncing ({percent}%). Sending is available when it reaches 100%.',
   'wallet.transfer.saveRecipient.title': 'Save recipient',
   'wallet.transfer.saveRecipient.description':
     'Save this address to your address book so you can reuse it later.',
@@ -512,6 +530,10 @@ export const en: Record<string, string> = {
   'wallet.transfer.error.unsupportedChannel': 'This channel is not supported for transfer.',
   'wallet.transfer.error.invalidAddress': 'The destination address is invalid.',
   'wallet.transfer.error.insufficientFunds': 'Insufficient funds for this transfer.',
+  'wallet.transfer.error.dlightProverUnavailable':
+    'Private send prover is unavailable. Install valid Sapling params and try again.',
+  'wallet.transfer.error.dlightSpendCacheNotReady':
+    'Private spend cache is not ready yet. Let private sync complete, then try again.',
   'wallet.transfer.error.network': 'Network error. Try again.',
   'wallet.transfer.error.operationFailed': 'Transfer failed. Try again.',
 

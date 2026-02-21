@@ -58,6 +58,7 @@ pub async fn preflight_send(
 #[tauri::command(rename_all = "snake_case")]
 pub async fn send_transaction(
     request: SendRequest,
+    app_handle: AppHandle,
     preflight_store: State<'_, PreflightStore>,
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     coin_registry: State<'_, Arc<CoinRegistry>>,
@@ -80,6 +81,7 @@ pub async fn send_transaction(
         vrpc_provider_pool.inner().as_ref(),
         btc_provider_pool.inner().as_ref(),
         eth_provider_pool.inner().as_ref(),
+        &app_handle,
     )
     .await
 }

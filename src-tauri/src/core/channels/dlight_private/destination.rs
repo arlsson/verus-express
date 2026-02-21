@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use zcash_client_backend::encoding::decode_payment_address;
-use zcash_protocol::constants::{mainnet, testnet};
+use zcash_protocol::constants::mainnet;
 
 use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
@@ -57,12 +57,14 @@ pub fn is_shielded_sapling_address(address: &str, network: WalletNetwork) -> boo
     }
 
     let normalized = trimmed.to_ascii_lowercase();
-    let hrp = match network {
-        WalletNetwork::Mainnet => mainnet::HRP_SAPLING_PAYMENT_ADDRESS,
-        WalletNetwork::Testnet => testnet::HRP_SAPLING_PAYMENT_ADDRESS,
-    };
+    let hrp = sapling_payment_address_hrp(network);
 
     decode_payment_address(hrp, normalized.as_str()).is_ok()
+}
+
+fn sapling_payment_address_hrp(_network: WalletNetwork) -> &'static str {
+    // Parity policy: use zs-addresses on both mainnet and testnet.
+    mainnet::HRP_SAPLING_PAYMENT_ADDRESS
 }
 
 fn is_base58_char(ch: char) -> bool {
@@ -101,13 +103,23 @@ mod tests {
     }
 
     #[test]
-    fn classify_supports_testnet_sapling_address() {
-        let testnet = "ztestsapling1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75ss7jnk";
+    fn classify_supports_zs_on_testnet() {
+        let testnet =
+            "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z";
         assert_eq!(
             classify_dlight_destination(testnet, WalletNetwork::Testnet)
                 .expect("valid testnet sapling address"),
             DlightDestinationKind::Shielded
         );
+    }
+
+    #[test]
+    fn classify_rejects_legacy_testnet_sapling_prefix() {
+        let legacy_testnet = "ztestsapling1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75ss7jnk";
+        assert!(matches!(
+            classify_dlight_destination(legacy_testnet, WalletNetwork::Testnet),
+            Err(WalletError::InvalidAddress)
+        ));
     }
 
     #[test]

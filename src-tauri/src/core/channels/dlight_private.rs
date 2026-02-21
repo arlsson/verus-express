@@ -2,9 +2,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use serde_json::Value;
-use zcash_client_backend::encoding::{
-    decode_extended_spending_key, encode_payment_address, AddressCodec,
-};
+use zcash_client_backend::encoding::{decode_extended_spending_key, encode_payment_address};
 use zcash_client_backend::keys::{ReceiverRequirement, UnifiedAddressRequest, UnifiedSpendingKey};
 use zcash_protocol::consensus::{MainNetwork, Parameters, TestNetwork};
 use zcash_protocol::constants::{mainnet, testnet};
@@ -17,14 +15,21 @@ use crate::types::WalletError;
 mod destination;
 mod preflight;
 mod reader;
+mod recipient_resolution;
 mod runtime;
 mod send;
+mod spend_db;
+mod spend_engine;
+mod spend_keys;
+mod spend_params;
+mod spend_sync;
 mod store;
 mod synchronizer;
 
 pub use preflight::{preflight, DlightPreflightPayload};
 pub use runtime::stop_all_runtimes;
 pub use send::send;
+pub use spend_params::{DlightProverFileDiagnostics, DlightProverStatus};
 pub use synchronizer::{DlightSynchronizerAdapter, DlightSynchronizerRuntimeAdapter};
 
 const SAPLING_ADDRESS_REQUEST: UnifiedAddressRequest = UnifiedAddressRequest::unsafe_custom(
@@ -68,6 +73,15 @@ pub struct DlightRuntimeDiagnostics {
     pub scan_rate_blocks_per_sec: Option<f64>,
     pub stalled: bool,
     pub last_error: Option<String>,
+    pub spend_cache_ready: Option<bool>,
+    pub spend_cache_status_kind: Option<String>,
+    pub spend_cache_percent: Option<f64>,
+    pub spend_cache_lag_blocks: Option<u64>,
+    pub spend_cache_last_error: Option<String>,
+    pub spend_cache_scanned_height: Option<u64>,
+    pub spend_cache_tip_height: Option<u64>,
+    pub spend_cache_last_updated: Option<u64>,
+    pub spend_cache_note_count: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +141,35 @@ pub fn parse_dlight_channel_id(channel_id: &str) -> Result<DlightChannelRef, Wal
     })
 }
 
+pub(super) fn ensure_runtime_ready_for_spend(
+    status_kind: runtime::RuntimeStatusKind,
+) -> Result<(), WalletError> {
+    match status_kind {
+        runtime::RuntimeStatusKind::Synced => Ok(()),
+        runtime::RuntimeStatusKind::Initializing | runtime::RuntimeStatusKind::Syncing => {
+            Err(WalletError::DlightSynchronizerNotReady)
+        }
+        runtime::RuntimeStatusKind::Error => Err(WalletError::NetworkError),
+    }
+}
+
+pub(super) fn ensure_spend_cache_ready(
+    request: &DlightRuntimeRequest,
+    runtime_snapshot: &runtime::RuntimeSnapshot,
+) -> Result<(), WalletError> {
+    let runtime_tip_hint = runtime_snapshot
+        .chain_tip_height
+        .or(runtime_snapshot.estimated_tip_height)
+        .filter(|tip| *tip > 0);
+    let spend_status = spend_sync::get_spend_cache_status(request, runtime_tip_hint)
+        .ok_or(WalletError::DlightSpendCacheNotReady)?;
+    if spend_status.ready {
+        Ok(())
+    } else {
+        Err(WalletError::DlightSpendCacheNotReady)
+    }
+}
+
 fn is_dlight_spending_key(value: &str) -> bool {
     value.trim().starts_with("secret-extended-key-")
 }
@@ -135,16 +178,11 @@ fn derive_scope_address_from_spending_key(
     spending_key: &str,
     network: WalletNetwork,
 ) -> Result<String, WalletError> {
-    let (spending_key_hrp, payment_address_hrp) = match network {
-        WalletNetwork::Mainnet => (
-            mainnet::HRP_SAPLING_EXTENDED_SPENDING_KEY,
-            mainnet::HRP_SAPLING_PAYMENT_ADDRESS,
-        ),
-        WalletNetwork::Testnet => (
-            testnet::HRP_SAPLING_EXTENDED_SPENDING_KEY,
-            testnet::HRP_SAPLING_PAYMENT_ADDRESS,
-        ),
+    let spending_key_hrp = match network {
+        WalletNetwork::Mainnet => mainnet::HRP_SAPLING_EXTENDED_SPENDING_KEY,
+        WalletNetwork::Testnet => testnet::HRP_SAPLING_EXTENDED_SPENDING_KEY,
     };
+    let payment_address_hrp = sapling_payment_address_hrp(network);
 
     let extsk = decode_extended_spending_key(spending_key_hrp, spending_key.trim())
         .map_err(|_| WalletError::InvalidImportText)?;
@@ -158,6 +196,7 @@ fn derive_scope_address_from_spending_key(
 fn derive_scope_address_for_network<P: Parameters>(
     seed_bytes: &[u8],
     network: &P,
+    payment_address_hrp: &str,
 ) -> Result<String, WalletError> {
     let usk = UnifiedSpendingKey::from_seed(network, seed_bytes, AccountId::ZERO)
         .map_err(|_| WalletError::InvalidSeedPhrase)?;
@@ -168,7 +207,7 @@ fn derive_scope_address_for_network<P: Parameters>(
 
     address
         .sapling()
-        .map(|sapling| sapling.encode(network))
+        .map(|sapling| encode_payment_address(payment_address_hrp, sapling))
         .ok_or(WalletError::OperationFailed)
 }
 
@@ -188,15 +227,25 @@ pub fn derive_scope_address(
     let mnemonic =
         bip39::Mnemonic::parse(normalized).map_err(|_| WalletError::InvalidSeedPhrase)?;
     let seed_bytes = mnemonic.to_seed_normalized("").to_vec();
+    let payment_address_hrp = sapling_payment_address_hrp(network);
 
     match network {
-        WalletNetwork::Mainnet => {
-            derive_scope_address_for_network(seed_bytes.as_slice(), &MainNetwork)
-        }
-        WalletNetwork::Testnet => {
-            derive_scope_address_for_network(seed_bytes.as_slice(), &TestNetwork)
-        }
+        WalletNetwork::Mainnet => derive_scope_address_for_network(
+            seed_bytes.as_slice(),
+            &MainNetwork,
+            payment_address_hrp,
+        ),
+        WalletNetwork::Testnet => derive_scope_address_for_network(
+            seed_bytes.as_slice(),
+            &TestNetwork,
+            payment_address_hrp,
+        ),
     }
+}
+
+fn sapling_payment_address_hrp(_network: WalletNetwork) -> &'static str {
+    // Parity policy: use zs-addresses on both mainnet and testnet.
+    mainnet::HRP_SAPLING_PAYMENT_ADDRESS
 }
 
 pub fn normalize_endpoint_url(endpoint: &str) -> Result<String, WalletError> {
@@ -318,6 +367,10 @@ pub async fn get_runtime_diagnostics(
     active_adapter().get_runtime_diagnostics(&request).await
 }
 
+pub fn get_prover_status() -> DlightProverStatus {
+    spend_params::get_prover_status()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -341,5 +394,22 @@ mod tests {
     fn canonical_dlight_channel_id_has_expected_shape() {
         let channel = canonical_dlight_channel_id("zsTest", "iSystem");
         assert_eq!(channel, "dlight_private.zsTest.iSystem");
+    }
+
+    #[test]
+    fn runtime_ready_gate_requires_synced_status() {
+        assert!(ensure_runtime_ready_for_spend(runtime::RuntimeStatusKind::Synced).is_ok());
+        assert!(matches!(
+            ensure_runtime_ready_for_spend(runtime::RuntimeStatusKind::Initializing),
+            Err(WalletError::DlightSynchronizerNotReady)
+        ));
+        assert!(matches!(
+            ensure_runtime_ready_for_spend(runtime::RuntimeStatusKind::Syncing),
+            Err(WalletError::DlightSynchronizerNotReady)
+        ));
+        assert!(matches!(
+            ensure_runtime_ready_for_spend(runtime::RuntimeStatusKind::Error),
+            Err(WalletError::NetworkError)
+        ));
     }
 }

@@ -32,7 +32,14 @@ fn greet(name: &str) -> String {
 fn load_runtime_env_files() {
     // Load local env files for desktop dev/runtime convenience without committing secrets.
     // Existing process environment variables keep precedence.
-    for candidate in [".env.local", ".env", "../.env.local", "../.env"] {
+    for candidate in [
+        ".env.local",
+        ".env",
+        ".env.zcash-params",
+        "../.env.local",
+        "../.env",
+        "../.env.zcash-params",
+    ] {
         if !Path::new(candidate).exists() {
             continue;
         }
@@ -156,6 +163,7 @@ pub fn run() {
             wallet::get_dlight_seed_status,
             wallet::setup_dlight_seed,
             wallet::get_dlight_runtime_status,
+            wallet::get_dlight_prover_status,
             wallet::get_watched_vrpc_addresses,
             wallet::set_watched_vrpc_addresses,
             wallet::is_unlocked,

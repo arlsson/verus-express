@@ -1,6 +1,6 @@
 ---
 owner: lite-wallet-team
-last_reviewed: 2026-02-20
+last_reviewed: 2026-02-21
 ---
 
 # Desktop transfer wizard redesign v2
@@ -58,6 +58,8 @@ last_reviewed: 2026-02-20
   amount, or recipient changes.
 - Send action uses current `activePreflight.preflightId` only.
 - Backend transaction and preflight APIs are unchanged.
+- For `dlight_private`, backend preflight/send now route through the spend engine
+  and preserve the same IPC contract (`preflight_send`, `send_transaction`).
 
 ## Localization updates
 

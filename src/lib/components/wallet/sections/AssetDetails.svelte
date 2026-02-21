@@ -711,7 +711,8 @@
   function formatSyncPercent(percent: number): string {
     const clamped = Math.max(0, Math.min(percent, 100));
     if (clamped > 0 && clamped < 1) return '<1';
-    return i18n.formatNumber(clamped, {
+    const floored = Math.floor(clamped * 10) / 10;
+    return i18n.formatNumber(floored, {
       minimumFractionDigits: 0,
       maximumFractionDigits: 1
     });

@@ -1,6 +1,6 @@
 ---
 owner: lite-wallet-team
-last_reviewed: 2026-02-20
+last_reviewed: 2026-02-21
 ---
 
 # Context pack: send flow
@@ -17,9 +17,11 @@ Read this before touching transaction send behavior.
 - ERC20 preflight must enforce both token balance and ETH-fee balance checks before send.
 - ETH/ERC20 send must reject missing/expired preflight and consume preflight records exactly once.
 - dlight private preflight supports destination policy `zs | R | i` only.
+- dlight private `i...` recipient handling resolves to primary `R...` server-side before send.
 - dlight private preflight uses fixed fee `0.0001` in source coin units.
 - dlight private preflight and send must return `DlightSynchronizerNotReady` while private sync is incomplete.
 - dlight private memo is accepted only for shielded (`zs`) destinations.
+- dlight private send must fail safely when Sapling proving params are missing or checksum-invalid.
 
 ## Open these files first
 
@@ -39,6 +41,11 @@ Read this before touching transaction send behavior.
 - `src-tauri/src/core/channels/dlight_private/preflight.rs`
 - `src-tauri/src/core/channels/dlight_private/send.rs`
 - `src-tauri/src/core/channels/dlight_private/destination.rs`
+- `src-tauri/src/core/channels/dlight_private/spend_engine.rs`
+- `src-tauri/src/core/channels/dlight_private/spend_sync.rs`
+- `src-tauri/src/core/channels/dlight_private/spend_keys.rs`
+- `src-tauri/src/core/channels/dlight_private/spend_params.rs`
+- `src-tauri/src/core/channels/dlight_private/recipient_resolution.rs`
 
 ## Verification checklist
 

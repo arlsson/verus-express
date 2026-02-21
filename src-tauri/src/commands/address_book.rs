@@ -52,8 +52,15 @@ async fn load_snapshot(context: &AddressBookContext) -> Result<AddressBookSnapsh
         .await?;
 
     match payload {
-        Some(raw) => serde_json::from_slice::<AddressBookSnapshot>(&raw)
-            .map_err(|_| WalletError::OperationFailed),
+        Some(raw) => {
+            let mut snapshot = serde_json::from_slice::<AddressBookSnapshot>(&raw)
+                .map_err(|_| WalletError::OperationFailed)?;
+            let migrated = manager::migrate_legacy_zs_snapshot(&mut snapshot, context.network);
+            if migrated {
+                store_snapshot(context, &snapshot).await?;
+            }
+            Ok(snapshot)
+        }
         None => Ok(manager::empty_snapshot()),
     }
 }

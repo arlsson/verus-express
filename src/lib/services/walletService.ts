@@ -8,6 +8,7 @@ import type {
   ActiveAssetsState,
   BalanceResult,
   CoinScopesResult,
+  DlightProverStatusResult,
   DlightRuntimeStatusResult,
   DlightSeedStatusResult,
   SetupDlightSeedRequest,
@@ -122,6 +123,10 @@ export async function getDlightRuntimeStatus(
     channel_id: channelId,
     ...(coinId ? { coin_id: coinId } : {})
   });
+}
+
+export async function getDlightProverStatus(): Promise<DlightProverStatusResult> {
+  return invoke<DlightProverStatusResult>('get_dlight_prover_status');
 }
 
 export async function readClipboardText(): Promise<string> {

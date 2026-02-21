@@ -38,6 +38,7 @@ pub const EVENT_TRANSACTIONS_UPDATED: &str = "wallet://transactions-updated";
 pub const EVENT_INFO_UPDATED: &str = "wallet://info-updated";
 pub const EVENT_RATES_UPDATED: &str = "wallet://rates-updated";
 pub const EVENT_BOOTSTRAP_UPDATED: &str = "wallet://bootstrap-updated";
+pub const EVENT_TX_SEND_PROGRESS: &str = "wallet://tx-send-progress";
 pub const EVENT_ERROR: &str = "wallet://error";
 const BOOTSTRAP_BALANCE_CONCURRENCY: usize = 4;
 const BOOTSTRAP_RATE_CONCURRENCY: usize = 3;

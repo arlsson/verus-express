@@ -230,6 +230,40 @@ pub struct DlightRuntimeStatusResult {
     pub scan_rate_blocks_per_sec: Option<f64>,
     pub stalled: bool,
     pub last_error: Option<String>,
+    pub spend_cache_ready: Option<bool>,
+    pub spend_cache_status_kind: Option<String>,
+    pub spend_cache_percent: Option<f64>,
+    pub spend_cache_lag_blocks: Option<u64>,
+    pub spend_cache_last_error: Option<String>,
+    pub spend_cache_scanned_height: Option<u64>,
+    pub spend_cache_tip_height: Option<u64>,
+    pub spend_cache_last_updated: Option<u64>,
+    pub spend_cache_note_count: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DlightProverFileStatusResult {
+    pub path: String,
+    pub exists: bool,
+    pub size_bytes: Option<u64>,
+    pub min_size_bytes: u64,
+    pub checksum_algorithm: String,
+    pub expected_checksum: String,
+    pub actual_checksum: Option<String>,
+    pub checksum_matches: bool,
+    pub placeholder_detected: bool,
+    pub errors: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DlightProverStatusResult {
+    pub ready: bool,
+    pub params_dir: Option<String>,
+    pub spend: DlightProverFileStatusResult,
+    pub output: DlightProverFileStatusResult,
+    pub errors: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]

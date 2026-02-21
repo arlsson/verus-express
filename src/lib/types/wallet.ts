@@ -510,6 +510,48 @@ export interface DlightRuntimeStatusResult {
   scanRateBlocksPerSec?: number | null;
   stalled: boolean;
   lastError?: string | null;
+  spendCacheReady?: boolean | null;
+  spendCacheStatusKind?: string | null;
+  spendCachePercent?: number | null;
+  spendCacheLagBlocks?: number | null;
+  spendCacheLastError?: string | null;
+  spendCacheScannedHeight?: number | null;
+  spendCacheTipHeight?: number | null;
+  spendCacheLastUpdated?: number | null;
+  spendCacheNoteCount?: number | null;
+}
+
+export interface DlightProverFileStatusResult {
+  path: string;
+  exists: boolean;
+  sizeBytes?: number | null;
+  minSizeBytes: number;
+  checksumAlgorithm: string;
+  expectedChecksum: string;
+  actualChecksum?: string | null;
+  checksumMatches: boolean;
+  placeholderDetected: boolean;
+  errors: string[];
+}
+
+export interface DlightProverStatusResult {
+  ready: boolean;
+  paramsDir?: string | null;
+  spend: DlightProverFileStatusResult;
+  output: DlightProverFileStatusResult;
+  errors: string[];
+}
+
+export type TxSendProgressStage =
+  | 'syncing_spend_state'
+  | 'loading_prover'
+  | 'building_proof'
+  | 'broadcasting';
+
+export interface TxSendProgressEventPayload {
+  channel?: string;
+  coinId?: string;
+  stage?: TxSendProgressStage;
 }
 
 export type DlightSeedSetupMode = 'reuse_primary' | 'create_new' | 'import_text';

@@ -9,6 +9,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tauri::AppHandle;
 use tokio::sync::Mutex;
 
 use crate::core::auth::SessionManager;
@@ -257,6 +258,14 @@ fn coin_supports_dlight(coin: &CoinDefinition) -> bool {
         .any(|ch| matches!(ch, Channel::DlightPrivate))
 }
 
+fn is_shielded_z_destination(address: &str) -> bool {
+    let trimmed = address.trim();
+    trimmed
+        .get(..2)
+        .map(|prefix| prefix.eq_ignore_ascii_case("zs"))
+        .unwrap_or(false)
+}
+
 fn is_native_vrpc_system_coin(coin: &CoinDefinition) -> bool {
     coin_supports_vrpc(coin) && coin.currency_id.eq_ignore_ascii_case(&coin.system_id)
 }
@@ -487,6 +496,51 @@ pub async fn route_preflight(
                     resolved.system_id
                 );
             }
+
+            if is_shielded_z_destination(&params.to_address) {
+                // `createrawtransaction` rejects shielded recipients; use sendcurrency preflight for R/i -> zs.
+                let sendcurrency_preflight = vrpc::preflight_transfer(
+                    crate::types::VrpcTransferPreflightParams {
+                        coin_id: params.coin_id.clone(),
+                        channel_id: canonical_channel_id.clone(),
+                        source_address: Some(resolved.address.clone()),
+                        destination: params.to_address.clone(),
+                        amount: params.amount.clone(),
+                        convert_to: None,
+                        export_to: None,
+                        via: None,
+                        fee_currency: None,
+                        fee_satoshis: None,
+                        preconvert: None,
+                        map_to: None,
+                        vdxf_tag: None,
+                        memo: params.memo.clone(),
+                    },
+                    preflight_store,
+                    &account_id,
+                    &resolved.address,
+                    &canonical_channel_id,
+                    vrpc_provider_pool.for_system(network, &resolved.system_id),
+                )
+                .await?;
+
+                return Ok(PreflightResult {
+                    preflight_id: sendcurrency_preflight.preflight_id,
+                    fee: sendcurrency_preflight.fee,
+                    fee_currency: sendcurrency_preflight.fee_currency,
+                    value: sendcurrency_preflight.value,
+                    amount_submitted: sendcurrency_preflight.amount_submitted,
+                    to_address: sendcurrency_preflight.to_address,
+                    from_address: sendcurrency_preflight.from_address,
+                    fee_taken_from_amount: sendcurrency_preflight.amount_adjusted.is_some(),
+                    fee_taken_message: sendcurrency_preflight
+                        .amount_adjusted
+                        .map(|_| "Fee was deducted from the submitted amount due to available balance.".to_string()),
+                    warnings: sendcurrency_preflight.warnings,
+                    memo: sendcurrency_preflight.memo,
+                });
+            }
+
             vrpc::preflight(
                 params,
                 preflight_store,
@@ -512,9 +566,17 @@ pub async fn route_preflight(
                 coin_registry,
             )
             .await?;
+            let provider = vrpc_provider_pool.for_system(request.network, &request.scope_system_id);
 
-            dlight_private::preflight(params, preflight_store, &account_id, channel_id, request)
-                .await
+            dlight_private::preflight(
+                params,
+                preflight_store,
+                &account_id,
+                channel_id,
+                request,
+                provider,
+            )
+            .await
         }
         "btc" => {
             let session = session_manager.lock().await;
@@ -610,6 +672,7 @@ pub async fn route_send(
     vrpc_provider_pool: &VrpcProviderPool,
     btc_provider_pool: &BtcProviderPool,
     eth_provider_pool: &EthProviderPool,
+    app_handle: &AppHandle,
 ) -> Result<SendResult, WalletError> {
     let record = preflight_store
         .get(preflight_id)
@@ -655,7 +718,14 @@ pub async fn route_send(
             )
             .await?;
 
-            dlight_private::send(preflight_id, preflight_store, session_manager, request).await
+            dlight_private::send(
+                preflight_id,
+                preflight_store,
+                session_manager,
+                request,
+                app_handle,
+            )
+            .await
         }
         _ => Err(WalletError::UnsupportedChannel),
     }
@@ -1221,6 +1291,7 @@ pub async fn route_get_dlight_runtime_status(
 mod tests {
     use super::{
         clamp_history_limit, decode_history_cursor, encode_history_cursor,
+        is_shielded_z_destination,
         resolve_vrpc_coin_context, TransactionHistoryCursor,
     };
     use crate::core::coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
@@ -1365,6 +1436,14 @@ mod tests {
         assert_eq!(clamp_history_limit(Some(1)), 1);
         assert_eq!(clamp_history_limit(Some(50)), 50);
         assert_eq!(clamp_history_limit(Some(500)), 100);
+    }
+
+    #[test]
+    fn detects_shielded_z_destination_prefix() {
+        assert!(is_shielded_z_destination("zs1abc"));
+        assert!(is_shielded_z_destination("ZS1abc"));
+        assert!(!is_shielded_z_destination("Rabcd"));
+        assert!(!is_shielded_z_destination(""));
     }
 
     #[test]

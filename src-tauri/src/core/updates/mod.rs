@@ -8,7 +8,7 @@ mod params;
 
 pub use engine::{
     UpdateEngine, UpdateEngineStartConfig, EVENT_BALANCES_UPDATED, EVENT_ERROR, EVENT_INFO_UPDATED,
-    EVENT_RATES_UPDATED, EVENT_TRANSACTIONS_UPDATED,
+    EVENT_RATES_UPDATED, EVENT_TRANSACTIONS_UPDATED, EVENT_TX_SEND_PROGRESS,
 };
-pub use events::UpdateErrorPayload;
+pub use events::{TxSendProgressPayload, UpdateErrorPayload};
 pub use params::{jitter_duration, BALANCE_EXPIRE_SECS, BALANCE_REFRESH_SECS};

@@ -5,7 +5,7 @@ const BTC_BECH32_ADDRESS_PATTERN = /^(bc1|tb1)[ac-hj-np-z02-9]{11,71}$/i;
 const BTC_BASE58_ADDRESS_PATTERN = /^[13mn2][a-km-zA-HJ-NP-Z1-9]{25,39}$/;
 const VRPC_HANDLE_PATTERN = /^[A-Za-z0-9._-]+@$/;
 const VRPC_TRANSPARENT_PATTERN = /^[Ri][a-km-zA-HJ-NP-Z1-9]{24,60}$/;
-const SAPLING_PATTERN = /^(zs|ztestsapling)[0-9a-z]{60,140}$/i;
+const SAPLING_PATTERN = /^zs[0-9a-z]{60,140}$/i;
 
 export type DlightDestinationKind = 'shielded' | 'transparent';
 
@@ -48,6 +48,6 @@ export function validateDestinationAddressForKind(
   if (kind === 'eth') return isEthereumAddress(input);
   if (kind === 'btc') return isBitcoinAddress(input);
   if (kind === 'dlight') return classifyDlightDestinationAddress(input) !== null;
-
-  return isVrpcHandleAddress(input) || isVrpcTransparentAddress(input);
+  // VRPC routes can still target shielded recipients on Verus.
+  return isVrpcHandleAddress(input) || isVrpcTransparentAddress(input) || isDlightShieldedAddress(input);
 }

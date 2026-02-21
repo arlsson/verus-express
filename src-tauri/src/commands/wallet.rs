@@ -28,9 +28,10 @@ use crate::types::wallet::{DlightSeedSetupMode, ScopeKind, WalletNetwork};
 use crate::types::{
     AccountRecord, ActiveAssetsState, ActiveWalletResponse, AddressEndpointKind, AddressResponse,
     CoinScope, CoinScopesResult, CreateWalletRequest, CreateWalletResult,
-    DlightRuntimeStatusResult, DlightSeedStatusResult, GenerateMnemonicRequest,
-    ImportWalletTextRequest, LinkedIdentity, MnemonicResult, SetupDlightSeedRequest,
-    SetupDlightSeedResult, WalletError, WalletListItem, WalletSecretKind,
+    DlightProverFileStatusResult, DlightProverStatusResult, DlightRuntimeStatusResult,
+    DlightSeedStatusResult, GenerateMnemonicRequest, ImportWalletTextRequest, LinkedIdentity,
+    MnemonicResult, SetupDlightSeedRequest, SetupDlightSeedResult, WalletError, WalletListItem,
+    WalletSecretKind,
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -1118,6 +1119,44 @@ pub async fn get_dlight_runtime_status(
         scan_rate_blocks_per_sec: diagnostics.scan_rate_blocks_per_sec,
         stalled: diagnostics.stalled,
         last_error: diagnostics.last_error,
+        spend_cache_ready: diagnostics.spend_cache_ready,
+        spend_cache_status_kind: diagnostics.spend_cache_status_kind,
+        spend_cache_percent: diagnostics.spend_cache_percent,
+        spend_cache_lag_blocks: diagnostics.spend_cache_lag_blocks,
+        spend_cache_last_error: diagnostics.spend_cache_last_error,
+        spend_cache_scanned_height: diagnostics.spend_cache_scanned_height,
+        spend_cache_tip_height: diagnostics.spend_cache_tip_height,
+        spend_cache_last_updated: diagnostics.spend_cache_last_updated,
+        spend_cache_note_count: diagnostics.spend_cache_note_count,
+    })
+}
+
+fn map_prover_file_status(
+    diagnostics: crate::core::channels::dlight_private::DlightProverFileDiagnostics,
+) -> DlightProverFileStatusResult {
+    DlightProverFileStatusResult {
+        path: diagnostics.path,
+        exists: diagnostics.exists,
+        size_bytes: diagnostics.size_bytes,
+        min_size_bytes: diagnostics.min_size_bytes,
+        checksum_algorithm: diagnostics.checksum_algorithm,
+        expected_checksum: diagnostics.expected_checksum,
+        actual_checksum: diagnostics.actual_checksum,
+        checksum_matches: diagnostics.checksum_matches,
+        placeholder_detected: diagnostics.placeholder_detected,
+        errors: diagnostics.errors,
+    }
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_dlight_prover_status() -> Result<DlightProverStatusResult, WalletError> {
+    let diagnostics = crate::core::channels::dlight_private::get_prover_status();
+    Ok(DlightProverStatusResult {
+        ready: diagnostics.ready,
+        params_dir: diagnostics.params_dir,
+        spend: map_prover_file_status(diagnostics.spend),
+        output: map_prover_file_status(diagnostics.output),
+        errors: diagnostics.errors,
     })
 }
 

@@ -69,6 +69,18 @@ pub enum WalletError {
     #[error("dlight synchronizer not ready")]
     DlightSynchronizerNotReady,
 
+    #[error("dlight prover parameters are unavailable")]
+    DlightProverUnavailable,
+
+    #[error("dlight spend cache is not ready")]
+    DlightSpendCacheNotReady,
+
+    #[error("{0}")]
+    DlightBroadcastRejected(String),
+
+    #[error("{0}")]
+    DlightSendFailed(String),
+
     #[error("Ethereum channels are not configured")]
     EthNotConfigured,
 

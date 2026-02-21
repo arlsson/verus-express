@@ -1,4 +1,5 @@
 use super::runtime::{ensure_runtime, get_runtime_snapshot, RuntimeStatusKind};
+use super::spend_sync::get_spend_cache_status;
 use super::{DlightInfo, DlightRuntimeDiagnostics, DlightRuntimeRequest};
 use crate::types::transaction::{BalanceResult, Transaction};
 use crate::types::WalletError;
@@ -82,10 +83,47 @@ pub async fn get_transactions(
 pub async fn get_info(request: &DlightRuntimeRequest) -> Result<DlightInfo, WalletError> {
     let _ = ensure_runtime(request);
     let snapshot = get_runtime_snapshot(&request.runtime_key).unwrap_or_default();
+    let runtime_tip_hint = snapshot
+        .chain_tip_height
+        .or(snapshot.estimated_tip_height)
+        .filter(|tip| *tip > 0);
+    let spend_cache = get_spend_cache_status(request, runtime_tip_hint);
 
     let mut info = snapshot.info;
     if snapshot.status_kind == RuntimeStatusKind::Error {
         info.syncing = false;
+        info.status_kind = Some("error".to_string());
+        return Ok(info);
+    }
+
+    if snapshot.status_kind == RuntimeStatusKind::Synced {
+        if let Some(spend_cache) = spend_cache {
+            if spend_cache.ready {
+                info.syncing = false;
+                info.status_kind = Some("synced".to_string());
+                info.percent = Some(100.0);
+            } else {
+                info.syncing = true;
+                info.status_kind = Some("syncing".to_string());
+                info.percent = match (info.percent, spend_cache.percent) {
+                    (Some(runtime_percent), Some(spend_percent)) => {
+                        Some(runtime_percent.min(spend_percent))
+                    }
+                    (None, Some(spend_percent)) => Some(spend_percent),
+                    (Some(runtime_percent), None) => Some(runtime_percent),
+                    (None, None) => None,
+                };
+            }
+        } else {
+            info.syncing = true;
+            info.status_kind = Some("syncing".to_string());
+            info.percent = match info.percent {
+                Some(percent) => Some(percent.min(99.9)),
+                None => Some(0.0),
+            };
+        }
+    } else if info.status_kind.is_none() {
+        info.status_kind = Some("syncing".to_string());
     }
 
     Ok(info)
@@ -96,6 +134,10 @@ pub async fn get_runtime_diagnostics(
 ) -> Result<DlightRuntimeDiagnostics, WalletError> {
     let _ = ensure_runtime(request);
     let snapshot = get_runtime_snapshot(&request.runtime_key).unwrap_or_default();
+    let runtime_tip_hint = snapshot
+        .chain_tip_height
+        .or(snapshot.estimated_tip_height)
+        .filter(|tip| *tip > 0);
 
     let status_kind = match snapshot.status_kind {
         RuntimeStatusKind::Initializing => "initializing",
@@ -103,6 +145,7 @@ pub async fn get_runtime_diagnostics(
         RuntimeStatusKind::Synced => "synced",
         RuntimeStatusKind::Error => "error",
     };
+    let spend_cache = get_spend_cache_status(request, runtime_tip_hint);
 
     Ok(DlightRuntimeDiagnostics {
         runtime_key: request.runtime_key.clone(),
@@ -119,5 +162,14 @@ pub async fn get_runtime_diagnostics(
         scan_rate_blocks_per_sec: snapshot.scan_rate_blocks_per_sec,
         stalled: snapshot.stalled,
         last_error: snapshot.last_error,
+        spend_cache_ready: spend_cache.as_ref().map(|value| value.ready),
+        spend_cache_status_kind: spend_cache.as_ref().map(|value| value.status_kind.clone()),
+        spend_cache_percent: spend_cache.as_ref().and_then(|value| value.percent),
+        spend_cache_lag_blocks: spend_cache.as_ref().map(|value| value.lag_blocks),
+        spend_cache_last_error: spend_cache.as_ref().and_then(|value| value.last_error.clone()),
+        spend_cache_scanned_height: spend_cache.as_ref().map(|value| value.scanned_height),
+        spend_cache_tip_height: spend_cache.as_ref().map(|value| value.effective_tip_height),
+        spend_cache_last_updated: spend_cache.as_ref().map(|value| value.last_updated),
+        spend_cache_note_count: spend_cache.as_ref().map(|value| value.note_count),
     })
 }

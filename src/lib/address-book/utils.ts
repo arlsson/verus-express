@@ -17,7 +17,7 @@ export function endpointKindForDestinationKind(kind: DestinationAddressKind): Ad
 }
 
 export function endpointKindsForDestinationKind(kind: DestinationAddressKind): AddressEndpointKind[] {
-  if (kind === 'dlight') return ['zs', 'vrpc'];
+  if (kind === 'dlight' || kind === 'vrpc') return ['zs', 'vrpc'];
   return [endpointKindForDestinationKind(kind)];
 }
 
@@ -55,6 +55,7 @@ export function inferEndpointKindForDestinationAddress(
   if (destinationKind === 'eth') return isEthereumAddress(input) ? 'eth' : null;
   if (destinationKind === 'btc') return isBitcoinAddress(input) ? 'btc' : null;
   if (destinationKind === 'vrpc') {
+    if (isDlightShieldedAddress(input)) return 'zs';
     return isVrpcTransparentAddress(input) || isVrpcHandleAddress(input) ? 'vrpc' : null;
   }
 
@@ -80,6 +81,14 @@ export function isEndpointCompatibleWithDestinationKind(
   if (destinationKind === 'dlight') {
     if (endpoint.kind === 'zs') return isDlightShieldedAddress(endpoint.address);
     if (endpoint.kind === 'vrpc') return isVrpcTransparentAddress(endpoint.address);
+    return false;
+  }
+
+  if (destinationKind === 'vrpc') {
+    if (endpoint.kind === 'zs') return isDlightShieldedAddress(endpoint.address);
+    if (endpoint.kind === 'vrpc') {
+      return isVrpcTransparentAddress(endpoint.address) || isVrpcHandleAddress(endpoint.address);
+    }
     return false;
   }
 

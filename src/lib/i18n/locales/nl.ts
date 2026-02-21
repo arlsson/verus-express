@@ -307,7 +307,7 @@ export const nl: Record<string, string> = {
   'wallet.send.sending': 'Transactie wordt verzonden…',
   'wallet.send.sentTitle': 'Verzonden',
   'wallet.send.sentDescription': 'Transactie uitgezonden',
-  'wallet.send.sentSummary': '{value} verzonden naar {address}',
+  'wallet.send.sentSummary': '{value} verzonden naar',
   'wallet.send.emptyDescription': 'Kies een coin en vul ontvanger en bedrag in.',
 
   'wallet.transfer.sendTitle': 'Versturen',
@@ -339,6 +339,10 @@ export const nl: Record<string, string> = {
     'Controleer kosten, route en waarschuwingen voor verzending.',
   'wallet.transfer.step.success.title': 'Transfer verzonden',
   'wallet.transfer.step.success.description': 'Je transactie is succesvol uitgezonden.',
+  'wallet.transfer.step.success.txidLabel': 'Transactie-id',
+  'wallet.transfer.step.success.savedRecipientTitle': 'Ontvanger opgeslagen',
+  'wallet.transfer.step.success.savedRecipientDescription':
+    'Dit adres staat nu in je adresboek.',
   'wallet.transfer.youSend': 'Je verzendt',
   'wallet.transfer.youReceive': 'Je ontvangt',
   'wallet.transfer.doConversion': 'Omwisselen',
@@ -435,7 +439,7 @@ export const nl: Record<string, string> = {
   'wallet.transfer.max': 'Max',
   'wallet.transfer.estimatedReceive': 'Geschatte ontvangst: {value} {ticker}',
   'wallet.transfer.recipientLabel': 'Ontvanger',
-  'wallet.transfer.recipientPlaceholderVrpc': 'R-adres, i-adres of handle@',
+  'wallet.transfer.recipientPlaceholderVrpc': 'R-adres, i-adres, zs-adres of handle@',
   'wallet.transfer.recipientPlaceholderEth': '0x…',
   'wallet.transfer.recipientPlaceholderBtc': 'bc1…',
   'wallet.transfer.recipientPlaceholderDlight': 'zs-adres, R-adres of i-adres',
@@ -462,6 +466,18 @@ export const nl: Record<string, string> = {
   'wallet.transfer.prepareReview': 'Review voorbereiden',
   'wallet.transfer.sendNow': 'Nu verzenden',
   'wallet.transfer.sendingNow': 'Uitzenden…',
+  'wallet.transfer.sendStage.syncingSpendState': 'Spend-status synchroniseren…',
+  'wallet.transfer.sendStage.loadingProver': 'Prover laden…',
+  'wallet.transfer.sendStage.buildingProof': 'Bewijs opbouwen…',
+  'wallet.transfer.sendStage.broadcasting': 'Uitzenden…',
+  'wallet.transfer.sendStageHint.syncingSpendState':
+    'De private spend-status wordt nog gesynchroniseerd. Probeer opnieuw zodra private sync stabiel is.',
+  'wallet.transfer.sendStageHint.loadingProver':
+    'Het laden van proving-parameters duurt langer dan verwacht. Controleer of Sapling-params correct zijn geïnstalleerd.',
+  'wallet.transfer.sendStageHint.buildingProof':
+    'Het genereren van het bewijs duurt langer dan verwacht. Laat de app open en probeer opnieuw als dit niet afrondt.',
+  'wallet.transfer.sendStageHint.broadcasting':
+    'Uitzenden duurt langer dan verwacht. Endpoint-latentie kan hoog zijn; probeer opnieuw als er geen txid verschijnt.',
   'wallet.transfer.routeSectionTitle': 'Route',
   'wallet.transfer.warningsTitle': 'Waarschuwingen',
   'wallet.transfer.noWarnings': 'Geen waarschuwingen.',
@@ -490,6 +506,8 @@ export const nl: Record<string, string> = {
     'Private Verus synchroniseert nog ({percent}%). Verzenden is beschikbaar zodra de synchronisatie 100% bereikt.',
   'wallet.transfer.privateSyncBlockedUnknown':
     'Private Verus synchroniseert nog. Verzenden is beschikbaar zodra de synchronisatie 100% bereikt.',
+  'wallet.transfer.privateSpendCacheBlocked':
+    'Private spend-cache synchroniseert nog ({percent}%). Verzenden is beschikbaar zodra deze 100% bereikt.',
   'wallet.transfer.saveRecipient.title': 'Ontvanger opslaan',
   'wallet.transfer.saveRecipient.description':
     'Sla dit adres op in je adresboek zodat je het later opnieuw kunt gebruiken.',
@@ -526,6 +544,10 @@ export const nl: Record<string, string> = {
   'wallet.transfer.error.unsupportedChannel': 'Dit kanaal wordt niet ondersteund voor transfers.',
   'wallet.transfer.error.invalidAddress': 'Het bestemmingsadres is ongeldig.',
   'wallet.transfer.error.insufficientFunds': 'Onvoldoende saldo voor deze transfer.',
+  'wallet.transfer.error.dlightProverUnavailable':
+    'Private send-prover is niet beschikbaar. Installeer geldige Sapling-params en probeer opnieuw.',
+  'wallet.transfer.error.dlightSpendCacheNotReady':
+    'Private spend-cache is nog niet klaar. Laat private sync voltooien en probeer daarna opnieuw.',
   'wallet.transfer.error.network': 'Netwerkfout. Probeer opnieuw.',
   'wallet.transfer.error.operationFailed': 'Transfer mislukt. Probeer opnieuw.',
 
