@@ -6,6 +6,7 @@ pub enum AddressEndpointKind {
     Vrpc,
     Btc,
     Eth,
+    Zs,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

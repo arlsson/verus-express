@@ -1,6 +1,6 @@
 ---
 owner: lite-wallet-team
-last_reviewed: 2026-02-12
+last_reviewed: 2026-02-20
 ---
 
 # Verus/PBaaS core parity matrix
@@ -24,6 +24,8 @@ This matrix tracks the in-scope backend/API transaction parity scenarios against
 | `GUARD-REV-301` | Signed-out revoke via guard session             | Implemented        | In-memory guard session, no wallet persistence.  |
 | `GUARD-REC-302` | Signed-out recover via guard session            | Implemented        | In-memory guard session, no wallet persistence.  |
 | `PBAAS-DYN-401` | Dynamic PBaaS coin immediate preflight/send use | Implemented        | Uses runtime coin registry system-id resolution. |
+| `DLIGHT-SEND-501` | dlight private send (`zs/R/i` destination)       | In progress        | Preflight routing + policy are implemented; spend broadcast engine is pending. |
+| `DLIGHT-AB-502` | dlight address book endpoint parity (`zs`)        | Implemented        | Address book endpoint kind includes `zs` normalization. |
 
 ## Validation status
 

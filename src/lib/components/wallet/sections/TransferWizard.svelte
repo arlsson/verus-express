@@ -35,11 +35,16 @@
   import { formatUsdAmount } from '$lib/utils/walletOverview.js';
   import * as addressBookService from '$lib/services/addressBookService.js';
   import {
-    endpointKindForDestinationKind,
     findMatchingSavedEndpoint,
-    normalizeAddressByKind,
+    inferEndpointKindForDestinationAddress,
+    isEndpointCompatibleWithDestinationKind,
+    normalizeAddressByDestinationKind,
     sharesSuspiciousPrefixSuffix
   } from '$lib/address-book/utils';
+  import {
+    classifyDlightDestinationAddress,
+    validateDestinationAddressForKind
+  } from '$lib/transfer/recipientAddressValidation';
   import { channelIdForCoin } from '$lib/utils/channelId.js';
   import * as walletService from '$lib/services/walletService.js';
   import { preflightSend, sendTransaction } from '$lib/services/txService.js';
@@ -207,6 +212,7 @@
   let amount = $state('');
   let amountInputEl = $state<HTMLInputElement | null>(null);
   let destinationAddress = $state('');
+  let memo = $state('');
   let conversionEnabled = $state(false);
   let conversionInitialized = $state(false);
   let selectedReceiveAssetId = $state('');
@@ -311,11 +317,24 @@
   const selectedBalance = $derived(selectedCoinOption?.balanceTotal ?? '0');
   const selectedBalanceValue = $derived(toFiniteNumber(selectedBalance));
 
+  const selectedDlightScopeAddress = $derived(
+    (() => {
+      const channelId = selectedChannelId?.trim() ?? '';
+      if (!channelId.startsWith('dlight_private.')) return '';
+      const rest = channelId.slice('dlight_private.'.length);
+      const splitIndex = rest.indexOf('.');
+      if (splitIndex <= 0) return '';
+      return rest.slice(0, splitIndex);
+    })()
+  );
+
   const selectedSourceAddress = $derived(
     !addresses
       ? ''
       : selectedChannelPrefix === 'vrpc'
         ? addresses.vrsc_address
+        : selectedChannelPrefix === 'dlight_private'
+          ? selectedDlightScopeAddress
         : selectedChannelPrefix === 'btc'
           ? addresses.btc_address
           : addresses.eth_address
@@ -610,21 +629,21 @@
         ? 'eth'
         : selectedChannelPrefix === 'btc'
           ? 'btc'
-          : 'vrpc'
+          : selectedChannelPrefix === 'dlight_private'
+            ? 'dlight'
+            : 'vrpc'
   );
 
   const selfDestinationAddress = $derived(
-    !addresses
-      ? ''
-      : destinationAddressKind === 'eth'
+    destinationAddressKind === 'dlight'
+      ? selectedDlightScopeAddress
+      : !addresses
+        ? ''
+        : destinationAddressKind === 'eth'
         ? addresses.eth_address
         : destinationAddressKind === 'btc'
           ? addresses.btc_address
           : addresses.vrsc_address
-  );
-
-  const destinationEndpointKind = $derived<AddressEndpointKind>(
-    endpointKindForDestinationKind(destinationAddressKind)
   );
 
   const addressBookEndpointOptions = $derived<AddressBookEndpointOption[]>(
@@ -632,7 +651,9 @@
       const query = addressBookSearchTerm.trim().toLowerCase();
       const options = addressBookContacts.flatMap((contact: AddressBookContact) =>
         contact.endpoints
-          .filter((endpoint) => endpoint.kind === destinationEndpointKind)
+          .filter((endpoint) =>
+            isEndpointCompatibleWithDestinationKind(endpoint, destinationAddressKind)
+          )
           .map((endpoint) => ({
             contactId: contact.id,
             contactName: contact.displayName,
@@ -664,19 +685,25 @@
   );
 
   const matchedSavedRecipient = $derived(
-    findMatchingSavedEndpoint(addressBookContacts, destinationEndpointKind, destinationAddress)
+    findMatchingSavedEndpoint(addressBookContacts, destinationAddressKind, destinationAddress)
   );
   const isSelfRecipient = $derived(
     (() => {
-      const normalizedDestination = normalizeAddressByKind(destinationEndpointKind, destinationAddress);
-      const normalizedSelf = normalizeAddressByKind(destinationEndpointKind, selfDestinationAddress);
+      const normalizedDestination = normalizeAddressByDestinationKind(
+        destinationAddressKind,
+        destinationAddress
+      );
+      const normalizedSelf = normalizeAddressByDestinationKind(
+        destinationAddressKind,
+        selfDestinationAddress
+      );
       return !!normalizedDestination && !!normalizedSelf && normalizedDestination === normalizedSelf;
     })()
   );
   const isSavedRecipient = $derived(!!matchedSavedRecipient);
   const hasRecipientSimilarityWarning = $derived(
     !isSavedRecipient &&
-      sharesSuspiciousPrefixSuffix(addressBookContacts, destinationEndpointKind, destinationAddress)
+      sharesSuspiciousPrefixSuffix(addressBookContacts, destinationAddressKind, destinationAddress)
   );
   const activePreflight = $derived(simplePreflightResult ?? bridgePreflightResult);
   const requiresUnsavedRecipientAck = $derived(
@@ -684,7 +711,17 @@
   );
 
   const recipientInputCopy = $derived(getRecipientInputCopy(i18n.t, destinationAddressKind));
-  const recipientValid = $derived(validateDestinationAddress(destinationAddress, destinationAddressKind));
+  const recipientValid = $derived(
+    validateDestinationAddressForKind(destinationAddress, destinationAddressKind)
+  );
+  const dlightDestinationKind = $derived(
+    destinationAddressKind === 'dlight'
+      ? classifyDlightDestinationAddress(destinationAddress)
+      : null
+  );
+  const showDlightMemoField = $derived(
+    destinationAddressKind === 'dlight' && dlightDestinationKind === 'shielded'
+  );
   const amountValid = $derived(isPositiveAmount(amount));
 
   const estimatedConversionValue = $derived(
@@ -895,6 +932,7 @@
     currentStep !== 'details' ||
       !!amount.trim() ||
       !!destinationAddress.trim() ||
+      !!memo.trim() ||
       conversionEnabled !== (entryIntent === 'convert') ||
       !!selectedSendExportSystemId ||
       !!simplePreflightResult ||
@@ -1075,7 +1113,8 @@
       activeExportSystemId ?? '',
       activeTargetOption?.id ?? '',
       amount.trim(),
-      destinationAddress.trim()
+      destinationAddress.trim(),
+      showDlightMemoField ? memo.trim() : ''
     ].join('|')
   );
 
@@ -1529,6 +1568,12 @@
   });
 
   $effect(() => {
+    if (!showDlightMemoField && memo) {
+      memo = '';
+    }
+  });
+
+  $effect(() => {
     if (currentStep !== 'details') return;
     void tick().then(() => amountInputEl?.focus());
   });
@@ -1545,6 +1590,7 @@
 
   function endpointBadgeLabel(kind: AddressEndpointKind): string {
     if (kind === 'vrpc') return 'VERUS';
+    if (kind === 'zs') return 'ZS';
     return kind.toUpperCase();
   }
 
@@ -1593,12 +1639,21 @@
       return;
     }
 
+    const endpointKind = inferEndpointKindForDestinationAddress(
+      destinationAddressKind,
+      sendResult.toAddress
+    );
+    if (!endpointKind) {
+      saveRecipientError = i18n.t('wallet.transfer.saveRecipient.error.invalid');
+      return;
+    }
+
     savingRecipient = true;
     saveRecipientError = '';
 
     try {
       const validation = await addressBookService.validateDestinationAddress({
-        kind: destinationEndpointKind,
+        kind: endpointKind,
         address: sendResult.toAddress
       });
       if (!validation.valid) {
@@ -1611,7 +1666,7 @@
         note: null,
         endpoints: [
           {
-            kind: destinationEndpointKind,
+            kind: endpointKind,
             label: i18n.t('wallet.transfer.saveRecipient.defaultEndpointLabel'),
             address: sendResult.toAddress
           }
@@ -2079,27 +2134,6 @@
     return { primary, secondary };
   }
 
-  function validateDestinationAddress(value: string, kind: DestinationAddressKind): boolean {
-    const input = value.trim();
-    if (!input) return false;
-
-    if (kind === 'eth') {
-      return /^0x[a-fA-F0-9]{40}$/.test(input);
-    }
-    if (kind === 'btc') {
-      if (/^(bc1|tb1)[ac-hj-np-z02-9]{11,71}$/i.test(input)) {
-        return true;
-      }
-      return /^[13mn2][a-km-zA-HJ-NP-Z1-9]{25,39}$/.test(input);
-    }
-
-    if (/[A-Za-z0-9._-]+@$/.test(input)) {
-      return true;
-    }
-
-    return /^[Ri][a-km-zA-HJ-NP-Z1-9]{24,60}$/.test(input);
-  }
-
   function viaLexicalKey(option: ViaRouteOption): string {
     return `${option.via ?? ''}|${option.exportTo ?? ''}|${option.mapTo ?? ''}`.toLowerCase();
   }
@@ -2294,6 +2328,9 @@
       return i18n.t('wallet.transfer.error.bridgeInsufficientEthFeeEnvelope');
     }
     if (errorType === 'BridgeGasDriftExceeded') return i18n.t('wallet.transfer.error.bridgeGasDriftExceeded');
+    if (errorType === 'DlightSynchronizerNotReady') {
+      return shieldedSyncBlockedHelper || i18n.t('wallet.transfer.privateSyncBlockedUnknown');
+    }
     if (errorType === 'UnsupportedChannel') return i18n.t('wallet.transfer.error.unsupportedChannel');
     if (errorType === 'InvalidAddress') return i18n.t('wallet.transfer.error.invalidAddress');
     if (errorType === 'InsufficientFunds') return i18n.t('wallet.transfer.error.insufficientFunds');
@@ -2412,7 +2449,8 @@
           coinId: selectedCoin.id,
           channelId: selectedChannelId,
           toAddress: destinationAddress.trim(),
-          amount: amount.trim()
+          amount: amount.trim(),
+          memo: showDlightMemoField ? memo.trim() || null : null
         });
         bridgePreflightResult = null;
       }
@@ -2914,6 +2952,25 @@
               </div>
               {#if destinationAddress.trim() && !recipientValid}
                 <p class="text-destructive text-xs">{i18n.t('wallet.transfer.recipientInvalid')}</p>
+              {/if}
+              <p class="text-muted-foreground text-xs">{recipientInputCopy.hint}</p>
+
+              {#if showDlightMemoField}
+                <div class="w-full max-w-[560px] text-left">
+                  <Label for="transfer-memo" class="text-xs font-medium">
+                    {i18n.t('wallet.send.memoLabel')}
+                  </Label>
+                  <Input
+                    id="transfer-memo"
+                    class="mt-1 h-10 rounded-xl bg-muted/85 px-3 text-sm dark:bg-muted/55"
+                    bind:value={memo}
+                    maxlength={512}
+                    placeholder={i18n.t('wallet.send.memoPlaceholder')}
+                  />
+                  <p class="text-muted-foreground mt-1 text-[11px]">
+                    {i18n.t('wallet.transfer.memoHintDlight')}
+                  </p>
+                </div>
               {/if}
 
               <div class="mt-3 flex items-center justify-center gap-2">

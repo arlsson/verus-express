@@ -1,4 +1,4 @@
-export type AddressEndpointKind = 'vrpc' | 'btc' | 'eth';
+export type AddressEndpointKind = 'vrpc' | 'btc' | 'eth' | 'zs';
 
 export type AddressBookEndpoint = {
   id: string;
@@ -44,4 +44,3 @@ export type ValidateDestinationAddressResult = {
   normalizedAddress: string | null;
   reason: string | null;
 };
-

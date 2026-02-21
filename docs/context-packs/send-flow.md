@@ -1,6 +1,6 @@
 ---
 owner: lite-wallet-team
-last_reviewed: 2026-02-14
+last_reviewed: 2026-02-20
 ---
 
 # Context pack: send flow
@@ -16,6 +16,10 @@ Read this before touching transaction send behavior.
 - ETH preflight enforces a minimum gas floor of `1 gwei` and may adjust send value downward when balance cannot cover `amount + fee`.
 - ERC20 preflight must enforce both token balance and ETH-fee balance checks before send.
 - ETH/ERC20 send must reject missing/expired preflight and consume preflight records exactly once.
+- dlight private preflight supports destination policy `zs | R | i` only.
+- dlight private preflight uses fixed fee `0.0001` in source coin units.
+- dlight private preflight and send must return `DlightSynchronizerNotReady` while private sync is incomplete.
+- dlight private memo is accepted only for shielded (`zs`) destinations.
 
 ## Open these files first
 
@@ -32,6 +36,9 @@ Read this before touching transaction send behavior.
 - `src-tauri/src/core/channels/eth/preflight.rs`
 - `src-tauri/src/core/channels/eth/send.rs`
 - `src-tauri/src/core/channels/eth/transactions.rs`
+- `src-tauri/src/core/channels/dlight_private/preflight.rs`
+- `src-tauri/src/core/channels/dlight_private/send.rs`
+- `src-tauri/src/core/channels/dlight_private/destination.rs`
 
 ## Verification checklist
 

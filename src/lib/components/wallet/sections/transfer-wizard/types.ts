@@ -12,7 +12,7 @@ export type TransferStepperStep = {
   status: StepStatus;
 };
 
-export type DestinationAddressKind = 'vrpc' | 'btc' | 'eth';
+export type DestinationAddressKind = 'vrpc' | 'btc' | 'eth' | 'dlight';
 
 export type TransferEntryContext = {
   coinId: string;

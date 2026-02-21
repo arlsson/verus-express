@@ -438,13 +438,17 @@ export const nl: Record<string, string> = {
   'wallet.transfer.recipientPlaceholderVrpc': 'R-adres, i-adres of handle@',
   'wallet.transfer.recipientPlaceholderEth': '0x…',
   'wallet.transfer.recipientPlaceholderBtc': 'bc1…',
+  'wallet.transfer.recipientPlaceholderDlight': 'zs-adres, R-adres of i-adres',
   'wallet.transfer.recipientHintVrpc':
     'Gebruik een geldig Verus-bestemmingsadres voor deze transfer.',
   'wallet.transfer.recipientHintEth': 'Gebruik een geldig Ethereum-adres voor deze transfer.',
   'wallet.transfer.recipientHintBtc': 'Gebruik een geldig Bitcoin-adres voor deze transfer.',
+  'wallet.transfer.recipientHintDlight':
+    'Gebruik een shielded zs-adres of transparant Verus R/i-adres voor private sends.',
   'wallet.transfer.recipientInvalid': 'Het bestemmingsadres is ongeldig voor deze route.',
   'wallet.transfer.recipient.paste': 'Plakken',
   'wallet.transfer.recipient.sendToSelf': 'Naar jezelf',
+  'wallet.transfer.memoHintDlight': 'Memo wordt alleen ondersteund voor shielded zs-bestemmingen.',
   'wallet.transfer.addressBook.open': 'Adresboek openen',
   'wallet.transfer.addressBook.sheetTitle': 'Adresboek',
   'wallet.transfer.addressBook.searchPlaceholder': 'Zoek op contact of adres',

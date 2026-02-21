@@ -1,3 +1,8 @@
+---
+owner: lite-wallet-team
+last_reviewed: 2026-02-20
+---
+
 # Desktop transfer wizard redesign v2
 
 ## Scope
@@ -13,7 +18,8 @@
 
 - `TransferWizard.svelte`
   - Reworked to step IDs: `details | recipient | review | success`.
-  - Removed memo from UI and preflight payload usage.
+  - Memo is shown conditionally for `dlight_private` routes when destination is shielded (`zs`).
+  - dlight recipient validation uses route-aware policy (`zs | R | i` only).
   - Added conversion toggle flow for Send entry (`Do conversion`).
   - Added route normalization and deduped receive assets.
   - Added best-via auto selection + manual via lock and reset.

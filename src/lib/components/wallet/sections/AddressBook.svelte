@@ -47,6 +47,8 @@
   let copiedEndpointId = $state<string | null>(null);
 
   const ETH_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
+  const ZS_MAINNET_ADDRESS_PATTERN = /^zs[0-9a-z]{60,140}$/i;
+  const ZS_TESTNET_ADDRESS_PATTERN = /^ztestsapling[0-9a-z]{60,140}$/i;
   const VRPC_HANDLE_PATTERN = /^[A-Za-z0-9._-]+@$/;
   const VRPC_ADDRESS_PATTERN = /^[Ri][1-9A-HJ-NP-Za-km-z]{24,60}$/;
   const BTC_BECH32_ADDRESS_PATTERN = /^(bc1|tb1)[ac-hj-np-z02-9]{11,71}$/i;
@@ -94,6 +96,9 @@
     const trimmed = address.trim();
     if (!trimmed) return null;
     if (ETH_ADDRESS_PATTERN.test(trimmed)) return 'eth';
+    if (ZS_MAINNET_ADDRESS_PATTERN.test(trimmed) || ZS_TESTNET_ADDRESS_PATTERN.test(trimmed)) {
+      return 'zs';
+    }
     if (VRPC_HANDLE_PATTERN.test(trimmed) || VRPC_ADDRESS_PATTERN.test(trimmed)) return 'vrpc';
     if (BTC_BECH32_ADDRESS_PATTERN.test(trimmed) || BTC_BASE58_ADDRESS_PATTERN.test(trimmed)) return 'btc';
     return null;
@@ -106,13 +111,14 @@
 
   function endpointBadgeLabel(kind: AddressEndpointKind): string {
     if (kind === 'vrpc') return 'VERUS';
+    if (kind === 'zs') return 'ZS';
     return kind.toUpperCase();
   }
 
   async function resolveEndpointKind(address: string, initialKind: AddressEndpointKind | null): Promise<AddressEndpointKind | null> {
     const orderedCandidates: AddressEndpointKind[] = initialKind
-      ? [initialKind, ...(['vrpc', 'btc', 'eth'] as AddressEndpointKind[]).filter((kind) => kind !== initialKind)]
-      : ['vrpc', 'btc', 'eth'];
+      ? [initialKind, ...(['zs', 'vrpc', 'btc', 'eth'] as AddressEndpointKind[]).filter((kind) => kind !== initialKind)]
+      : ['zs', 'vrpc', 'btc', 'eth'];
 
     for (const kind of orderedCandidates) {
       const validation = await addressBookService.validateDestinationAddress({ kind, address });

@@ -51,6 +51,13 @@ export function getRecipientInputCopy(
     };
   }
 
+  if (kind === 'dlight') {
+    return {
+      placeholder: t('wallet.transfer.recipientPlaceholderDlight'),
+      hint: t('wallet.transfer.recipientHintDlight'),
+    };
+  }
+
   return {
     placeholder: t('wallet.transfer.recipientPlaceholderVrpc'),
     hint: t('wallet.transfer.recipientHintVrpc'),

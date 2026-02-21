@@ -4,6 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use bitcoin::{address::NetworkUnchecked, Network as BtcNetwork};
 use ethers::types::Address;
 use uuid::Uuid;
+use zcash_client_backend::encoding::{decode_payment_address, encode_payment_address};
+use zcash_protocol::constants::{mainnet, testnet};
 
 use crate::types::address_book::{
     AddressBookContact, AddressBookEndpoint, AddressBookSnapshot, AddressEndpointKind,
@@ -257,6 +259,16 @@ pub fn normalize_destination_address(
 
             Ok(trimmed.to_string())
         }
+        AddressEndpointKind::Zs => {
+            let hrp = match network {
+                WalletNetwork::Mainnet => mainnet::HRP_SAPLING_PAYMENT_ADDRESS,
+                WalletNetwork::Testnet => testnet::HRP_SAPLING_PAYMENT_ADDRESS,
+            };
+            let normalized = trimmed.to_ascii_lowercase();
+            let decoded = decode_payment_address(hrp, normalized.as_str())
+                .map_err(|_| WalletError::InvalidAddress)?;
+            Ok(encode_payment_address(hrp, &decoded))
+        }
     }
 }
 
@@ -355,5 +367,35 @@ mod tests {
         .expect("valid testnet bech32");
 
         assert_eq!(normalized, "tb1qggqzj0uzun238nhzzs5wdz2en05s0d9njgv4r6");
+    }
+
+    #[test]
+    fn normalize_zs_mainnet_accepts_valid_address() {
+        let normalized = normalize_destination_address(
+            AddressEndpointKind::Zs,
+            "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z",
+            WalletNetwork::Mainnet,
+        )
+        .expect("valid mainnet sapling address");
+
+        assert_eq!(
+            normalized,
+            "zs1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75c8v35z"
+        );
+    }
+
+    #[test]
+    fn normalize_zs_testnet_accepts_valid_address() {
+        let normalized = normalize_destination_address(
+            AddressEndpointKind::Zs,
+            "ztestsapling1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75ss7jnk",
+            WalletNetwork::Testnet,
+        )
+        .expect("valid testnet sapling address");
+
+        assert_eq!(
+            normalized,
+            "ztestsapling1qqqqqqqqqqqqqqqqqqcguyvaw2vjk4sdyeg0lc970u659lvhqq7t0np6hlup5lusxle75ss7jnk"
+        );
     }
 }

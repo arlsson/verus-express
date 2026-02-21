@@ -497,6 +497,25 @@ pub async fn route_preflight(
             )
             .await
         }
+        "dlight_private" => {
+            let session = session_manager.lock().await;
+            let account_id = session
+                .active_account_id()
+                .ok_or(WalletError::WalletLocked)?
+                .to_string();
+            drop(session);
+
+            let request = build_dlight_runtime_request(
+                channel_id,
+                Some(&params.coin_id),
+                session_manager,
+                coin_registry,
+            )
+            .await?;
+
+            dlight_private::preflight(params, preflight_store, &account_id, channel_id, request)
+                .await
+        }
         "btc" => {
             let session = session_manager.lock().await;
             let account_id = session
@@ -587,6 +606,7 @@ pub async fn route_send(
     preflight_id: &str,
     preflight_store: &PreflightStore,
     session_manager: &Arc<Mutex<SessionManager>>,
+    coin_registry: &CoinRegistry,
     vrpc_provider_pool: &VrpcProviderPool,
     btc_provider_pool: &BtcProviderPool,
     eth_provider_pool: &EthProviderPool,
@@ -622,6 +642,20 @@ pub async fn route_send(
                 eth_provider_pool,
             )
             .await
+        }
+        "dlight_private" => {
+            let payload: dlight_private::DlightPreflightPayload =
+                serde_json::from_value(record.payload)
+                    .map_err(|_| WalletError::InvalidPreflight)?;
+            let request = build_dlight_runtime_request(
+                &record.channel_id,
+                Some(&payload.coin_id),
+                session_manager,
+                coin_registry,
+            )
+            .await?;
+
+            dlight_private::send(preflight_id, preflight_store, session_manager, request).await
         }
         _ => Err(WalletError::UnsupportedChannel),
     }

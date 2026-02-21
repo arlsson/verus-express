@@ -14,12 +14,17 @@ use crate::types::transaction::{BalanceResult, Transaction};
 use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
 
+mod destination;
+mod preflight;
 mod reader;
 mod runtime;
+mod send;
 mod store;
 mod synchronizer;
 
+pub use preflight::{preflight, DlightPreflightPayload};
 pub use runtime::stop_all_runtimes;
+pub use send::send;
 pub use synchronizer::{DlightSynchronizerAdapter, DlightSynchronizerRuntimeAdapter};
 
 const SAPLING_ADDRESS_REQUEST: UnifiedAddressRequest = UnifiedAddressRequest::unsafe_custom(
