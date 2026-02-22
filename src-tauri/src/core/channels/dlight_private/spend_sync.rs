@@ -303,14 +303,13 @@ pub async fn sync_spend_state(
 
                         let scan_error_debug = format!("{scan_error:?}");
                         let is_tree_size_unknown = scan_error_debug.contains("TreeSizeUnknown");
-                        let can_attempt_tree_recovery =
-                            is_tree_size_unknown && tree_size_recovery_attempts < TREE_SIZE_RECOVERY_LIMIT;
+                        let can_attempt_tree_recovery = is_tree_size_unknown
+                            && tree_size_recovery_attempts < TREE_SIZE_RECOVERY_LIMIT;
 
                         if can_attempt_tree_recovery {
                             tree_size_recovery_attempts =
                                 tree_size_recovery_attempts.saturating_add(1);
-                            let local_tree_size_u32 =
-                                u32::try_from(runtime_state.tree.size()).ok();
+                            let local_tree_size_u32 = u32::try_from(runtime_state.tree.size()).ok();
                             let seeded = seed_prior_metadata_from_cached_state(
                                 request,
                                 client,
@@ -368,7 +367,10 @@ pub async fn sync_spend_state(
                         } else {
                             persist_spend_sync_error(
                                 &paths,
-                                format!("spend sync scan failure at height {}", compact_block.height),
+                                format!(
+                                    "spend sync scan failure at height {}",
+                                    compact_block.height
+                                ),
                             );
                             return Err(WalletError::OperationFailed);
                         }

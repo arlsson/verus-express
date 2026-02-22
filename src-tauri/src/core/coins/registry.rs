@@ -71,23 +71,22 @@ impl CoinRegistry {
             .dynamic_coins_by_account
             .lock()
             .expect("coin registry lock");
-        let dynamic = dynamic_by_account.get(&account_id).cloned().unwrap_or_default();
-        static_coins
-            .into_iter()
-            .chain(dynamic)
-            .collect()
+        let dynamic = dynamic_by_account
+            .get(&account_id)
+            .cloned()
+            .unwrap_or_default();
+        static_coins.into_iter().chain(dynamic).collect()
     }
 
     pub fn set_active_account(&self, account_id: Option<String>) {
-        let normalized = account_id
-            .and_then(|value| {
-                let trimmed = value.trim();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(trimmed.to_string())
-                }
-            });
+        let normalized = account_id.and_then(|value| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
 
         if let Ok(mut active) = self.active_account_id.lock() {
             *active = normalized;
@@ -235,7 +234,10 @@ impl CoinRegistry {
     }
 
     /// Adds a coin definition to the currently active account registry.
-    pub fn add_coin_for_active_account(&self, def: CoinDefinition) -> Result<CoinDefinition, WalletError> {
+    pub fn add_coin_for_active_account(
+        &self,
+        def: CoinDefinition,
+    ) -> Result<CoinDefinition, WalletError> {
         let account_id = self
             .active_account_id
             .lock()

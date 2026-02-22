@@ -215,7 +215,7 @@ pub fn save_meta(paths: &SpendStoragePaths, state: &StoredSpendMeta) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::{
-        load_meta, load_wallet_db, StoredSpendMeta, StoredSpendWalletDb, SpendStoragePaths,
+        load_meta, load_wallet_db, SpendStoragePaths, StoredSpendMeta, StoredSpendWalletDb,
         SPEND_SCHEMA_VERSION,
     };
     use std::fs;

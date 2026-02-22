@@ -61,12 +61,8 @@ struct VrpcScopeAddress {
 const VRSC_MAINNET_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
 const VRSC_TESTNET_SYSTEM_ID: &str = "iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq";
 const VETH_SYSTEM_ID: &str = "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X";
-const MAINNET_DEFAULT_ACTIVE_COIN_IDS: &[&str] = &[
-    "VRSC",
-    "ETH",
-    "BTC",
-    "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd",
-];
+const MAINNET_DEFAULT_ACTIVE_COIN_IDS: &[&str] =
+    &["VRSC", "ETH", "BTC", "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd"];
 const TESTNET_DEFAULT_ACTIVE_COIN_IDS: &[&str] = &["VRSCTEST", "GETH", "BTCTEST"];
 
 fn coin_supports_channel(coin: &CoinDefinition, channel: Channel) -> bool {

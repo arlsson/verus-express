@@ -794,8 +794,8 @@ async fn sync_range(
         compact_blocks.push(compact_block);
     }
 
-    let scanning_keys = build_scanning_keys_from_seed(seed_material, network)
-        .map_err(SyncRangeError::Wallet)?;
+    let scanning_keys =
+        build_scanning_keys_from_seed(seed_material, network).map_err(SyncRangeError::Wallet)?;
 
     for compact_block in compact_blocks {
         maybe_seed_prior_metadata_for_sapling_activation(

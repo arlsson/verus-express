@@ -166,7 +166,9 @@ pub async fn get_runtime_diagnostics(
         spend_cache_status_kind: spend_cache.as_ref().map(|value| value.status_kind.clone()),
         spend_cache_percent: spend_cache.as_ref().and_then(|value| value.percent),
         spend_cache_lag_blocks: spend_cache.as_ref().map(|value| value.lag_blocks),
-        spend_cache_last_error: spend_cache.as_ref().and_then(|value| value.last_error.clone()),
+        spend_cache_last_error: spend_cache
+            .as_ref()
+            .and_then(|value| value.last_error.clone()),
         spend_cache_scanned_height: spend_cache.as_ref().map(|value| value.scanned_height),
         spend_cache_tip_height: spend_cache.as_ref().map(|value| value.effective_tip_height),
         spend_cache_last_updated: spend_cache.as_ref().map(|value| value.last_updated),

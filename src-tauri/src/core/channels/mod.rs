@@ -533,9 +533,10 @@ pub async fn route_preflight(
                     to_address: sendcurrency_preflight.to_address,
                     from_address: sendcurrency_preflight.from_address,
                     fee_taken_from_amount: sendcurrency_preflight.amount_adjusted.is_some(),
-                    fee_taken_message: sendcurrency_preflight
-                        .amount_adjusted
-                        .map(|_| "Fee was deducted from the submitted amount due to available balance.".to_string()),
+                    fee_taken_message: sendcurrency_preflight.amount_adjusted.map(|_| {
+                        "Fee was deducted from the submitted amount due to available balance."
+                            .to_string()
+                    }),
                     warnings: sendcurrency_preflight.warnings,
                     memo: sendcurrency_preflight.memo,
                 });
@@ -1291,8 +1292,7 @@ pub async fn route_get_dlight_runtime_status(
 mod tests {
     use super::{
         clamp_history_limit, decode_history_cursor, encode_history_cursor,
-        is_shielded_z_destination,
-        resolve_vrpc_coin_context, TransactionHistoryCursor,
+        is_shielded_z_destination, resolve_vrpc_coin_context, TransactionHistoryCursor,
     };
     use crate::core::coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
     use crate::types::wallet::WalletNetwork;

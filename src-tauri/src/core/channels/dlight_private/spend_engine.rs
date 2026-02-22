@@ -215,14 +215,12 @@ async fn execute_send_for_network<P: Parameters + Send + Clone>(
         .ok_or(WalletError::InsufficientFunds)?;
 
     let target_height = chain_tip_height.saturating_add(1);
-    let target_height = BlockHeight::from_u32(
-        u32::try_from(target_height).map_err(|_| {
-            dlight_send_failure(
-                "target height selection",
-                "next block height could not be represented as u32",
-            )
-        })?,
-    );
+    let target_height = BlockHeight::from_u32(u32::try_from(target_height).map_err(|_| {
+        dlight_send_failure(
+            "target height selection",
+            "next block height could not be represented as u32",
+        )
+    })?);
 
     let build_config = BuildConfig::Standard {
         sapling_anchor: Some(anchor),
@@ -237,10 +235,12 @@ async fn execute_send_for_network<P: Parameters + Send + Clone>(
             .map_err(map_build_error)?;
     }
 
-    let send_value =
-        Zatoshis::from_u64(params.value_sats).map_err(|_| {
-            dlight_send_failure("amount encoding", "send amount could not be represented as zatoshis")
-        })?;
+    let send_value = Zatoshis::from_u64(params.value_sats).map_err(|_| {
+        dlight_send_failure(
+            "amount encoding",
+            "send amount could not be represented as zatoshis",
+        )
+    })?;
     match params.destination_kind {
         DlightDestinationKind::Shielded => {
             let recipient = decode_shielded_delivery(&params.delivery_to_address, request.network)?;
@@ -287,11 +287,10 @@ async fn execute_send_for_network<P: Parameters + Send + Clone>(
     // A spend set may include both external and internal (change) notes.
     // Provide both keys so Sapling builder can authorize either scope.
     let sapling_extsks = key_material.sapling_extsks_for_builder();
-    let fee_rule = fixed::FeeRule::non_standard(
-        Zatoshis::from_u64(params.fee_sats).map_err(|_| {
+    let fee_rule =
+        fixed::FeeRule::non_standard(Zatoshis::from_u64(params.fee_sats).map_err(|_| {
             dlight_send_failure("fee encoding", "fee could not be represented as zatoshis")
-        })?,
-    );
+        })?);
     emit_send_stage(progress, DlightSendStage::LoadingProver);
     let proving = load_sapling_provers()?;
 
@@ -312,13 +311,12 @@ async fn execute_send_for_network<P: Parameters + Send + Clone>(
     let txid = tx.txid().to_string();
 
     let mut raw = Vec::<u8>::new();
-    tx.write(&mut raw)
-        .map_err(|error| {
-            dlight_send_failure(
-                "transaction serialization",
-                format!("failed to serialize transaction bytes: {error}"),
-            )
-        })?;
+    tx.write(&mut raw).map_err(|error| {
+        dlight_send_failure(
+            "transaction serialization",
+            format!("failed to serialize transaction bytes: {error}"),
+        )
+    })?;
     eprintln!(
         "[dlight_private][spend_send] built tx txid={} bytes={}",
         txid,
@@ -579,15 +577,12 @@ async fn broadcast_transaction(endpoint: &str, raw_tx: Vec<u8>) -> Result<(), Wa
         endpoint_builder
     };
 
-    let channel: Channel = endpoint_builder
-        .connect()
-        .await
-        .map_err(|error| {
-            dlight_send_failure(
-                "lightwalletd connection",
-                format!("failed to connect to broadcast endpoint: {error}"),
-            )
-        })?;
+    let channel: Channel = endpoint_builder.connect().await.map_err(|error| {
+        dlight_send_failure(
+            "lightwalletd connection",
+            format!("failed to connect to broadcast endpoint: {error}"),
+        )
+    })?;
     let mut client = CompactTxStreamerClient::new(channel);
 
     let response = client

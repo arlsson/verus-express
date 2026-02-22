@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
 
+use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex, Semaphore};
 use tokio::task::JoinSet;
@@ -17,8 +18,7 @@ use crate::core::channels::dlight_private;
 use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::channels::{route_get_balances, route_get_info, route_get_transactions};
-use crate::core::coins::Channel;
-use crate::core::coins::CoinRegistry;
+use crate::core::coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
 use crate::core::rates::{build_rates_http_client, coinpaprika, ecb, pbaas};
 use crate::core::updates::events::{
     BalancesUpdatedPayload, BootstrapUpdatedPayload, InfoUpdatedPayload, RatesUpdatedPayload,
@@ -41,9 +41,17 @@ pub const EVENT_BOOTSTRAP_UPDATED: &str = "wallet://bootstrap-updated";
 pub const EVENT_TX_SEND_PROGRESS: &str = "wallet://tx-send-progress";
 pub const EVENT_ERROR: &str = "wallet://error";
 const BOOTSTRAP_BALANCE_CONCURRENCY: usize = 4;
-const BOOTSTRAP_RATE_CONCURRENCY: usize = 3;
 const VRSC_COIN_ID: &str = "VRSC";
 const VRSCTEST_COIN_ID: &str = "VRSCTEST";
+const ETH_COIN_ID: &str = "ETH";
+const VETH_SYSTEM_ID: &str = "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X";
+const VRSC_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
+const BRIDGE_VETH_CURRENCY_ID: &str = "i3f7tSctFkiPpiedY8QR5Tep9p4qDVebDx";
+const BRIDGE_VETH_TICKER: &str = "Bridge.vETH";
+const DAI_VETH_CURRENCY_ID: &str = "iGBs4DWztRNvNEJBt4mqHszLxfKTNHTkhM";
+const VUSDC_VETH_CURRENCY_ID: &str = "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd";
+const DAI_USDC_PARITY_MIN: f64 = 0.95;
+const DAI_USDC_PARITY_MAX: f64 = 1.05;
 
 #[derive(Clone, Debug, Default)]
 pub struct UpdateEngineStartConfig {
@@ -189,6 +197,269 @@ fn fiat_rate_candidates(
         .into_iter()
         .filter(|coin| !coin.is_testnet)
         .collect()
+}
+
+fn is_bridge_veth(coin: &CoinDefinition) -> bool {
+    if coin.proto != Protocol::Vrsc {
+        return false;
+    }
+
+    coin.id.trim().eq_ignore_ascii_case(BRIDGE_VETH_CURRENCY_ID)
+        || coin
+            .display_ticker
+            .trim()
+            .eq_ignore_ascii_case(BRIDGE_VETH_TICKER)
+        || coin
+            .display_name
+            .trim()
+            .eq_ignore_ascii_case(BRIDGE_VETH_TICKER)
+}
+
+fn is_coinpaprika_primary_candidate(coin: &CoinDefinition) -> bool {
+    match coin.proto {
+        Protocol::Eth | Protocol::Erc20 | Protocol::Btc => true,
+        Protocol::Vrsc => {
+            if coin.id.trim().eq_ignore_ascii_case(VRSC_COIN_ID) {
+                return true;
+            }
+
+            if is_bridge_veth(coin) {
+                return false;
+            }
+
+            coin.id.trim().eq_ignore_ascii_case(VETH_SYSTEM_ID)
+                || coin.system_id.trim().eq_ignore_ascii_case(VETH_SYSTEM_ID)
+        }
+    }
+}
+
+fn should_attempt_coinpaprika(coin: &CoinDefinition) -> bool {
+    is_coinpaprika_primary_candidate(coin) && coinpaprika::has_known_coinpaprika_id(coin)
+}
+
+fn lookup_rates_case_insensitive<'a>(
+    latest_rates: &'a HashMap<String, HashMap<String, f64>>,
+    coin_id: &str,
+) -> Option<&'a HashMap<String, f64>> {
+    latest_rates
+        .iter()
+        .find(|(id, _)| id.trim().eq_ignore_ascii_case(coin_id.trim()))
+        .map(|(_, rates)| rates)
+}
+
+fn strict_alias_counterpart_coin_id(coin: &CoinDefinition) -> Option<&'static str> {
+    if coin.id.trim().eq_ignore_ascii_case(ETH_COIN_ID) {
+        return Some(VETH_SYSTEM_ID);
+    }
+    if coin.id.trim().eq_ignore_ascii_case(VETH_SYSTEM_ID) {
+        return Some(ETH_COIN_ID);
+    }
+    None
+}
+
+fn strict_alias_fallback_rates(
+    coin: &CoinDefinition,
+    latest_rates: &HashMap<String, HashMap<String, f64>>,
+) -> Option<HashMap<String, f64>> {
+    let counterpart = strict_alias_counterpart_coin_id(coin)?;
+    lookup_rates_case_insensitive(latest_rates, counterpart).cloned()
+}
+
+fn pending_strict_alias_backfill(
+    coins: &[CoinDefinition],
+    latest_rates: &HashMap<String, HashMap<String, f64>>,
+) -> Vec<(String, HashMap<String, f64>)> {
+    let mut seen = HashSet::<String>::new();
+    let mut out = Vec::<(String, HashMap<String, f64>)>::new();
+
+    for coin in coins {
+        let key = coin.id.trim().to_ascii_lowercase();
+        if !seen.insert(key) {
+            continue;
+        }
+        if lookup_rates_case_insensitive(latest_rates, &coin.id).is_some() {
+            continue;
+        }
+        if let Some(rates) = strict_alias_fallback_rates(coin, latest_rates) {
+            out.push((coin.id.clone(), rates));
+        }
+    }
+
+    out
+}
+
+fn value_to_f64(value: &Value) -> Option<f64> {
+    if let Some(v) = value.as_f64() {
+        return Some(v);
+    }
+    if let Some(v) = value.as_i64() {
+        return Some(v as f64);
+    }
+    if let Some(v) = value.as_u64() {
+        return Some(v as f64);
+    }
+    value
+        .as_str()
+        .and_then(|s| s.trim().parse::<f64>().ok())
+        .filter(|v| v.is_finite())
+}
+
+fn extract_last_conversion_price_from_map(
+    currencies: &serde_json::Map<String, Value>,
+    currency_id: &str,
+) -> Option<f64> {
+    currencies
+        .iter()
+        .find(|(key, _)| key.trim().eq_ignore_ascii_case(currency_id.trim()))
+        .and_then(|(_, value)| value.get("lastconversionprice").and_then(value_to_f64))
+        .filter(|value| value.is_finite() && *value > 0.0)
+}
+
+fn extract_currency_state_map(currency_result: &Value) -> Option<&serde_json::Map<String, Value>> {
+    currency_result
+        .get("bestcurrencystate")
+        .and_then(|value| value.get("currencies"))
+        .and_then(|value| value.as_object())
+        .or_else(|| {
+            currency_result
+                .get("lastconfirmedcurrencystate")
+                .and_then(|value| value.get("currencies"))
+                .and_then(|value| value.as_object())
+        })
+}
+
+fn derive_vrsc_usd_anchor_from_bridge_currency_result(currency_result: &Value) -> Option<f64> {
+    let currencies = extract_currency_state_map(currency_result)?;
+    let vrsc_price = extract_last_conversion_price_from_map(currencies, VRSC_SYSTEM_ID)?;
+    let dai_price = extract_last_conversion_price_from_map(currencies, DAI_VETH_CURRENCY_ID)?;
+    let usdc_price = extract_last_conversion_price_from_map(currencies, VUSDC_VETH_CURRENCY_ID)?;
+
+    let dai_per_usdc = dai_price / usdc_price;
+    if !(dai_per_usdc.is_finite()
+        && dai_per_usdc >= DAI_USDC_PARITY_MIN
+        && dai_per_usdc <= DAI_USDC_PARITY_MAX)
+    {
+        return None;
+    }
+
+    let vrsc_usd = dai_price / vrsc_price;
+    if vrsc_usd.is_finite() && vrsc_usd > 0.0 {
+        Some(vrsc_usd)
+    } else {
+        None
+    }
+}
+
+fn emit_and_store_rates(
+    app_handle: &AppHandle,
+    coin_id: &str,
+    rates: HashMap<String, f64>,
+    usd_change_24h_pct: Option<f64>,
+    latest_rates: &mut HashMap<String, HashMap<String, f64>>,
+) -> bool {
+    let payload = RatesUpdatedPayload {
+        coin_id: coin_id.to_string(),
+        rates: rates.clone(),
+        usd_change_24h_pct,
+    };
+    if let Err(err) = app_handle.emit(EVENT_RATES_UPDATED, &payload) {
+        println!("[UPDATE] Emit rates-updated failed: {:?}", err);
+        false
+    } else {
+        latest_rates.insert(coin_id.to_string(), rates);
+        true
+    }
+}
+
+async fn maybe_seed_vrsc_anchor_from_bridge_veth(
+    app_handle: &AppHandle,
+    vrpc_provider_pool: &VrpcProviderPool,
+    active_network: WalletNetwork,
+    usd_reference_rates: &HashMap<String, f64>,
+    latest_rates: &mut HashMap<String, HashMap<String, f64>>,
+) {
+    if lookup_rates_case_insensitive(latest_rates, VRSC_COIN_ID).is_some() {
+        return;
+    }
+
+    let mut providers = Vec::new();
+    providers.push(vrpc_provider_pool.for_network(active_network));
+    providers.extend(vrpc_provider_pool.provider_candidates(active_network, Some(VRSC_SYSTEM_ID)));
+
+    let mut seen = HashSet::<usize>::new();
+    for provider in providers {
+        let provider_ptr = provider as *const _ as usize;
+        if !seen.insert(provider_ptr) {
+            continue;
+        }
+
+        let payload = match provider.getcurrency(BRIDGE_VETH_CURRENCY_ID).await {
+            Ok(payload) => Some(payload),
+            Err(_) => provider.getcurrency(BRIDGE_VETH_TICKER).await.ok(),
+        };
+        let Some(payload) = payload else {
+            continue;
+        };
+        let result = payload.get("result").unwrap_or(&payload);
+
+        let Some(vrsc_usd) = derive_vrsc_usd_anchor_from_bridge_currency_result(result) else {
+            continue;
+        };
+        let rates = ecb::build_coin_fiat_rates(vrsc_usd, usd_reference_rates);
+        if rates.is_empty() {
+            continue;
+        }
+
+        if emit_and_store_rates(app_handle, VRSC_COIN_ID, rates, None, latest_rates) {
+            println!("[UPDATE] Seeded VRSC anchor rate from Bridge.vETH DAI path");
+            return;
+        }
+    }
+}
+
+async fn resolve_rates_for_coin(
+    rates_http_client: &reqwest::Client,
+    usd_reference_rates: &HashMap<String, f64>,
+    vrpc_provider_pool: &VrpcProviderPool,
+    active_network: WalletNetwork,
+    coin: &CoinDefinition,
+    latest_rates: &HashMap<String, HashMap<String, f64>>,
+) -> (Option<HashMap<String, f64>>, Option<f64>, Option<String>) {
+    let mut direct_error: Option<String> = None;
+
+    if should_attempt_coinpaprika(coin) {
+        match coinpaprika::fetch_usd_metrics(rates_http_client, coin).await {
+            Ok(metrics) => {
+                let rates = ecb::build_coin_fiat_rates(metrics.usd_price, usd_reference_rates);
+                if !rates.is_empty() {
+                    return (Some(rates), metrics.usd_change_24h_pct, None);
+                }
+            }
+            Err(err) => direct_error = Some(err),
+        }
+    } else if is_coinpaprika_primary_candidate(coin) && !coinpaprika::has_known_coinpaprika_id(coin)
+    {
+        direct_error = Some(format!("coinpaprika known id missing for {}", coin.id));
+    }
+
+    if pbaas::is_pbaas_derivation_candidate(coin) {
+        if let Some(rates) = derive_pbaas_rates_with_provider_candidates(
+            vrpc_provider_pool,
+            active_network,
+            coin,
+            latest_rates,
+        )
+        .await
+        {
+            return (Some(rates), None, direct_error);
+        }
+    }
+
+    if let Some(rates) = strict_alias_fallback_rates(coin, latest_rates) {
+        return (Some(rates), None, direct_error);
+    }
+
+    (None, None, direct_error)
 }
 
 fn normalize_priority_entries(entries: &[String]) -> HashSet<String> {
@@ -530,158 +801,64 @@ async fn run_bootstrap_rate_fetches(
             HashMap::from([(ecb::USD.to_string(), 1.0)])
         }
     };
-
-    let semaphore = Arc::new(Semaphore::new(BOOTSTRAP_RATE_CONCURRENCY));
-    let mut direct_join_set = JoinSet::new();
+    maybe_seed_vrsc_anchor_from_bridge_veth(
+        app_handle,
+        vrpc_provider_pool.as_ref(),
+        active_network,
+        &usd_reference_rates,
+        latest_rates,
+    )
+    .await;
 
     for coin in prioritized_coins {
         if cancel_token.is_cancelled() {
             return;
         }
 
-        let permit = match semaphore.clone().acquire_owned().await {
-            Ok(permit) => permit,
-            Err(_) => return,
-        };
-        let coin = coin.clone();
-        let rates_http_client = rates_http_client.clone();
-        let usd_reference_rates = usd_reference_rates.clone();
-        direct_join_set.spawn(async move {
-            let _permit = permit;
-
-            let mut resolved_rates: Option<HashMap<String, f64>> = None;
-            let mut usd_change_24h_pct: Option<f64> = None;
-            let mut rate_error: Option<String> = None;
-
-            match coinpaprika::fetch_usd_metrics(&rates_http_client, &coin).await {
-                Ok(metrics) => {
-                    let rates = ecb::build_coin_fiat_rates(metrics.usd_price, &usd_reference_rates);
-                    if !rates.is_empty() {
-                        usd_change_24h_pct = metrics.usd_change_24h_pct;
-                        resolved_rates = Some(rates);
-                    }
-                }
-                Err(err) => {
-                    rate_error = Some(err);
-                }
-            }
-
-            (coin, resolved_rates, usd_change_24h_pct, rate_error)
-        });
-    }
-
-    let mut unresolved_pbaas = Vec::<(crate::core::coins::CoinDefinition, Option<String>)>::new();
-
-    while let Some(task_result) = direct_join_set.join_next().await {
-        let (coin, resolved_rates, usd_change_24h_pct, rate_error) = match task_result {
-            Ok(value) => value,
-            Err(err) => {
-                println!("[UPDATE] Bootstrap direct rate task join error: {}", err);
-                continue;
-            }
-        };
-        let coin_id = coin.id.clone();
+        let (resolved_rates, usd_change_24h_pct, rate_error) = resolve_rates_for_coin(
+            &rates_http_client,
+            &usd_reference_rates,
+            vrpc_provider_pool.as_ref(),
+            active_network,
+            coin,
+            latest_rates,
+        )
+        .await;
 
         if let Some(rates) = resolved_rates {
-            let payload = RatesUpdatedPayload {
-                coin_id: coin_id.clone(),
-                rates: rates.clone(),
+            if emit_and_store_rates(
+                app_handle,
+                &coin.id,
+                rates,
                 usd_change_24h_pct,
-            };
-            if let Err(err) = app_handle.emit(EVENT_RATES_UPDATED, &payload) {
-                println!("[UPDATE] Emit rates-updated failed: {:?}", err);
-            } else {
-                latest_rates.insert(coin_id.clone(), rates);
-                // Avoid rate loop re-fetching this coin in the same cycle.
-                coin_rates_state.insert(coin_id, Instant::now());
+                latest_rates,
+            ) {
+                coin_rates_state.insert(coin.id.clone(), Instant::now());
             }
-            continue;
-        }
-
-        if pbaas::is_pbaas_derivation_candidate(&coin) {
-            unresolved_pbaas.push((coin, rate_error));
         } else if let Some(rate_error) = rate_error {
             println!(
                 "[UPDATE] Fiat rate unavailable during bootstrap for {}: {}",
-                coin_id, rate_error
-            );
-        }
-    }
-
-    if unresolved_pbaas.is_empty() {
-        return;
-    }
-
-    println!(
-        "[UPDATE] Bootstrap PBaaS derivation retry candidates={}",
-        unresolved_pbaas.len()
-    );
-
-    let latest_rates_snapshot = latest_rates.clone();
-    let semaphore = Arc::new(Semaphore::new(BOOTSTRAP_RATE_CONCURRENCY));
-    let mut derive_join_set = JoinSet::new();
-
-    for (coin, direct_error) in unresolved_pbaas {
-        if cancel_token.is_cancelled() {
-            return;
-        }
-
-        let permit = match semaphore.clone().acquire_owned().await {
-            Ok(permit) => permit,
-            Err(_) => return,
-        };
-        let vrpc_provider_pool = Arc::clone(&vrpc_provider_pool);
-        let latest_rates_snapshot = latest_rates_snapshot.clone();
-
-        derive_join_set.spawn(async move {
-            let _permit = permit;
-            let coin_id = coin.id.clone();
-            let resolved_rates = derive_pbaas_rates_with_provider_candidates(
-                vrpc_provider_pool.as_ref(),
-                active_network,
-                &coin,
-                &latest_rates_snapshot,
-            )
-            .await;
-
-            (coin_id, resolved_rates, direct_error)
-        });
-    }
-
-    while let Some(task_result) = derive_join_set.join_next().await {
-        let (coin_id, resolved_rates, direct_error) = match task_result {
-            Ok(value) => value,
-            Err(err) => {
-                println!("[UPDATE] Bootstrap PBaaS derive task join error: {}", err);
-                continue;
-            }
-        };
-
-        if let Some(rates) = resolved_rates {
-            let payload = RatesUpdatedPayload {
-                coin_id: coin_id.clone(),
-                rates: rates.clone(),
-                usd_change_24h_pct: None,
-            };
-            if let Err(err) = app_handle.emit(EVENT_RATES_UPDATED, &payload) {
-                println!("[UPDATE] Emit rates-updated failed: {:?}", err);
-            } else {
-                latest_rates.insert(coin_id.clone(), rates);
-                coin_rates_state.insert(coin_id, Instant::now());
-            }
-            continue;
-        }
-
-        if let Some(rate_error) = direct_error {
-            println!(
-                "[UPDATE] Fiat rate unavailable during bootstrap for {}: {}",
-                coin_id, rate_error
+                coin.id, rate_error
             );
         } else {
             println!(
                 "[UPDATE] Fiat rate unavailable during bootstrap for {}",
-                coin_id
+                coin.id
             );
+        }
+
+        // Throttle retries after both success and failure.
+        coin_rates_state.insert(coin.id.clone(), Instant::now());
+        tokio::time::sleep(jitter_duration(1)).await;
+    }
+
+    let alias_backfills = pending_strict_alias_backfill(prioritized_coins, latest_rates);
+    for (coin_id, rates) in alias_backfills {
+        if cancel_token.is_cancelled() {
+            return;
+        }
+        if emit_and_store_rates(app_handle, &coin_id, rates, None, latest_rates) {
+            coin_rates_state.insert(coin_id, Instant::now());
         }
     }
 }
@@ -1091,6 +1268,15 @@ async fn run_update_loop(
                 }
             };
 
+            maybe_seed_vrsc_anchor_from_bridge_veth(
+                &app_handle,
+                vrpc_provider_pool.as_ref(),
+                active_network,
+                &usd_reference_rates,
+                &mut latest_rates,
+            )
+            .await;
+
             for coin in &rate_coins {
                 if cancel_token.is_cancelled() {
                     return;
@@ -1103,51 +1289,46 @@ async fn run_update_loop(
                     continue;
                 }
 
-                let mut resolved_rates: Option<HashMap<String, f64>> = None;
-                let mut usd_change_24h_pct: Option<f64> = None;
-
-                match coinpaprika::fetch_usd_metrics(&rates_http_client, coin).await {
-                    Ok(metrics) => {
-                        let rates =
-                            ecb::build_coin_fiat_rates(metrics.usd_price, &usd_reference_rates);
-                        if !rates.is_empty() {
-                            usd_change_24h_pct = metrics.usd_change_24h_pct;
-                            resolved_rates = Some(rates);
-                        }
-                    }
-                    Err(err) => {
-                        if pbaas::is_pbaas_derivation_candidate(coin) {
-                            resolved_rates = derive_pbaas_rates_with_provider_candidates(
-                                vrpc_provider_pool.as_ref(),
-                                active_network,
-                                coin,
-                                &latest_rates,
-                            )
-                            .await;
-                        }
-
-                        if resolved_rates.is_none() {
-                            println!("[UPDATE] Fiat rate unavailable for {}: {}", coin.id, err);
-                        }
-                    }
-                }
+                let (resolved_rates, usd_change_24h_pct, rate_error) = resolve_rates_for_coin(
+                    &rates_http_client,
+                    &usd_reference_rates,
+                    vrpc_provider_pool.as_ref(),
+                    active_network,
+                    coin,
+                    &latest_rates,
+                )
+                .await;
 
                 if let Some(rates) = resolved_rates {
-                    let payload = RatesUpdatedPayload {
-                        coin_id: coin.id.clone(),
-                        rates: rates.clone(),
+                    let _ = emit_and_store_rates(
+                        &app_handle,
+                        &coin.id,
+                        rates,
                         usd_change_24h_pct,
-                    };
-                    if let Err(e) = app_handle.emit(EVENT_RATES_UPDATED, &payload) {
-                        println!("[UPDATE] Emit rates-updated failed: {:?}", e);
-                    } else {
-                        latest_rates.insert(coin.id.clone(), rates);
-                    }
+                        &mut latest_rates,
+                    );
+                } else if let Some(rate_error) = rate_error {
+                    println!(
+                        "[UPDATE] Fiat rate unavailable for {}: {}",
+                        coin.id, rate_error
+                    );
+                } else {
+                    println!("[UPDATE] Fiat rate unavailable for {}", coin.id);
                 }
 
                 // Throttle retries after both success and failure.
                 coin_rates_state.insert(coin.id.clone(), Instant::now());
                 tokio::time::sleep(jitter_duration(1)).await;
+            }
+
+            let alias_backfills = pending_strict_alias_backfill(&rate_coins, &latest_rates);
+            for (coin_id, rates) in alias_backfills {
+                if cancel_token.is_cancelled() {
+                    return;
+                }
+                if emit_and_store_rates(&app_handle, &coin_id, rates, None, &mut latest_rates) {
+                    coin_rates_state.insert(coin_id, Instant::now());
+                }
             }
         }
 
@@ -1180,11 +1361,35 @@ fn user_facing_error(e: &WalletError) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        active_channels, dedupe_channel_pairs, fiat_rate_candidates, partition_bootstrap_channels,
-        prioritized_rate_coins,
+        active_channels, dedupe_channel_pairs, derive_vrsc_usd_anchor_from_bridge_currency_result,
+        fiat_rate_candidates, is_coinpaprika_primary_candidate, partition_bootstrap_channels,
+        pending_strict_alias_backfill, prioritized_rate_coins, should_attempt_coinpaprika,
+        strict_alias_fallback_rates, BRIDGE_VETH_CURRENCY_ID, DAI_VETH_CURRENCY_ID, VETH_SYSTEM_ID,
+        VRSC_SYSTEM_ID, VUSDC_VETH_CURRENCY_ID,
     };
     use crate::core::coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
+    use serde_json::json;
     use std::collections::HashSet;
+
+    fn sample_coin(id: &str, system_id: &str, proto: Protocol) -> CoinDefinition {
+        CoinDefinition {
+            id: id.to_string(),
+            currency_id: id.to_string(),
+            system_id: system_id.to_string(),
+            display_ticker: id.to_string(),
+            display_name: id.to_string(),
+            coin_paprika_id: None,
+            proto,
+            compatible_channels: vec![Channel::Vrpc],
+            decimals: 8,
+            vrpc_endpoints: vec![],
+            dlight_endpoints: None,
+            electrum_endpoints: None,
+            seconds_per_block: 60,
+            mapped_to: None,
+            is_testnet: false,
+        }
+    }
 
     #[test]
     fn active_channels_includes_eth_and_erc20_when_eth_enabled() {
@@ -1391,5 +1596,129 @@ mod tests {
 
         assert!(prioritized_ids.contains(&vdex.id));
         assert!(prioritized_ids.contains(&vrsc.id));
+    }
+
+    #[test]
+    fn coinpaprika_primary_candidates_follow_asset_classes() {
+        let mut eth = sample_coin("ETH", "ETH", Protocol::Eth);
+        eth.coin_paprika_id = Some("eth-ethereum".to_string());
+        assert!(is_coinpaprika_primary_candidate(&eth));
+        assert!(should_attempt_coinpaprika(&eth));
+
+        let mut btc = sample_coin("BTC", "BTC", Protocol::Btc);
+        btc.coin_paprika_id = Some("btc-bitcoin".to_string());
+        assert!(is_coinpaprika_primary_candidate(&btc));
+        assert!(should_attempt_coinpaprika(&btc));
+
+        let mut vrsc = sample_coin("VRSC", VRSC_SYSTEM_ID, Protocol::Vrsc);
+        vrsc.coin_paprika_id = Some("vrsc-verus-coin".to_string());
+        assert!(is_coinpaprika_primary_candidate(&vrsc));
+        assert!(should_attempt_coinpaprika(&vrsc));
+
+        let veth = sample_coin(VETH_SYSTEM_ID, VRSC_SYSTEM_ID, Protocol::Vrsc);
+        assert!(is_coinpaprika_primary_candidate(&veth));
+
+        let mut veth_family = sample_coin("iUnknownBridgeAsset", VETH_SYSTEM_ID, Protocol::Vrsc);
+        veth_family.display_ticker = "Unknown.vETH".to_string();
+        assert!(is_coinpaprika_primary_candidate(&veth_family));
+        assert!(
+            !should_attempt_coinpaprika(&veth_family),
+            "known coinpaprika id is required for primary assets"
+        );
+
+        let mut bridge = sample_coin(BRIDGE_VETH_CURRENCY_ID, VRSC_SYSTEM_ID, Protocol::Vrsc);
+        bridge.display_ticker = "Bridge.vETH".to_string();
+        bridge.display_name = "Bridge.vETH".to_string();
+        assert!(!is_coinpaprika_primary_candidate(&bridge));
+        assert!(!should_attempt_coinpaprika(&bridge));
+
+        let pure = sample_coin(
+            "iHax5qYQGbcMGqJKKrPorpzUBX2oFFXGnY",
+            VRSC_SYSTEM_ID,
+            Protocol::Vrsc,
+        );
+        assert!(!is_coinpaprika_primary_candidate(&pure));
+        assert!(!should_attempt_coinpaprika(&pure));
+    }
+
+    #[test]
+    fn strict_alias_fallback_copies_between_eth_and_veth() {
+        let mut latest_rates =
+            std::collections::HashMap::<String, std::collections::HashMap<String, f64>>::new();
+        latest_rates.insert(
+            VETH_SYSTEM_ID.to_string(),
+            std::collections::HashMap::from([
+                ("USD".to_string(), 2500.0),
+                ("EUR".to_string(), 2300.0),
+            ]),
+        );
+
+        let eth = sample_coin("ETH", "ETH", Protocol::Eth);
+        let fallback = strict_alias_fallback_rates(&eth, &latest_rates);
+        assert_eq!(
+            fallback.and_then(|rates| rates.get("USD").copied()),
+            Some(2500.0)
+        );
+
+        latest_rates.insert(
+            "ETH".to_string(),
+            std::collections::HashMap::from([("USD".to_string(), 2550.0)]),
+        );
+        let veth = sample_coin(VETH_SYSTEM_ID, VRSC_SYSTEM_ID, Protocol::Vrsc);
+        let fallback_veth = strict_alias_fallback_rates(&veth, &latest_rates);
+        assert_eq!(
+            fallback_veth.and_then(|rates| rates.get("USD").copied()),
+            Some(2550.0)
+        );
+    }
+
+    #[test]
+    fn pending_alias_backfill_resolves_missing_eth_after_veth() {
+        let coins = vec![
+            sample_coin("ETH", "ETH", Protocol::Eth),
+            sample_coin(VETH_SYSTEM_ID, VRSC_SYSTEM_ID, Protocol::Vrsc),
+        ];
+
+        let latest_rates = std::collections::HashMap::from([(
+            VETH_SYSTEM_ID.to_string(),
+            std::collections::HashMap::from([("USD".to_string(), 2400.0)]),
+        )]);
+
+        let backfills = pending_strict_alias_backfill(&coins, &latest_rates);
+        assert_eq!(backfills.len(), 1);
+        assert!(backfills[0].0.eq_ignore_ascii_case("ETH"));
+        assert_eq!(backfills[0].1.get("USD").copied(), Some(2400.0));
+    }
+
+    #[test]
+    fn derive_vrsc_anchor_from_bridge_currency_result_uses_dai_guard() {
+        let payload = json!({
+            "bestcurrencystate": {
+                "currencies": {
+                    VRSC_SYSTEM_ID: { "lastconversionprice": 0.0005 },
+                    DAI_VETH_CURRENCY_ID: { "lastconversionprice": 1.0 },
+                    VUSDC_VETH_CURRENCY_ID: { "lastconversionprice": 1.0 }
+                }
+            }
+        });
+
+        let vrsc_usd = derive_vrsc_usd_anchor_from_bridge_currency_result(&payload);
+        assert_eq!(vrsc_usd, Some(2000.0));
+    }
+
+    #[test]
+    fn derive_vrsc_anchor_from_bridge_currency_result_rejects_dai_depeg() {
+        let payload = json!({
+            "bestcurrencystate": {
+                "currencies": {
+                    VRSC_SYSTEM_ID: { "lastconversionprice": 0.0005 },
+                    DAI_VETH_CURRENCY_ID: { "lastconversionprice": 1.0 },
+                    VUSDC_VETH_CURRENCY_ID: { "lastconversionprice": 2.0 }
+                }
+            }
+        });
+
+        let vrsc_usd = derive_vrsc_usd_anchor_from_bridge_currency_result(&payload);
+        assert_eq!(vrsc_usd, None);
     }
 }

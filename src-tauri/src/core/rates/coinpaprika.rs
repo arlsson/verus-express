@@ -115,18 +115,31 @@ pub fn infer_coinpaprika_id(coin: &CoinDefinition) -> String {
     resolve_coinpaprika_id(coin).0
 }
 
-fn resolve_coinpaprika_id(coin: &CoinDefinition) -> (String, CoinPaprikaIdSource) {
+pub fn known_coinpaprika_id(coin: &CoinDefinition) -> Option<String> {
+    resolve_known_coinpaprika_id(coin).map(|(id, _)| id)
+}
+
+pub fn has_known_coinpaprika_id(coin: &CoinDefinition) -> bool {
+    known_coinpaprika_id(coin).is_some()
+}
+
+fn resolve_known_coinpaprika_id(coin: &CoinDefinition) -> Option<(String, CoinPaprikaIdSource)> {
     if let Some(override_id) = coin.coin_paprika_id.as_deref() {
-        if !override_id.trim().is_empty() {
-            return (
-                override_id.trim().to_string(),
+        let normalized = override_id.trim();
+        if !normalized.is_empty() {
+            return Some((
+                normalized.to_string(),
                 CoinPaprikaIdSource::ExplicitOverride,
-            );
+            ));
         }
     }
 
-    if let Some(catalog_override) = catalog_coinpaprika_id_for_coin(coin) {
-        return (catalog_override, CoinPaprikaIdSource::CatalogOverride);
+    catalog_coinpaprika_id_for_coin(coin).map(|id| (id, CoinPaprikaIdSource::CatalogOverride))
+}
+
+fn resolve_coinpaprika_id(coin: &CoinDefinition) -> (String, CoinPaprikaIdSource) {
+    if let Some(known) = resolve_known_coinpaprika_id(coin) {
+        return known;
     }
 
     let normalized_name = coin
@@ -273,6 +286,39 @@ mod tests {
     fn infer_coinpaprika_id_falls_back_to_slug() {
         let coin = sample_unlisted_coin();
         assert_eq!(infer_coinpaprika_id(&coin), "fake-fake-coin");
+    }
+
+    #[test]
+    fn has_known_coinpaprika_id_false_for_unlisted_coin() {
+        let coin = sample_unlisted_coin();
+        assert!(!has_known_coinpaprika_id(&coin));
+    }
+
+    #[test]
+    fn has_known_coinpaprika_id_true_for_catalog_override() {
+        let coin = CoinDefinition {
+            id: "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd".to_string(),
+            currency_id: "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd".to_string(),
+            system_id: "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X".to_string(),
+            display_ticker: "vUSDC.vETH".to_string(),
+            display_name: "USDC on Verus".to_string(),
+            coin_paprika_id: None,
+            proto: Protocol::Vrsc,
+            compatible_channels: vec![Channel::Vrpc],
+            decimals: 8,
+            vrpc_endpoints: vec![],
+            dlight_endpoints: None,
+            electrum_endpoints: None,
+            seconds_per_block: 60,
+            mapped_to: Some("USDC".to_string()),
+            is_testnet: false,
+        };
+
+        assert!(has_known_coinpaprika_id(&coin));
+        assert_eq!(
+            known_coinpaprika_id(&coin).as_deref(),
+            Some("usdc-usd-coin")
+        );
     }
 
     #[test]
