@@ -56,6 +56,23 @@ type DestinationEntry = {
   ethDisplayTicker?: string;
 };
 
+function resolveMappingDestination(quote: BridgeConversionPathQuote): string | undefined {
+  if (quote.mapTo && quote.mapTo.trim()) {
+    return quote.mapTo.trim();
+  }
+
+  if (!quote.mapping) return undefined;
+
+  const fallback =
+    quote.convertToDisplayName ||
+    quote.destinationDisplayName ||
+    quote.convertTo ||
+    quote.destinationId;
+  if (!fallback) return undefined;
+  const trimmed = fallback.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 export type ViaRouteOption = {
   id: string;
   key: string;
@@ -209,18 +226,24 @@ export function buildReceiveAssetSections(input: TargetBuildInput): ReceiveAsset
         });
       }
 
-      if (
-        exportTo &&
-        !entry.exportOptions.some((option) => normalizeCase(option.exportTo) === normalizeCase(exportTo))
-      ) {
-        entry.exportOptions.push({
-          exportTo,
-          exportToName: quote.exportToDisplayName ?? exportTo,
-          gateway: quote.gateway,
-          via: quote.via ?? null,
-          price: quote.price ?? null,
-          mappingDestination: quote.mapTo ?? undefined,
-        });
+      if (exportTo) {
+        const mappingDestination = resolveMappingDestination(quote);
+        const existingOption = entry.exportOptions.find(
+          (option) => normalizeCase(option.exportTo) === normalizeCase(exportTo)
+        );
+
+        if (!existingOption) {
+          entry.exportOptions.push({
+            exportTo,
+            exportToName: quote.exportToDisplayName ?? exportTo,
+            gateway: quote.gateway,
+            via: quote.via ?? null,
+            price: quote.price ?? null,
+            mappingDestination,
+          });
+        } else if (!existingOption.mappingDestination && mappingDestination) {
+          existingOption.mappingDestination = mappingDestination;
+        }
       }
     }
   }
@@ -393,8 +416,17 @@ function dedupeExportOptions(options: ExportRouteOption[]): ExportRouteOption[] 
   const dedupe = new Map<string, ExportRouteOption>();
   for (const option of options) {
     const key = normalizeCase(option.exportTo);
-    if (!dedupe.has(key)) {
+    const existing = dedupe.get(key);
+    if (!existing) {
       dedupe.set(key, option);
+      continue;
+    }
+
+    if (!existing.mappingDestination && option.mappingDestination) {
+      dedupe.set(key, {
+        ...existing,
+        mappingDestination: option.mappingDestination,
+      });
     }
   }
   return Array.from(dedupe.values());

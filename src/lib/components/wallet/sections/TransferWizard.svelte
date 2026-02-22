@@ -533,10 +533,10 @@
               ? resolveReceiveLabel(sendSameAssetOption, activeSendExportSystemId)
               : selectedCoinPresentation.displayTicker,
           ethDestination: activeSendRoute?.ethDestination ?? false,
-          convertTo: activeSendRoute?.convertTo ?? null,
+          convertTo: null,
           exportTo: activeSendExportSystemId,
           via: activeSendRoute?.via ?? null,
-          mapTo: activeSendRoute?.mapTo ?? null,
+          mapTo: selectedSendExportRouteOption?.mappingDestination ?? activeSendRoute?.mapTo ?? null,
           price: activeSendRoute?.price ?? null
         }
       : null
