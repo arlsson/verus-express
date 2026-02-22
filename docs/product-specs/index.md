@@ -16,6 +16,8 @@ requirements.
   [`./verus-pbaas-core-parity-fixtures.json`](./verus-pbaas-core-parity-fixtures.json)
 - Identity guard signed-out UX flow:
   [`./identity-guard-signed-out-flow.md`](./identity-guard-signed-out-flow.md)
+- Settings scope (desktop):
+  [`./settings-scope.md`](./settings-scope.md)
 - UI component adoption matrix:
   [`../ui-component-matrix.md`](../ui-component-matrix.md)
 

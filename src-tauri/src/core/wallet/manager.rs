@@ -7,6 +7,7 @@ use bip39::{Language, Mnemonic};
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::types::{
     AccountRecord, CreateWalletRequest, WalletError, WalletListItem, WalletMetadata,
@@ -14,6 +15,22 @@ use crate::types::{
 
 pub struct WalletManager {
     data_directory: PathBuf,
+}
+
+fn sort_wallet_list_items(wallets: &mut [(WalletListItem, Option<u64>)]) {
+    wallets.sort_by(
+        |(left_wallet, left_last_unlocked), (right_wallet, right_last_unlocked)| {
+            right_last_unlocked
+                .cmp(left_last_unlocked)
+                .then_with(|| {
+                    left_wallet
+                        .wallet_name
+                        .to_ascii_lowercase()
+                        .cmp(&right_wallet.wallet_name.to_ascii_lowercase())
+                })
+                .then_with(|| left_wallet.account_id.cmp(&right_wallet.account_id))
+        },
+    );
 }
 
 impl WalletManager {
@@ -103,36 +120,99 @@ impl WalletManager {
         Ok(request.wallet_name.clone())
     }
 
-    /// List available wallets with account_id for unlock flow
+    /// List available wallets with account_id for unlock flow.
+    /// Most recently unlocked wallets appear first.
     pub async fn list_wallets(&self) -> Result<Vec<WalletListItem>, WalletError> {
-        let mut wallets = Vec::new();
+        let mut wallets_with_last_unlock: Vec<(WalletListItem, Option<u64>)> = Vec::new();
 
         if let Ok(entries) = std::fs::read_dir(&self.data_directory) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    if let Some(name) = entry.file_name().to_str() {
-                        if name.ends_with("_metadata.json") {
-                            let wallet_name = name.trim_end_matches("_metadata.json").to_string();
-                            let path = self.data_directory.join(name);
-                            if let Ok(content) = std::fs::read_to_string(&path) {
-                                if let Ok(account) = serde_json::from_str::<AccountRecord>(&content)
-                                {
-                                    wallets.push(WalletListItem {
-                                        account_id: account.id,
-                                        wallet_name,
-                                        network: account.network,
-                                        emoji: account.emoji,
-                                        color: account.color,
-                                    });
-                                }
-                            }
-                        }
-                    }
+            for entry in entries.flatten() {
+                let Some(name) = entry.file_name().to_str().map(|value| value.to_string()) else {
+                    continue;
+                };
+                if !name.ends_with("_metadata.json") {
+                    continue;
                 }
+                let wallet_name = name.trim_end_matches("_metadata.json").to_string();
+                let path = self.data_directory.join(name);
+                let Ok(content) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                let Ok(account) = serde_json::from_str::<AccountRecord>(&content) else {
+                    continue;
+                };
+                wallets_with_last_unlock.push((
+                    WalletListItem {
+                        account_id: account.id,
+                        wallet_name,
+                        network: account.network,
+                        emoji: account.emoji,
+                        color: account.color,
+                    },
+                    account.last_unlocked_at,
+                ));
             }
         }
 
-        Ok(wallets)
+        sort_wallet_list_items(&mut wallets_with_last_unlock);
+
+        Ok(wallets_with_last_unlock
+            .into_iter()
+            .map(|(wallet, _last_unlocked_at)| wallet)
+            .collect())
+    }
+
+    /// Persist last-unlocked timestamp for the selected account.
+    pub async fn mark_wallet_last_unlocked(&self, account_id: &str) -> Result<(), WalletError> {
+        let unlocked_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| {
+                println!(
+                    "[WALLET] Failed to compute current timestamp for last-unlocked update: {}",
+                    error
+                );
+                WalletError::OperationFailed
+            })?
+            .as_secs();
+
+        if let Ok(entries) = std::fs::read_dir(&self.data_directory) {
+            for entry in entries.flatten() {
+                let Some(name) = entry.file_name().to_str().map(|value| value.to_string()) else {
+                    continue;
+                };
+                if !name.ends_with("_metadata.json") {
+                    continue;
+                }
+
+                let path = self.data_directory.join(name);
+                let Ok(content) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                let Ok(mut account) = serde_json::from_str::<AccountRecord>(&content) else {
+                    continue;
+                };
+                if account.id != account_id {
+                    continue;
+                }
+
+                account.last_unlocked_at = Some(unlocked_at);
+                let metadata_json = serde_json::to_string_pretty(&account)?;
+                std::fs::write(&path, metadata_json).map_err(|error| {
+                    println!(
+                        "[WALLET] Failed to write last-unlocked timestamp for account {}: {}",
+                        account_id, error
+                    );
+                    WalletError::OperationFailed
+                })?;
+                return Ok(());
+            }
+        }
+
+        println!(
+            "[WALLET] Failed to find metadata record when persisting last-unlocked for account {}",
+            account_id
+        );
+        Err(WalletError::OperationFailed)
     }
 
     /// Resolve wallet display name for an account_id (for active wallet display)
@@ -202,5 +282,55 @@ impl WalletManager {
         let mut hasher = Sha256::new();
         hasher.update(password.as_bytes());
         hasher.finalize().to_vec()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sort_wallet_list_items;
+    use crate::types::{wallet::WalletNetwork, WalletListItem};
+
+    fn wallet(account_id: &str, wallet_name: &str) -> WalletListItem {
+        WalletListItem {
+            account_id: account_id.to_string(),
+            wallet_name: wallet_name.to_string(),
+            network: WalletNetwork::Mainnet,
+            emoji: "💰".to_string(),
+            color: "blue".to_string(),
+        }
+    }
+
+    #[test]
+    fn sort_wallets_prioritizes_latest_unlock_timestamp() {
+        let mut wallets = vec![
+            (wallet("wallet_a", "Alpha"), None),
+            (wallet("wallet_b", "Bravo"), Some(1700000000)),
+            (wallet("wallet_c", "Charlie"), Some(1800000000)),
+        ];
+
+        sort_wallet_list_items(&mut wallets);
+
+        let sorted_ids: Vec<String> = wallets
+            .into_iter()
+            .map(|(item, _last_unlocked_at)| item.account_id)
+            .collect();
+        assert_eq!(sorted_ids, vec!["wallet_c", "wallet_b", "wallet_a"]);
+    }
+
+    #[test]
+    fn sort_wallets_uses_name_and_id_when_timestamp_ties() {
+        let mut wallets = vec![
+            (wallet("wallet_c", "Charlie"), Some(1700000000)),
+            (wallet("wallet_a", "Alpha"), Some(1700000000)),
+            (wallet("wallet_b", "alpha"), Some(1700000000)),
+        ];
+
+        sort_wallet_list_items(&mut wallets);
+
+        let sorted_ids: Vec<String> = wallets
+            .into_iter()
+            .map(|(item, _last_unlocked_at)| item.account_id)
+            .collect();
+        assert_eq!(sorted_ids, vec!["wallet_a", "wallet_b", "wallet_c"]);
     }
 }

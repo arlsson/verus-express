@@ -615,6 +615,7 @@ pub async fn create_wallet(
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs(),
+        last_unlocked_at: None,
         network: request.network,
         emoji: request.emoji,
         color: request.color,
@@ -682,6 +683,7 @@ pub async fn import_wallet_text(
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs(),
+        last_unlocked_at: None,
         network: request.network,
         emoji: request.emoji,
         color: request.color,
@@ -735,6 +737,12 @@ pub async fn unlock_wallet(
         return Err(err);
     }
     drop(session);
+    if let Err(error) = wallet_manager.mark_wallet_last_unlocked(&account_id).await {
+        println!(
+            "[WALLET] Failed to persist last-unlocked wallet metadata: {:?}",
+            error
+        );
+    }
     coin_registry.set_active_account(Some(account_id));
 
     println!("[WALLET] Wallet unlocked successfully");

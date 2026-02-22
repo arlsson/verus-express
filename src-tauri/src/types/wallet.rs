@@ -131,6 +131,8 @@ pub struct AccountRecord {
     pub account_hash: String,
     pub key_derivation_version: u8,
     pub created_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_unlocked_at: Option<u64>,
     #[serde(default = "default_wallet_network")]
     pub network: WalletNetwork,
     #[serde(default = "default_wallet_emoji")]

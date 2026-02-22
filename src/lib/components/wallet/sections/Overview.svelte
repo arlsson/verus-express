@@ -588,15 +588,15 @@
                       </div>
                     </div>
 
-                    <div class="text-right tabular-nums">
-                      <p class={`text-foreground text-base font-semibold ${hideHoldings ? 'holdings-obscured' : ''}`}>
-                        {row.fiatValueDisplay}
-                      </p>
+                    <div class={`text-right tabular-nums ${row.syncLabel ? 'self-stretch flex items-center justify-end' : ''}`}>
                       {#if row.syncLabel}
-                        <p class={`text-muted-foreground mt-0.5 text-[13px] ${hideHoldings ? 'holdings-obscured' : ''}`}>
+                        <p class={`text-muted-foreground text-[13px] ${hideHoldings ? 'holdings-obscured' : ''}`}>
                           {row.syncLabel}
                         </p>
                       {:else}
+                        <p class={`text-foreground text-base font-semibold ${hideHoldings ? 'holdings-obscured' : ''}`}>
+                          {row.fiatValueDisplay}
+                        </p>
                         <p class={`text-muted-foreground mt-0.5 text-[13px] ${hideHoldings ? 'holdings-obscured' : ''}`}>
                           {row.cryptoAmountDisplay}
                         </p>
