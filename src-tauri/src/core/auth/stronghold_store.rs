@@ -19,6 +19,7 @@ const WATCHED_VRPC_ADDRESSES_RECORD_KEY: &[u8] = b"watched_vrpc_addresses_v1";
 const WATCHED_VRPC_ADDRESSES_SCHEMA_VERSION: u8 = 1;
 const ACTIVE_ASSETS_RECORD_KEY: &[u8] = b"active_assets_v1";
 const ACTIVE_ASSETS_SCHEMA_VERSION: u8 = 1;
+pub const ACTIVE_ASSETS_PROFILE_VERSION: u8 = 2;
 const LINKED_IDENTITIES_RECORD_KEY: &[u8] = b"linked_identities_v1";
 const LINKED_IDENTITIES_SCHEMA_VERSION: u8 = 1;
 const DLIGHT_SEED_RECORD_KEY: &[u8] = b"dlight_seed_v1";
@@ -48,6 +49,8 @@ struct ActiveAssetsNetworkSnapshot {
     #[serde(default)]
     initialized: bool,
     #[serde(default)]
+    profile_version: u8,
+    #[serde(default)]
     coin_ids: Vec<String>,
 }
 
@@ -55,6 +58,7 @@ impl Default for ActiveAssetsNetworkSnapshot {
     fn default() -> Self {
         Self {
             initialized: false,
+            profile_version: 0,
             coin_ids: vec![],
         }
     }
@@ -658,14 +662,22 @@ impl StrongholdStore {
         account_id: &str,
         password_hash: &[u8],
         network: WalletNetwork,
-    ) -> Result<(bool, Vec<String>), WalletError> {
+    ) -> Result<(bool, Vec<String>, u8), WalletError> {
         let snapshot = self
             .load_active_assets_snapshot(account_id, password_hash)
             .await?;
 
         match network {
-            WalletNetwork::Mainnet => Ok((snapshot.mainnet.initialized, snapshot.mainnet.coin_ids)),
-            WalletNetwork::Testnet => Ok((snapshot.testnet.initialized, snapshot.testnet.coin_ids)),
+            WalletNetwork::Mainnet => Ok((
+                snapshot.mainnet.initialized,
+                snapshot.mainnet.coin_ids,
+                snapshot.mainnet.profile_version,
+            )),
+            WalletNetwork::Testnet => Ok((
+                snapshot.testnet.initialized,
+                snapshot.testnet.coin_ids,
+                snapshot.testnet.profile_version,
+            )),
         }
     }
 
@@ -675,6 +687,7 @@ impl StrongholdStore {
         password_hash: &[u8],
         network: WalletNetwork,
         initialized: bool,
+        profile_version: u8,
         coin_ids: &[String],
     ) -> Result<(), WalletError> {
         let path = self.active_assets_snapshot_path(account_id);
@@ -691,6 +704,7 @@ impl StrongholdStore {
             WalletNetwork::Testnet => &mut snapshot.testnet,
         };
         network_snapshot.initialized = initialized;
+        network_snapshot.profile_version = profile_version;
         network_snapshot.coin_ids = coin_ids.to_vec();
 
         let stronghold = Stronghold::default();
@@ -855,7 +869,7 @@ impl StrongholdStore {
 
 #[cfg(test)]
 mod tests {
-    use super::StrongholdStore;
+    use super::{StrongholdStore, ACTIVE_ASSETS_PROFILE_VERSION};
     use crate::types::identity::LinkedIdentity;
     use crate::types::wallet::WalletNetwork;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -884,6 +898,7 @@ mod tests {
                 password_hash.as_slice(),
                 WalletNetwork::Mainnet,
                 true,
+                ACTIVE_ASSETS_PROFILE_VERSION,
                 &["VRSC".to_string(), "vUSDC".to_string()],
             )
             .await
@@ -895,6 +910,7 @@ mod tests {
                 password_hash.as_slice(),
                 WalletNetwork::Testnet,
                 false,
+                1,
                 &["VRSCTEST".to_string()],
             )
             .await
@@ -906,6 +922,7 @@ mod tests {
             .expect("load mainnet");
         assert_eq!(mainnet.0, true);
         assert_eq!(mainnet.1, vec!["VRSC".to_string(), "vUSDC".to_string()]);
+        assert_eq!(mainnet.2, ACTIVE_ASSETS_PROFILE_VERSION);
 
         let testnet = store
             .load_active_assets(account_id, password_hash.as_slice(), WalletNetwork::Testnet)
@@ -913,6 +930,7 @@ mod tests {
             .expect("load testnet");
         assert_eq!(testnet.0, false);
         assert_eq!(testnet.1, vec!["VRSCTEST".to_string()]);
+        assert_eq!(testnet.2, 1);
 
         let _ = std::fs::remove_dir_all(store.base_path);
     }

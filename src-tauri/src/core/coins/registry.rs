@@ -2,6 +2,7 @@
 // Module 3: Coin Registry — static coin definitions and dynamic PBaaS additions.
 // VRPC/Electrum endpoints are allowlist-only; custom endpoints deferred to advanced settings.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -21,38 +22,76 @@ const ELECTRUM_TESTNET: &[&str] = &["https://electrum.blockstream.info/testnet"]
 
 /// Verus mainnet system ID (i-address format).
 const VRSC_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
+const VETH_MAINNET_SYSTEM_ID: &str = "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X";
+const VUSDC_ON_VERUS_ID: &str = "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd";
 const ETH_ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 
 /// Registry of coins: static defaults plus dynamically added PBaaS currencies.
 pub struct CoinRegistry {
-    dynamic_coins: Mutex<Vec<CoinDefinition>>,
+    dynamic_coins_by_account: Mutex<HashMap<String, Vec<CoinDefinition>>>,
+    active_account_id: Mutex<Option<String>>,
     dynamic_store_path: Option<PathBuf>,
 }
 
 impl CoinRegistry {
     pub fn new() -> Self {
         Self {
-            dynamic_coins: Mutex::new(Vec::new()),
+            dynamic_coins_by_account: Mutex::new(HashMap::new()),
+            active_account_id: Mutex::new(None),
             dynamic_store_path: None,
         }
     }
 
     pub fn with_dynamic_store(path: PathBuf) -> Self {
-        let dynamic_coins = Self::load_dynamic_coins(&path);
+        let dynamic_coins_by_account = Self::load_dynamic_coins(&path);
         Self {
-            dynamic_coins: Mutex::new(dynamic_coins),
+            dynamic_coins_by_account: Mutex::new(dynamic_coins_by_account),
+            active_account_id: Mutex::new(None),
             dynamic_store_path: Some(path),
         }
     }
 
     /// Returns all coins: static list first, then dynamic PBaaS entries.
     pub fn get_all(&self) -> Vec<CoinDefinition> {
+        self.get_all_for_active_account()
+    }
+
+    pub fn get_all_for_active_account(&self) -> Vec<CoinDefinition> {
         let static_coins = Self::default_coins();
-        let dynamic = self.dynamic_coins.lock().expect("coin registry lock");
+        let active_account_id = self
+            .active_account_id
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone());
+        let Some(account_id) = active_account_id else {
+            return static_coins;
+        };
+
+        let dynamic_by_account = self
+            .dynamic_coins_by_account
+            .lock()
+            .expect("coin registry lock");
+        let dynamic = dynamic_by_account.get(&account_id).cloned().unwrap_or_default();
         static_coins
             .into_iter()
-            .chain(dynamic.iter().cloned())
+            .chain(dynamic)
             .collect()
+    }
+
+    pub fn set_active_account(&self, account_id: Option<String>) {
+        let normalized = account_id
+            .and_then(|value| {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            });
+
+        if let Ok(mut active) = self.active_account_id.lock() {
+            *active = normalized;
+        }
     }
 
     /// Find a coin by system ID and network.
@@ -69,14 +108,17 @@ impl CoinRegistry {
             .find(|c| c.id.eq_ignore_ascii_case(id) && c.is_testnet == is_testnet)
     }
 
-    fn load_dynamic_coins(path: &Path) -> Vec<CoinDefinition> {
+    fn load_dynamic_coins(path: &Path) -> HashMap<String, Vec<CoinDefinition>> {
         let Ok(raw) = fs::read_to_string(path) else {
-            return Vec::new();
+            return HashMap::new();
         };
-        serde_json::from_str::<Vec<CoinDefinition>>(&raw).unwrap_or_default()
+        serde_json::from_str::<HashMap<String, Vec<CoinDefinition>>>(&raw).unwrap_or_default()
     }
 
-    fn persist_dynamic_coins(&self, coins: &[CoinDefinition]) -> Result<(), WalletError> {
+    fn persist_dynamic_coins(
+        &self,
+        coins_by_account: &HashMap<String, Vec<CoinDefinition>>,
+    ) -> Result<(), WalletError> {
         let Some(path) = self.dynamic_store_path.as_ref() else {
             return Ok(());
         };
@@ -85,8 +127,8 @@ impl CoinRegistry {
             fs::create_dir_all(parent).map_err(|_| WalletError::OperationFailed)?;
         }
 
-        let payload =
-            serde_json::to_string_pretty(coins).map_err(|_| WalletError::OperationFailed)?;
+        let payload = serde_json::to_string_pretty(coins_by_account)
+            .map_err(|_| WalletError::OperationFailed)?;
         fs::write(path, payload).map_err(|_| WalletError::OperationFailed)?;
         Ok(())
     }
@@ -140,14 +182,23 @@ impl CoinRegistry {
         Self::canonical_asset_key(existing) == Self::canonical_asset_key(candidate)
     }
 
-    /// Adds a coin definition to the dynamic registry and persists it when storage is configured.
+    /// Adds a coin definition to the dynamic registry for a specific account and persists it.
     /// Rejects duplicates by canonical asset key (network + protocol identity).
-    pub fn add_coin(&self, def: CoinDefinition) -> Result<CoinDefinition, WalletError> {
+    pub fn add_coin_for_account(
+        &self,
+        account_id: &str,
+        def: CoinDefinition,
+    ) -> Result<CoinDefinition, WalletError> {
+        let account_key = account_id.trim();
+        if account_key.is_empty() {
+            return Err(WalletError::WalletLocked);
+        }
+
         Self::validate_coin_definition(&def)?;
 
         let static_coins = Self::default_coins();
-        let mut dynamic = self
-            .dynamic_coins
+        let mut dynamic_by_account = self
+            .dynamic_coins_by_account
             .lock()
             .map_err(|_| WalletError::OperationFailed)?;
 
@@ -156,26 +207,47 @@ impl CoinRegistry {
             return Err(WalletError::AssetAlreadyExists);
         }
 
-        if let Some(existing_index) = dynamic.iter().position(|c| Self::has_duplicate(c, &def)) {
-            if dynamic[existing_index] == def {
+        let previous_account_coins = dynamic_by_account.get(account_key).cloned();
+        let mut next_account_coins = previous_account_coins.clone().unwrap_or_default();
+        if let Some(existing_index) = next_account_coins
+            .iter()
+            .position(|coin| Self::has_duplicate(coin, &def))
+        {
+            if next_account_coins[existing_index] == def {
                 return Err(WalletError::AssetAlreadyExists);
             }
-
-            let previous = dynamic[existing_index].clone();
-            dynamic[existing_index] = def.clone();
-            if let Err(err) = self.persist_dynamic_coins(&dynamic) {
-                dynamic[existing_index] = previous;
-                return Err(err);
-            }
-            return Ok(def);
+            next_account_coins[existing_index] = def.clone();
+        } else {
+            next_account_coins.push(def.clone());
         }
 
-        dynamic.push(def.clone());
-        if let Err(err) = self.persist_dynamic_coins(&dynamic) {
-            dynamic.pop();
+        dynamic_by_account.insert(account_key.to_string(), next_account_coins);
+        if let Err(err) = self.persist_dynamic_coins(&dynamic_by_account) {
+            if let Some(previous) = previous_account_coins {
+                dynamic_by_account.insert(account_key.to_string(), previous);
+            } else {
+                dynamic_by_account.remove(account_key);
+            }
             return Err(err);
         }
+
         Ok(def)
+    }
+
+    /// Adds a coin definition to the currently active account registry.
+    pub fn add_coin_for_active_account(&self, def: CoinDefinition) -> Result<CoinDefinition, WalletError> {
+        let account_id = self
+            .active_account_id
+            .lock()
+            .map_err(|_| WalletError::OperationFailed)?
+            .clone()
+            .ok_or(WalletError::WalletLocked)?;
+        self.add_coin_for_account(&account_id, def)
+    }
+
+    /// Backward-compatible wrapper that writes to the currently active account.
+    pub fn add_coin(&self, def: CoinDefinition) -> Result<CoinDefinition, WalletError> {
+        self.add_coin_for_active_account(def)
     }
 
     /// Adds a PBaaS currency. Validates proto (Vrsc) and required fields.
@@ -187,7 +259,7 @@ impl CoinRegistry {
         if def.id.is_empty() || def.currency_id.is_empty() || def.system_id.is_empty() {
             return Err(WalletError::InvalidCoinDefinition);
         }
-        match self.add_coin(def) {
+        match self.add_coin_for_active_account(def) {
             Ok(_) => Ok(()),
             Err(WalletError::AssetAlreadyExists) => Err(WalletError::DuplicatePbaasCurrency),
             Err(err) => Err(err),
@@ -337,6 +409,24 @@ impl CoinRegistry {
                 mapped_to: Some("ETH".to_string()),
                 is_testnet: false,
             },
+            // vUSDC.vETH on Verus
+            CoinDefinition {
+                id: VUSDC_ON_VERUS_ID.to_string(),
+                currency_id: VUSDC_ON_VERUS_ID.to_string(),
+                system_id: VETH_MAINNET_SYSTEM_ID.to_string(),
+                display_ticker: "vUSDC.vETH".to_string(),
+                display_name: "USDC on Verus".to_string(),
+                coin_paprika_id: Some("usdc-usd-coin".to_string()),
+                proto: Protocol::Vrsc,
+                compatible_channels: vec![Channel::Vrpc],
+                decimals: 8,
+                vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+                dlight_endpoints: None,
+                electrum_endpoints: None,
+                seconds_per_block: 60,
+                mapped_to: Some("USDC".to_string()),
+                is_testnet: false,
+            },
         ]
     }
 }
@@ -351,6 +441,10 @@ impl Default for CoinRegistry {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn set_active_account(registry: &CoinRegistry, account_id: &str) {
+        registry.set_active_account(Some(account_id.to_string()));
+    }
 
     fn sample_dynamic_coin() -> CoinDefinition {
         CoinDefinition {
@@ -396,6 +490,7 @@ mod tests {
     #[test]
     fn add_coin_rejects_duplicate_static_asset() {
         let registry = CoinRegistry::new();
+        set_active_account(&registry, "account_alpha");
         let duplicate = CoinDefinition {
             id: "USDC_DUP".to_string(),
             currency_id: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
@@ -421,6 +516,7 @@ mod tests {
     #[test]
     fn add_coin_updates_existing_dynamic_duplicate_with_new_metadata() {
         let registry = CoinRegistry::new();
+        set_active_account(&registry, "account_alpha");
         let stale = CoinDefinition {
             id: "i3d4vSCbXYEC3u6TzwohMvdghHkhBrXWpE".to_string(),
             currency_id: "i3d4vSCbXYEC3u6TzwohMvdghHkhBrXWpE".to_string(),
@@ -476,6 +572,7 @@ mod tests {
     #[test]
     fn add_coin_rejects_identical_dynamic_duplicate() {
         let registry = CoinRegistry::new();
+        set_active_account(&registry, "account_alpha");
         let sample = sample_dynamic_coin();
         registry
             .add_coin(sample.clone())
@@ -495,16 +592,105 @@ mod tests {
             std::env::temp_dir().join(format!("lite_wallet_coin_registry_{}.json", unique_suffix));
 
         let registry = CoinRegistry::with_dynamic_store(path.clone());
+        set_active_account(&registry, "account_alpha");
         let added = registry
             .add_coin(sample_dynamic_coin())
             .expect("add dynamic coin");
         assert_eq!(added.id, "iSampleCurrency");
 
         let reloaded = CoinRegistry::with_dynamic_store(path.clone());
+        set_active_account(&reloaded, "account_alpha");
         let found = reloaded
             .find_by_id("iSampleCurrency", false)
             .expect("reloaded coin");
         assert_eq!(found.currency_id, "iSampleCurrency");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn add_coin_isolated_between_accounts() {
+        let registry = CoinRegistry::new();
+        set_active_account(&registry, "account_alpha");
+        registry
+            .add_coin(sample_dynamic_coin())
+            .expect("add dynamic coin in alpha");
+
+        set_active_account(&registry, "account_beta");
+        assert!(registry.find_by_id("iSampleCurrency", false).is_none());
+
+        set_active_account(&registry, "account_alpha");
+        assert!(registry.find_by_id("iSampleCurrency", false).is_some());
+    }
+
+    #[test]
+    fn add_coin_persists_dynamic_entries_per_account() {
+        let unique_suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "lite_wallet_coin_registry_by_account_{}.json",
+            unique_suffix
+        ));
+
+        let registry = CoinRegistry::with_dynamic_store(path.clone());
+        set_active_account(&registry, "account_alpha");
+        registry
+            .add_coin(sample_dynamic_coin())
+            .expect("add coin for alpha");
+
+        set_active_account(&registry, "account_beta");
+        registry
+            .add_coin(CoinDefinition {
+                id: "iOtherCurrency".to_string(),
+                currency_id: "iOtherCurrency".to_string(),
+                system_id: VRSC_SYSTEM_ID.to_string(),
+                display_ticker: "OTHER".to_string(),
+                display_name: "Other currency".to_string(),
+                coin_paprika_id: None,
+                proto: Protocol::Vrsc,
+                compatible_channels: vec![Channel::Vrpc],
+                decimals: 8,
+                vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+                dlight_endpoints: None,
+                electrum_endpoints: None,
+                seconds_per_block: 60,
+                mapped_to: None,
+                is_testnet: false,
+            })
+            .expect("add coin for beta");
+
+        let reloaded = CoinRegistry::with_dynamic_store(path.clone());
+        set_active_account(&reloaded, "account_alpha");
+        assert!(reloaded.find_by_id("iSampleCurrency", false).is_some());
+        assert!(reloaded.find_by_id("iOtherCurrency", false).is_none());
+
+        set_active_account(&reloaded, "account_beta");
+        assert!(reloaded.find_by_id("iSampleCurrency", false).is_none());
+        assert!(reloaded.find_by_id("iOtherCurrency", false).is_some());
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn legacy_global_dynamic_store_format_is_ignored() {
+        let unique_suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "lite_wallet_coin_registry_legacy_format_{}.json",
+            unique_suffix
+        ));
+
+        let payload = serde_json::to_string_pretty(&vec![sample_dynamic_coin()])
+            .expect("serialize legacy payload");
+        std::fs::write(&path, payload).expect("write legacy payload");
+
+        let reloaded = CoinRegistry::with_dynamic_store(path.clone());
+        set_active_account(&reloaded, "account_alpha");
+        assert!(reloaded.find_by_id("iSampleCurrency", false).is_none());
 
         let _ = std::fs::remove_file(path);
     }

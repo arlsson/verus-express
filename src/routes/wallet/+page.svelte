@@ -21,7 +21,6 @@
   import { coinsStore } from '$lib/stores/coins.js';
   import { buildWalletChannels, resetWalletChannels, walletChannelsStore } from '$lib/stores/walletChannels.js';
   import { clearCoinScopes } from '$lib/stores/coinScopes.js';
-  import { filterVisibleAssets } from '$lib/stores/assetVisibility.js';
   import { clearWalletErrors, pushWalletError } from '$lib/stores/walletErrors.js';
   import { setAddressBookContacts } from '$lib/stores/addressBook.js';
   import { isWalletSupportedAsset } from '$lib/coins/supportedAssets.js';
@@ -97,21 +96,16 @@
         return [];
       });
       const supportedCoins = allCoins.filter((coin) => isWalletSupportedAsset(coin, walletNetwork));
-      const legacyVisibleCoins = filterVisibleAssets(supportedCoins, walletNetwork);
 
       let coins: CoinDefinition[] = [];
       try {
-        let activeAssets = await walletService.getActiveAssets();
-        if (!activeAssets.initialized) {
-          const migrationIds = legacyVisibleCoins.map((coin) => coin.id);
-          activeAssets = await walletService.setActiveAssets(migrationIds);
-        }
+        const activeAssets = await walletService.getActiveAssets();
         coins = filterCoinsByActiveIds(supportedCoins, activeAssets.coinIds);
         sessionCoinsByWallet.set(cacheKey, coins);
       } catch (error) {
         console.error('[WALLET_ROUTE] Failed to load active assets state', error);
         const previousSessionCoins = sessionCoinsByWallet.get(cacheKey) ?? get(coinsStore);
-        const fallbackCoins = previousSessionCoins.length > 0 ? previousSessionCoins : legacyVisibleCoins;
+        const fallbackCoins = previousSessionCoins.length > 0 ? previousSessionCoins : [];
         coins = fallbackCoins;
         sessionCoinsByWallet.set(cacheKey, fallbackCoins);
         pushWalletError(i18n.t('wallet.overview.errorActiveAssetsFallback'));

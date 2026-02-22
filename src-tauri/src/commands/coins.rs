@@ -256,33 +256,67 @@ async fn require_active_network(
 
 /// Returns all coins: static definitions plus dynamically added entries.
 #[tauri::command(rename_all = "snake_case")]
-pub fn get_coin_registry(
+pub async fn get_coin_registry(
     registry: State<'_, Arc<CoinRegistry>>,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
 ) -> Result<Vec<CoinDefinition>, WalletError> {
+    let session = session_manager.lock().await;
+    let active_account_id = if session.is_unlocked() {
+        session.active_account_id().cloned()
+    } else {
+        None
+    };
+    drop(session);
+    registry.set_active_account(active_account_id);
+
     println!("[COINS] Get coin registry requested");
-    let coins = registry.get_all();
+    let coins = registry.get_all_for_active_account();
     println!("[COINS] Returning {} coins", coins.len());
     Ok(coins)
 }
 
 /// Adds a coin definition to the dynamic registry.
 #[tauri::command(rename_all = "snake_case")]
-pub fn add_coin_definition(
+pub async fn add_coin_definition(
     registry: State<'_, Arc<CoinRegistry>>,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     definition: CoinDefinition,
 ) -> Result<CoinDefinition, WalletError> {
+    let session = session_manager.lock().await;
+    if !session.is_unlocked() {
+        return Err(WalletError::WalletLocked);
+    }
+    let account_id = session
+        .active_account_id()
+        .cloned()
+        .ok_or(WalletError::WalletLocked)?;
+    drop(session);
+    registry.set_active_account(Some(account_id));
+
     println!("[COINS] Add coin requested: {}", definition.id);
-    let added = registry.add_coin(definition)?;
+    let added = registry.add_coin_for_active_account(definition)?;
     println!("[COINS] Coin added: {}", added.id);
     Ok(added)
 }
 
 /// Adds a PBaaS currency to the registry (compatibility wrapper).
 #[tauri::command(rename_all = "snake_case")]
-pub fn add_pbaas_currency(
+pub async fn add_pbaas_currency(
     registry: State<'_, Arc<CoinRegistry>>,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
     definition: CoinDefinition,
 ) -> Result<(), WalletError> {
+    let session = session_manager.lock().await;
+    if !session.is_unlocked() {
+        return Err(WalletError::WalletLocked);
+    }
+    let account_id = session
+        .active_account_id()
+        .cloned()
+        .ok_or(WalletError::WalletLocked)?;
+    drop(session);
+    registry.set_active_account(Some(account_id));
+
     println!("[COINS] Add PBaaS currency requested: {}", definition.id);
     registry.add_pbaas(definition)?;
     println!("[COINS] PBaaS currency added");

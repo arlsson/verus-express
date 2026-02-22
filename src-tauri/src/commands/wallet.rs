@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::core::address_book::manager as address_book_manager;
-use crate::core::auth::SessionManager;
+use crate::core::auth::{stronghold_store::ACTIVE_ASSETS_PROFILE_VERSION, SessionManager};
 use crate::core::channels::btc::BtcProviderPool;
 use crate::core::channels::dlight_private;
 use crate::core::channels::eth::EthProviderPool;
@@ -61,6 +61,13 @@ struct VrpcScopeAddress {
 const VRSC_MAINNET_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
 const VRSC_TESTNET_SYSTEM_ID: &str = "iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq";
 const VETH_SYSTEM_ID: &str = "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X";
+const MAINNET_DEFAULT_ACTIVE_COIN_IDS: &[&str] = &[
+    "VRSC",
+    "ETH",
+    "BTC",
+    "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd",
+];
+const TESTNET_DEFAULT_ACTIVE_COIN_IDS: &[&str] = &["VRSCTEST", "GETH", "BTCTEST"];
 
 fn coin_supports_channel(coin: &CoinDefinition, channel: Channel) -> bool {
     coin.compatible_channels.iter().any(|item| *item == channel)
@@ -285,6 +292,19 @@ fn sanitize_active_coin_ids(
     }
 
     sanitized
+}
+
+fn default_active_coin_ids(network: WalletNetwork) -> Vec<String> {
+    match network {
+        WalletNetwork::Mainnet => MAINNET_DEFAULT_ACTIVE_COIN_IDS
+            .iter()
+            .map(|coin_id| (*coin_id).to_string())
+            .collect(),
+        WalletNetwork::Testnet => TESTNET_DEFAULT_ACTIVE_COIN_IDS
+            .iter()
+            .map(|coin_id| (*coin_id).to_string())
+            .collect(),
+    }
 }
 
 fn canonical_network_label_for_system(system_id: &str) -> Option<(String, String)> {
@@ -690,6 +710,7 @@ pub async fn unlock_wallet(
     password: String,
     wallet_manager: State<'_, WalletManager>,
     session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+    coin_registry: State<'_, Arc<CoinRegistry>>,
     app_handle: AppHandle,
 ) -> Result<(), WalletError> {
     println!("[WALLET] Unlock wallet requested");
@@ -702,7 +723,7 @@ pub async fn unlock_wallet(
     let mut session = session_manager.lock().await;
     if let Err(err) = session
         .unlock(
-            account_id,
+            account_id.clone(),
             password,
             wallet.network,
             wallet.secret_kind,
@@ -714,6 +735,7 @@ pub async fn unlock_wallet(
         return Err(err);
     }
     drop(session);
+    coin_registry.set_active_account(Some(account_id));
 
     println!("[WALLET] Wallet unlocked successfully");
     Ok(())
@@ -766,6 +788,7 @@ pub async fn lock_wallet(
     guard_session_manager: State<'_, Arc<Mutex<GuardSessionManager>>>,
     preflight_store: State<'_, PreflightStore>,
     update_engine: State<'_, Arc<UpdateEngine>>,
+    coin_registry: State<'_, Arc<CoinRegistry>>,
 ) -> Result<(), WalletError> {
     println!("[WALLET] Lock wallet requested");
 
@@ -774,6 +797,7 @@ pub async fn lock_wallet(
 
     let mut session = session_manager.lock().await;
     session.lock();
+    coin_registry.set_active_account(None);
     preflight_store.clear();
     drop(session);
 
@@ -923,10 +947,33 @@ pub async fn get_active_assets(
     let stronghold_store = session.stronghold_store().clone();
     drop(session);
 
-    let (initialized, coin_ids) = stronghold_store
+    let (initialized, coin_ids, profile_version) = stronghold_store
         .load_active_assets(&account_id, password_hash.as_ref(), network)
         .await?;
     let sanitized = sanitize_active_coin_ids(coin_registry.as_ref(), network, &coin_ids);
+    if profile_version < ACTIVE_ASSETS_PROFILE_VERSION {
+        let defaults = sanitize_active_coin_ids(
+            coin_registry.as_ref(),
+            network,
+            &default_active_coin_ids(network),
+        );
+        stronghold_store
+            .store_active_assets(
+                &account_id,
+                password_hash.as_ref(),
+                network,
+                true,
+                ACTIVE_ASSETS_PROFILE_VERSION,
+                &defaults,
+            )
+            .await?;
+
+        return Ok(ActiveAssetsState {
+            network,
+            initialized: true,
+            coin_ids: defaults,
+        });
+    }
 
     Ok(ActiveAssetsState {
         network,
@@ -963,6 +1010,7 @@ pub async fn set_active_assets(
             password_hash.as_ref(),
             network,
             true,
+            ACTIVE_ASSETS_PROFILE_VERSION,
             &sanitized,
         )
         .await?;
@@ -1212,7 +1260,7 @@ pub async fn get_coin_scopes(
         let active_coin_ids = stronghold_store
             .load_active_assets(&account_id, password_hash.as_ref(), network)
             .await
-            .map(|(_initialized, coin_ids)| coin_ids);
+            .map(|(_initialized, coin_ids, _profile_version)| coin_ids);
         let systems = match active_coin_ids {
             Ok(active_ids) => {
                 collect_vrpc_system_descriptors(coin_registry.as_ref(), network, &coin, &active_ids)
@@ -1342,6 +1390,10 @@ mod tests {
     const VETH_SYSTEM_ID: &str = "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X";
     const CHIPS_SYSTEM_ID: &str = "iJ3WZocnjG9ufv7GKUA4LijQno5gTMb7tP";
 
+    fn set_active_account(registry: &CoinRegistry) {
+        registry.set_active_account(Some("wallet_tests_account".to_string()));
+    }
+
     fn sample_vrpc_coin(
         id: &str,
         currency_id: &str,
@@ -1455,6 +1507,7 @@ mod tests {
     #[test]
     fn vrpc_system_descriptors_include_only_activated_systems() {
         let registry = CoinRegistry::new();
+        set_active_account(&registry);
         registry
             .add_coin(sample_vrpc_coin(
                 "vUSDC",
@@ -1505,6 +1558,7 @@ mod tests {
     #[test]
     fn vrpc_system_descriptors_use_canonical_network_labels() {
         let registry = CoinRegistry::new();
+        set_active_account(&registry);
         registry
             .add_coin(sample_vrpc_coin(
                 "VETHCHAIN",
@@ -1534,6 +1588,7 @@ mod tests {
     #[test]
     fn vrpc_system_descriptors_do_not_use_token_ticker_as_network_label() {
         let registry = CoinRegistry::new();
+        set_active_account(&registry);
         registry
             .add_coin(sample_vrpc_coin(
                 "vDAI",
@@ -1562,6 +1617,7 @@ mod tests {
     #[test]
     fn vrpc_system_descriptors_always_include_root_system() {
         let registry = CoinRegistry::new();
+        set_active_account(&registry);
         registry
             .add_coin(sample_vrpc_coin(
                 "CHIPS",

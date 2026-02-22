@@ -106,7 +106,7 @@ pub fn run() {
             app.manage(session_manager);
             println!("[APP] Session manager initialized");
 
-            let coin_registry_store = wallet_data_dir.join("dynamic_coins.json");
+            let coin_registry_store = wallet_data_dir.join("dynamic_coins_by_account.json");
             let coin_registry = Arc::new(CoinRegistry::with_dynamic_store(coin_registry_store));
             app.manage(coin_registry);
             println!("[APP] Coin registry initialized");

@@ -1298,8 +1298,12 @@ mod tests {
     use crate::types::wallet::WalletNetwork;
 
     const VRSC_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
-    const VETH_SYSTEM_ID: &str = "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X";
     const CHIPS_SYSTEM_ID: &str = "iJ3WZocnjG9ufv7GKUA4LijQno5gTMb7tP";
+    const VUSDC_ON_VERUS_ID: &str = "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd";
+
+    fn set_active_account(registry: &CoinRegistry) {
+        registry.set_active_account(Some("channels_tests_account".to_string()));
+    }
 
     fn sample_vrpc_coin(
         id: &str,
@@ -1330,20 +1334,12 @@ mod tests {
     #[test]
     fn resolve_vrpc_coin_context_allows_root_scope_for_vrpc_token() {
         let registry = CoinRegistry::new();
-        registry
-            .add_coin(sample_vrpc_coin(
-                "vUSDC",
-                "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd",
-                VETH_SYSTEM_ID,
-                "vUSDC.vETH",
-                "USDC on Verus",
-            ))
-            .expect("add vUSDC");
+        set_active_account(&registry);
 
         let context = resolve_vrpc_coin_context(
             &registry,
             VRSC_SYSTEM_ID,
-            Some("vUSDC"),
+            Some(VUSDC_ON_VERUS_ID),
             WalletNetwork::Mainnet,
         )
         .expect("resolve context");
@@ -1353,6 +1349,7 @@ mod tests {
     #[test]
     fn resolve_vrpc_coin_context_uses_scope_system_for_native_detection() {
         let registry = CoinRegistry::new();
+        set_active_account(&registry);
         registry
             .add_coin(sample_vrpc_coin(
                 "vDEX",
@@ -1378,15 +1375,7 @@ mod tests {
     #[test]
     fn resolve_vrpc_coin_context_allows_native_chain_scope_for_vrpc_token() {
         let registry = CoinRegistry::new();
-        registry
-            .add_coin(sample_vrpc_coin(
-                "vUSDC",
-                "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd",
-                VETH_SYSTEM_ID,
-                "vUSDC.vETH",
-                "USDC on Verus",
-            ))
-            .expect("add vUSDC");
+        set_active_account(&registry);
         registry
             .add_coin(sample_vrpc_coin(
                 "CHIPS",
@@ -1400,7 +1389,7 @@ mod tests {
         let context = resolve_vrpc_coin_context(
             &registry,
             CHIPS_SYSTEM_ID,
-            Some("vUSDC"),
+            Some(VUSDC_ON_VERUS_ID),
             WalletNetwork::Mainnet,
         )
         .expect("resolve context");
@@ -1410,20 +1399,12 @@ mod tests {
     #[test]
     fn resolve_vrpc_coin_context_rejects_unrelated_non_native_scope() {
         let registry = CoinRegistry::new();
-        registry
-            .add_coin(sample_vrpc_coin(
-                "vUSDC",
-                "i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd",
-                VETH_SYSTEM_ID,
-                "vUSDC.vETH",
-                "USDC on Verus",
-            ))
-            .expect("add vUSDC");
+        set_active_account(&registry);
 
         let result = resolve_vrpc_coin_context(
             &registry,
             "iUnrelatedSystem",
-            Some("vUSDC"),
+            Some(VUSDC_ON_VERUS_ID),
             WalletNetwork::Mainnet,
         );
         assert!(result.is_err());
