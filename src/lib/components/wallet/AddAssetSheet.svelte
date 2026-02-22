@@ -464,6 +464,10 @@
           <SearchInput
             bind:value={searchInput}
             placeholder={i18n.t('wallet.addAsset.searchPlaceholder')}
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck={false}
             inputClass="focus-visible:ring-0 focus-visible:ring-transparent"
           />
 

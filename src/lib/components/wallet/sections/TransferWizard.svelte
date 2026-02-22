@@ -73,8 +73,8 @@
     BridgeCapabilitiesResult,
     BridgeConversionPathQuote,
     BridgeExportFeeEstimateResult,
-    DlightRuntimeStatusResult,
     BridgeTransferPreflightResult,
+    DlightRuntimeStatusResult,
     PreflightResult,
     SendResult,
     TxSendProgressEventPayload,
@@ -153,6 +153,7 @@
   const VRSC_SYSTEM_ID = 'i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV';
   const VRSCTEST_SYSTEM_ID = 'iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq';
   const VETH_SYSTEM_ID = 'i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X';
+  const MAX_REVIEW_DISPLAY_FRACTION_DIGITS = 8;
 
   /* eslint-disable prefer-const */
   let { entryIntent, entryContext = null, onClose = defaultClose }: TransferWizardProps = $props();
@@ -821,7 +822,8 @@
       if (!selectedCoinPresentation) return '';
       const baseAmount = (activePreflight?.value ?? amount.trim()).trim();
       if (!baseAmount) return '';
-      return `${baseAmount} ${selectedCoinPresentation.displayTicker}`;
+      const formattedAmount = formatAmountForReviewDisplay(baseAmount, MAX_REVIEW_DISPLAY_FRACTION_DIGITS);
+      return `${formattedAmount} ${selectedCoinPresentation.displayTicker}`;
     })()
   );
 
@@ -848,7 +850,9 @@
   );
 
   const reviewNetworkFeeValue = $derived(
-    activePreflight ? `${activePreflight.fee} ${activePreflight.feeCurrency}` : ''
+    activePreflight
+      ? `${formatAmountForReviewDisplay(activePreflight.fee, MAX_REVIEW_DISPLAY_FRACTION_DIGITS)} ${activePreflight.feeCurrency}`
+      : ''
   );
   const reviewTotalFeesFiat = $derived(
     (() => {
@@ -1066,7 +1070,8 @@
         const amountValue = amount.trim();
         const amountFqn = selectedCoinPresentation?.displayTicker?.trim() ?? '';
         if (amountValue) {
-          const amountPrimary = amountFqn ? `${amountValue} ${amountFqn}` : amountValue;
+          const formattedAmount = formatAmountForReviewDisplay(amountValue, MAX_REVIEW_DISPLAY_FRACTION_DIGITS);
+          const amountPrimary = amountFqn ? `${formattedAmount} ${amountFqn}` : formattedAmount;
           rows.push({
             label: i18n.t('wallet.transfer.summary.amount'),
             primary: amountPrimary
@@ -1117,7 +1122,10 @@
       }
 
       if (activePreflight) {
-        const feePrimary = activePreflight.fee.trim();
+        const feePrimary = formatAmountForReviewDisplay(
+          activePreflight.fee.trim(),
+          MAX_REVIEW_DISPLAY_FRACTION_DIGITS
+        );
         const feeSecondary = normalizeSummarySecondary(feePrimary, activePreflight.feeCurrency);
         if (feePrimary) {
           rows.push({
@@ -2223,6 +2231,57 @@
     const parsed = Number(trimmed);
     if (!Number.isFinite(parsed) || parsed < 0) return null;
     return parsed;
+  }
+
+  function formatAmountForReviewDisplay(
+    rawValue: string | null | undefined,
+    maxFractionDigits = MAX_REVIEW_DISPLAY_FRACTION_DIGITS
+  ): string {
+    if (typeof rawValue !== 'string') return '';
+    const trimmed = rawValue.trim();
+    if (!trimmed) return '';
+    if (maxFractionDigits < 0) return trimmed;
+
+    const parsed = parseDecimalParts(trimmed);
+    if (!parsed) return trimmed;
+
+    const normalizedInteger = normalizeIntegerPart(parsed.integerPart);
+    const truncatedFraction = parsed.fractionPart.slice(0, maxFractionDigits).replace(/0+$/, '');
+
+    if (normalizedInteger === '0' && !truncatedFraction && isTinyNonZero(parsed.fractionPart, maxFractionDigits)) {
+      return `<${formatDisplayFloor(maxFractionDigits)}`;
+    }
+
+    if (!truncatedFraction) return normalizedInteger;
+    return `${normalizedInteger}.${truncatedFraction}`;
+  }
+
+  function parseDecimalParts(value: string): { integerPart: string; fractionPart: string } | null {
+    const match = value.match(/^(\d+)(?:\.(\d+))?$/);
+    if (!match) return null;
+    return {
+      integerPart: match[1],
+      fractionPart: match[2] ?? ''
+    };
+  }
+
+  function normalizeIntegerPart(integerPart: string): string {
+    const normalized = integerPart.replace(/^0+(?=\d)/, '');
+    return normalized || '0';
+  }
+
+  function isTinyNonZero(fractionPart: string, maxFractionDigits: number): boolean {
+    if (!fractionPart) return false;
+    if (maxFractionDigits <= 0) return /[1-9]/.test(fractionPart);
+
+    const withinDisplay = fractionPart.slice(0, maxFractionDigits);
+    if (/[1-9]/.test(withinDisplay)) return false;
+    return /[1-9]/.test(fractionPart.slice(maxFractionDigits));
+  }
+
+  function formatDisplayFloor(maxFractionDigits: number): string {
+    if (maxFractionDigits <= 0) return '1';
+    return `0.${'0'.repeat(maxFractionDigits - 1)}1`;
   }
 
   function getUsdRate(rateMap?: Record<string, number>): number | null {
@@ -3408,9 +3467,13 @@
             </div>
 
             {#if sendResult}
+              {@const formattedSentValue = formatAmountForReviewDisplay(
+                sendResult.value,
+                MAX_REVIEW_DISPLAY_FRACTION_DIGITS
+              )}
               {@const sentValueWithTicker = selectedCoinPresentation?.displayTicker?.trim()
-                ? `${sendResult.value} ${selectedCoinPresentation.displayTicker.trim()}`
-                : sendResult.value}
+                ? `${formattedSentValue} ${selectedCoinPresentation.displayTicker.trim()}`
+                : formattedSentValue}
               <dl class="space-y-1 rounded-lg bg-muted/35 px-2.5 py-2 text-left dark:bg-muted/40">
                 <div class="flex items-start justify-between gap-3">
                   <dt class="text-muted-foreground text-[11px]">{i18n.t('wallet.transfer.summary.amount')}</dt>
