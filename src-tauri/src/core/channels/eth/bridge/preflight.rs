@@ -49,49 +49,6 @@ const APPROVE_ABI: &str = r#"[
   }
 ]"#;
 
-const SEND_TRANSFER_ABI: &str = r#"[
-  {
-    "inputs": [
-      {
-        "components": [
-          {"internalType": "uint32", "name": "version", "type": "uint32"},
-          {
-            "components": [
-              {"internalType": "address", "name": "currency", "type": "address"},
-              {"internalType": "uint64", "name": "amount", "type": "uint64"}
-            ],
-            "internalType": "struct VerusObjects.CCurrencyValueMap",
-            "name": "currencyvalue",
-            "type": "tuple"
-          },
-          {"internalType": "uint32", "name": "flags", "type": "uint32"},
-          {"internalType": "address", "name": "feecurrencyid", "type": "address"},
-          {"internalType": "uint64", "name": "fees", "type": "uint64"},
-          {
-            "components": [
-              {"internalType": "uint8", "name": "destinationtype", "type": "uint8"},
-              {"internalType": "bytes", "name": "destinationaddress", "type": "bytes"}
-            ],
-            "internalType": "struct VerusObjectsCommon.CTransferDestination",
-            "name": "destination",
-            "type": "tuple"
-          },
-          {"internalType": "address", "name": "destcurrencyid", "type": "address"},
-          {"internalType": "address", "name": "destsystemid", "type": "address"},
-          {"internalType": "address", "name": "secondreserveid", "type": "address"}
-        ],
-        "internalType": "struct VerusObjects.CReserveTransfer",
-        "name": "_transfer",
-        "type": "tuple"
-      }
-    ],
-    "name": "sendTransfer",
-    "outputs": [],
-    "stateMutability": "payable",
-    "type": "function"
-  }
-]"#;
-
 const BRIDGE_NAME: &str = "Bridge.vETH";
 const WEI_PER_SAT_U64: u64 = 10_000_000_000;
 
@@ -137,7 +94,7 @@ pub async fn preflight(
     let source_contract_str = format!("{:#x}", source_contract);
     let source_is_eth = source_contract == Address::zero();
 
-    let system_id = resolve_system_id(vrpc_provider).await?;
+    let system_id = resolve_system_id(&params, vrpc_provider).await?;
     let system_hex = to_eth_address_from_iaddress(&system_id)?;
 
     let bridge_definition = match vrpc_provider.getcurrency(BRIDGE_NAME).await {
@@ -164,14 +121,6 @@ pub async fn preflight(
     if is_conversion && !past_prelaunch {
         return Err(WalletError::BridgeRouteInvalid);
     }
-
-    let send_transfer_abi: Abi =
-        serde_json::from_str(SEND_TRANSFER_ABI).map_err(|_| WalletError::OperationFailed)?;
-    let send_transfer_contract = Contract::new(
-        delegator_address,
-        send_transfer_abi,
-        Arc::new(provider.rpc_provider.clone()),
-    );
 
     let mapped_currency_iaddress = resolve_mapped_currency(
         &map_to,
@@ -282,10 +231,9 @@ pub async fn preflight(
         }
 
         let transfer_gas_limit = if source_is_eth {
-            let tuple = reserve_transfer.clone().into_contract_tuple();
-            match send_transfer_contract
-                .method::<_, ()>("sendTransfer", tuple)
-                .map_err(|_| WalletError::OperationFailed)?
+            let transfer = reserve_transfer.clone().into_contract_struct();
+            match delegator
+                .send_transfer(transfer)
                 .from(from)
                 .gas(U256::from(INITIAL_GAS_LIMIT))
                 .gas_price(max_fee_per_gas)
@@ -367,10 +315,9 @@ pub async fn preflight(
         }
 
         if source_is_eth {
-            let tuple = reserve_transfer.clone().into_contract_tuple();
-            send_transfer_contract
-                .method::<_, ()>("sendTransfer", tuple)
-                .map_err(|_| WalletError::BridgeRouteInvalid)?
+            let transfer = reserve_transfer.clone().into_contract_struct();
+            delegator
+                .send_transfer(transfer)
                 .from(from)
                 .gas(transfer_gas_limit)
                 .gas_price(max_fee_per_gas)
@@ -586,7 +533,22 @@ async fn normalize_identity_destination(
         .ok_or(WalletError::InvalidAddress)
 }
 
-async fn resolve_system_id(vrpc_provider: &VrpcProvider) -> Result<String, WalletError> {
+async fn resolve_system_id(
+    params: &BridgeTransferPreflightParams,
+    vrpc_provider: &VrpcProvider,
+) -> Result<String, WalletError> {
+    if let Some(export_to) = normalized_optional(&params.export_to) {
+        if to_eth_address_from_iaddress(&export_to).is_ok() {
+            return Ok(export_to);
+        }
+
+        if let Ok(currency_definition) = vrpc_provider.getcurrency(&export_to).await {
+            if let Some(currency_id) = extract_currency_id(&currency_definition) {
+                return Ok(currency_id);
+            }
+        }
+    }
+
     let info = vrpc_provider.getinfo().await?;
     info.get("chainid")
         .and_then(extract_stringish)

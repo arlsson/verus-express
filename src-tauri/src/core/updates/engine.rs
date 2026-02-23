@@ -4,7 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
@@ -41,6 +41,10 @@ pub const EVENT_BOOTSTRAP_UPDATED: &str = "wallet://bootstrap-updated";
 pub const EVENT_TX_SEND_PROGRESS: &str = "wallet://tx-send-progress";
 pub const EVENT_ERROR: &str = "wallet://error";
 const BOOTSTRAP_BALANCE_CONCURRENCY: usize = 4;
+const BOOTSTRAP_RATE_RESOLVE_TIMEOUT_SECS: u64 = 10;
+const BOOTSTRAP_PBAAS_PROVIDER_TIMEOUT_SECS: u64 = 8;
+const BOOTSTRAP_BRIDGE_VETH_LOOKUP_TIMEOUT_SECS: u64 = 8;
+const BOOTSTRAP_RATE_SLOW_LOG_MS: u128 = 2_000;
 const VRSC_COIN_ID: &str = "VRSC";
 const VRSCTEST_COIN_ID: &str = "VRSCTEST";
 const ETH_COIN_ID: &str = "ETH";
@@ -387,16 +391,51 @@ async fn maybe_seed_vrsc_anchor_from_bridge_veth(
     providers.extend(vrpc_provider_pool.provider_candidates(active_network, Some(VRSC_SYSTEM_ID)));
 
     let mut seen = HashSet::<usize>::new();
-    for provider in providers {
+    for (provider_index, provider) in providers.into_iter().enumerate() {
         let provider_ptr = provider as *const _ as usize;
         if !seen.insert(provider_ptr) {
             continue;
         }
 
-        let payload = match provider.getcurrency(BRIDGE_VETH_CURRENCY_ID).await {
-            Ok(payload) => Some(payload),
-            Err(_) => provider.getcurrency(BRIDGE_VETH_TICKER).await.ok(),
+        let lookup_started_at = Instant::now();
+        let lookup_timeout = Duration::from_secs(BOOTSTRAP_BRIDGE_VETH_LOOKUP_TIMEOUT_SECS);
+        let payload = match tokio::time::timeout(
+            lookup_timeout,
+            provider.getcurrency(BRIDGE_VETH_CURRENCY_ID),
+        )
+        .await
+        {
+            Ok(Ok(payload)) => Some(payload),
+            Ok(Err(_)) => {
+                match tokio::time::timeout(lookup_timeout, provider.getcurrency(BRIDGE_VETH_TICKER))
+                    .await
+                {
+                    Ok(Ok(payload)) => Some(payload),
+                    Ok(Err(_)) => None,
+                    Err(_) => {
+                        println!(
+                            "[UPDATE] Bridge.vETH ticker lookup timed out: provider_index={} timeout_secs={}",
+                            provider_index, BOOTSTRAP_BRIDGE_VETH_LOOKUP_TIMEOUT_SECS
+                        );
+                        None
+                    }
+                }
+            }
+            Err(_) => {
+                println!(
+                    "[UPDATE] Bridge.vETH currency lookup timed out: provider_index={} timeout_secs={}",
+                    provider_index, BOOTSTRAP_BRIDGE_VETH_LOOKUP_TIMEOUT_SECS
+                );
+                None
+            }
         };
+        let lookup_elapsed_ms = lookup_started_at.elapsed().as_millis();
+        if lookup_elapsed_ms > BOOTSTRAP_RATE_SLOW_LOG_MS {
+            println!(
+                "[UPDATE] Bridge.vETH seed lookup slow: provider_index={} elapsed_ms={}",
+                provider_index, lookup_elapsed_ms
+            );
+        }
         let Some(payload) = payload else {
             continue;
         };
@@ -567,13 +606,34 @@ async fn derive_pbaas_rates_with_provider_candidates(
     providers.extend(vrpc_provider_pool.provider_candidates(active_network, Some(&coin.system_id)));
 
     let mut seen = HashSet::<usize>::new();
-    for provider in providers {
+    for (provider_index, provider) in providers.into_iter().enumerate() {
         let provider_ptr = provider as *const _ as usize;
         if !seen.insert(provider_ptr) {
             continue;
         }
-        if let Some(rates) = pbaas::derive_pbaas_rates(provider, coin, latest_rates).await {
-            return Some(rates);
+        let derivation_started_at = Instant::now();
+        let derivation_result = tokio::time::timeout(
+            Duration::from_secs(BOOTSTRAP_PBAAS_PROVIDER_TIMEOUT_SECS),
+            pbaas::derive_pbaas_rates(provider, coin, latest_rates),
+        )
+        .await;
+        let derivation_elapsed_ms = derivation_started_at.elapsed().as_millis();
+        if derivation_elapsed_ms > BOOTSTRAP_RATE_SLOW_LOG_MS {
+            println!(
+                "[UPDATE] PBaaS rate derivation slow: coin={} provider_index={} elapsed_ms={}",
+                coin.id, provider_index, derivation_elapsed_ms
+            );
+        }
+
+        match derivation_result {
+            Ok(Some(rates)) => return Some(rates),
+            Ok(None) => {}
+            Err(_) => {
+                println!(
+                    "[UPDATE] PBaaS rate derivation timed out: coin={} provider_index={} timeout_secs={}",
+                    coin.id, provider_index, BOOTSTRAP_PBAAS_PROVIDER_TIMEOUT_SECS
+                );
+            }
         }
     }
 
@@ -794,6 +854,19 @@ async fn run_bootstrap_rate_fetches(
         return;
     }
 
+    // Try anchor assets early so we only attempt Bridge.vETH fallback after an actual
+    // direct-price failure for the anchor.
+    let mut ordered_coins = prioritized_coins.to_vec();
+    ordered_coins.sort_by_key(|coin| {
+        if coin.id.trim().eq_ignore_ascii_case(VRSC_COIN_ID)
+            || coin.id.trim().eq_ignore_ascii_case(VRSCTEST_COIN_ID)
+        {
+            0_u8
+        } else {
+            1_u8
+        }
+    });
+
     let usd_reference_rates = match ecb::fetch_usd_reference_rates(&rates_http_client).await {
         Ok(rates) => rates,
         Err(err) => {
@@ -801,29 +874,123 @@ async fn run_bootstrap_rate_fetches(
             HashMap::from([(ecb::USD.to_string(), 1.0)])
         }
     };
-    maybe_seed_vrsc_anchor_from_bridge_veth(
-        app_handle,
-        vrpc_provider_pool.as_ref(),
-        active_network,
-        &usd_reference_rates,
-        latest_rates,
-    )
-    .await;
+    let mut bridge_seed_attempted = false;
+    let mut vrsc_direct_rate_failed = false;
 
-    for coin in prioritized_coins {
+    for coin in &ordered_coins {
         if cancel_token.is_cancelled() {
             return;
         }
 
-        let (resolved_rates, usd_change_24h_pct, rate_error) = resolve_rates_for_coin(
-            &rates_http_client,
-            &usd_reference_rates,
-            vrpc_provider_pool.as_ref(),
-            active_network,
-            coin,
-            latest_rates,
+        let coin_rate_started_at = Instant::now();
+        let resolved_result = tokio::time::timeout(
+            Duration::from_secs(BOOTSTRAP_RATE_RESOLVE_TIMEOUT_SECS),
+            resolve_rates_for_coin(
+                &rates_http_client,
+                &usd_reference_rates,
+                vrpc_provider_pool.as_ref(),
+                active_network,
+                coin,
+                latest_rates,
+            ),
         )
         .await;
+        let coin_rate_elapsed_ms = coin_rate_started_at.elapsed().as_millis();
+        if coin_rate_elapsed_ms > BOOTSTRAP_RATE_SLOW_LOG_MS {
+            println!(
+                "[UPDATE] Bootstrap rate fetch slow: coin={} elapsed_ms={}",
+                coin.id, coin_rate_elapsed_ms
+            );
+        }
+        let (mut resolved_rates, mut usd_change_24h_pct, mut rate_error) = match resolved_result {
+            Ok(result) => result,
+            Err(_) => {
+                println!(
+                    "[UPDATE] Bootstrap rate fetch timed out for {} after {}s",
+                    coin.id, BOOTSTRAP_RATE_RESOLVE_TIMEOUT_SECS
+                );
+                coin_rates_state.insert(coin.id.clone(), Instant::now());
+                continue;
+            }
+        };
+
+        if coin.id.trim().eq_ignore_ascii_case(VRSC_COIN_ID) && rate_error.is_some() {
+            vrsc_direct_rate_failed = true;
+        }
+
+        let needs_bridge_seed_for_vrsc = coin.id.trim().eq_ignore_ascii_case(VRSC_COIN_ID)
+            && rate_error.is_some()
+            && lookup_rates_case_insensitive(latest_rates, VRSC_COIN_ID).is_none();
+        let needs_bridge_seed_for_pbaas = pbaas::is_pbaas_derivation_candidate(coin)
+            && vrsc_direct_rate_failed
+            && lookup_rates_case_insensitive(
+                latest_rates,
+                anchor_coin_id_for_pbaas_candidate(coin),
+            )
+            .is_none();
+
+        if resolved_rates.is_none()
+            && (needs_bridge_seed_for_vrsc || needs_bridge_seed_for_pbaas)
+            && !bridge_seed_attempted
+        {
+            println!(
+                "[UPDATE] Attempting on-demand Bridge.vETH seed after direct rate miss: coin={}",
+                coin.id
+            );
+            maybe_seed_vrsc_anchor_from_bridge_veth(
+                app_handle,
+                vrpc_provider_pool.as_ref(),
+                active_network,
+                &usd_reference_rates,
+                latest_rates,
+            )
+            .await;
+            bridge_seed_attempted = true;
+
+            if needs_bridge_seed_for_vrsc
+                && lookup_rates_case_insensitive(latest_rates, VRSC_COIN_ID).is_some()
+            {
+                // Bridge seed already emitted VRSC rates and stored them.
+                coin_rates_state.insert(coin.id.clone(), Instant::now());
+                continue;
+            }
+
+            if needs_bridge_seed_for_pbaas {
+                let retry_started_at = Instant::now();
+                let retry_result = tokio::time::timeout(
+                    Duration::from_secs(BOOTSTRAP_RATE_RESOLVE_TIMEOUT_SECS),
+                    resolve_rates_for_coin(
+                        &rates_http_client,
+                        &usd_reference_rates,
+                        vrpc_provider_pool.as_ref(),
+                        active_network,
+                        coin,
+                        latest_rates,
+                    ),
+                )
+                .await;
+                let retry_elapsed_ms = retry_started_at.elapsed().as_millis();
+                if retry_elapsed_ms > BOOTSTRAP_RATE_SLOW_LOG_MS {
+                    println!(
+                        "[UPDATE] Bootstrap rate retry slow: coin={} elapsed_ms={}",
+                        coin.id, retry_elapsed_ms
+                    );
+                }
+                match retry_result {
+                    Ok(result) => {
+                        (resolved_rates, usd_change_24h_pct, rate_error) = result;
+                    }
+                    Err(_) => {
+                        println!(
+                            "[UPDATE] Bootstrap rate retry timed out for {} after {}s",
+                            coin.id, BOOTSTRAP_RATE_RESOLVE_TIMEOUT_SECS
+                        );
+                        coin_rates_state.insert(coin.id.clone(), Instant::now());
+                        continue;
+                    }
+                }
+            }
+        }
 
         if let Some(rates) = resolved_rates {
             if emit_and_store_rates(
@@ -847,12 +1014,11 @@ async fn run_bootstrap_rate_fetches(
             );
         }
 
-        // Throttle retries after both success and failure.
+        // Record attempted-at timestamp so the regular loop does not immediately refetch.
         coin_rates_state.insert(coin.id.clone(), Instant::now());
-        tokio::time::sleep(jitter_duration(1)).await;
     }
 
-    let alias_backfills = pending_strict_alias_backfill(prioritized_coins, latest_rates);
+    let alias_backfills = pending_strict_alias_backfill(&ordered_coins, latest_rates);
     for (coin_id, rates) in alias_backfills {
         if cancel_token.is_cancelled() {
             return;
@@ -985,38 +1151,45 @@ async fn run_update_loop(
                 remainder_channels.len()
             );
 
-            let balance_bootstrap_started_at = Instant::now();
-            run_bootstrap_balance_fetches(
-                &app_handle,
-                &cancel_token,
-                &prioritized_channels,
-                Arc::clone(&session_manager),
-                Arc::clone(&coin_registry),
-                Arc::clone(&vrpc_provider_pool),
-                Arc::clone(&btc_provider_pool),
-                Arc::clone(&eth_provider_pool),
-                &mut channel_state,
-            )
-            .await;
-            let balance_bootstrap_elapsed = balance_bootstrap_started_at.elapsed();
-
             let rate_coins = fiat_rate_candidates(coin_registry.as_ref(), is_testnet);
             let prioritized_coins =
                 prioritized_rate_coins(&rate_coins, &prioritized_channels, &priority_coin_ids);
 
-            let rate_bootstrap_started_at = Instant::now();
-            run_bootstrap_rate_fetches(
-                &app_handle,
-                &cancel_token,
-                &prioritized_coins,
-                active_network,
-                rates_http_client.clone(),
-                Arc::clone(&vrpc_provider_pool),
-                &mut latest_rates,
-                &mut coin_rates_state,
-            )
-            .await;
-            let rate_bootstrap_elapsed = rate_bootstrap_started_at.elapsed();
+            let balance_bootstrap = async {
+                let started_at = Instant::now();
+                run_bootstrap_balance_fetches(
+                    &app_handle,
+                    &cancel_token,
+                    &prioritized_channels,
+                    Arc::clone(&session_manager),
+                    Arc::clone(&coin_registry),
+                    Arc::clone(&vrpc_provider_pool),
+                    Arc::clone(&btc_provider_pool),
+                    Arc::clone(&eth_provider_pool),
+                    &mut channel_state,
+                )
+                .await;
+                started_at.elapsed()
+            };
+
+            let rate_bootstrap = async {
+                let started_at = Instant::now();
+                run_bootstrap_rate_fetches(
+                    &app_handle,
+                    &cancel_token,
+                    &prioritized_coins,
+                    active_network,
+                    rates_http_client.clone(),
+                    Arc::clone(&vrpc_provider_pool),
+                    &mut latest_rates,
+                    &mut coin_rates_state,
+                )
+                .await;
+                started_at.elapsed()
+            };
+
+            let (balance_bootstrap_elapsed, rate_bootstrap_elapsed) =
+                tokio::join!(balance_bootstrap, rate_bootstrap);
             let bootstrap_elapsed = bootstrap_started_at.elapsed();
 
             println!(

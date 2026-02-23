@@ -153,7 +153,7 @@
   const VRSC_SYSTEM_ID = 'i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV';
   const VRSCTEST_SYSTEM_ID = 'iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq';
   const VETH_SYSTEM_ID = 'i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X';
-  const MAX_REVIEW_DISPLAY_FRACTION_DIGITS = 8;
+  const MAX_TRANSFER_AMOUNT_FRACTION_DIGITS = 8;
 
   /* eslint-disable prefer-const */
   let { entryIntent, entryContext = null, onClose = defaultClose }: TransferWizardProps = $props();
@@ -822,7 +822,7 @@
       if (!selectedCoinPresentation) return '';
       const baseAmount = (activePreflight?.value ?? amount.trim()).trim();
       if (!baseAmount) return '';
-      const formattedAmount = formatAmountForReviewDisplay(baseAmount, MAX_REVIEW_DISPLAY_FRACTION_DIGITS);
+      const formattedAmount = formatAmountForReviewDisplay(baseAmount, MAX_TRANSFER_AMOUNT_FRACTION_DIGITS);
       return `${formattedAmount} ${selectedCoinPresentation.displayTicker}`;
     })()
   );
@@ -851,7 +851,7 @@
 
   const reviewNetworkFeeValue = $derived(
     activePreflight
-      ? `${formatAmountForReviewDisplay(activePreflight.fee, MAX_REVIEW_DISPLAY_FRACTION_DIGITS)} ${activePreflight.feeCurrency}`
+      ? `${formatAmountForReviewDisplay(activePreflight.fee, MAX_TRANSFER_AMOUNT_FRACTION_DIGITS)} ${activePreflight.feeCurrency}`
       : ''
   );
   const reviewTotalFeesFiat = $derived(
@@ -1070,7 +1070,7 @@
         const amountValue = amount.trim();
         const amountFqn = selectedCoinPresentation?.displayTicker?.trim() ?? '';
         if (amountValue) {
-          const formattedAmount = formatAmountForReviewDisplay(amountValue, MAX_REVIEW_DISPLAY_FRACTION_DIGITS);
+          const formattedAmount = formatAmountForReviewDisplay(amountValue, MAX_TRANSFER_AMOUNT_FRACTION_DIGITS);
           const amountPrimary = amountFqn ? `${formattedAmount} ${amountFqn}` : formattedAmount;
           rows.push({
             label: i18n.t('wallet.transfer.summary.amount'),
@@ -1124,7 +1124,7 @@
       if (activePreflight) {
         const feePrimary = formatAmountForReviewDisplay(
           activePreflight.fee.trim(),
-          MAX_REVIEW_DISPLAY_FRACTION_DIGITS
+          MAX_TRANSFER_AMOUNT_FRACTION_DIGITS
         );
         const feeSecondary = normalizeSummarySecondary(feePrimary, activePreflight.feeCurrency);
         if (feePrimary) {
@@ -1428,6 +1428,12 @@
 
     previousPreflightInputSignature = signature;
     clearPreflightState();
+  });
+
+  $effect(() => {
+    const sanitizedAmount = sanitizeAmountInput(amount, MAX_TRANSFER_AMOUNT_FRACTION_DIGITS);
+    if (sanitizedAmount === amount) return;
+    amount = sanitizedAmount;
   });
 
   $effect(() => {
@@ -2224,6 +2230,30 @@
     return `${option.via ?? ''}|${option.exportTo ?? ''}|${option.mapTo ?? ''}`.toLowerCase();
   }
 
+  function sanitizeAmountInput(
+    rawValue: string,
+    maxFractionDigits = MAX_TRANSFER_AMOUNT_FRACTION_DIGITS
+  ): string {
+    const normalizedInput = rawValue.replace(/,/g, '.').replace(/[^\d.]/g, '');
+    if (!normalizedInput) return '';
+
+    const hasDecimalSeparator = normalizedInput.includes('.');
+    const [integerPartRaw, ...fractionSegments] = normalizedInput.split('.');
+    const fractionRaw = fractionSegments.join('');
+    const normalizedInteger = normalizeIntegerPart(integerPartRaw || '0');
+
+    if (!hasDecimalSeparator || maxFractionDigits <= 0) {
+      return normalizedInteger;
+    }
+
+    const truncatedFraction = fractionRaw.slice(0, maxFractionDigits);
+    if (!truncatedFraction && normalizedInput.endsWith('.')) {
+      return `${normalizedInteger}.`;
+    }
+
+    return truncatedFraction ? `${normalizedInteger}.${truncatedFraction}` : normalizedInteger;
+  }
+
   function parseNonNegativeAmount(value?: string | null): number | null {
     if (typeof value !== 'string') return null;
     const trimmed = value.trim();
@@ -2235,7 +2265,7 @@
 
   function formatAmountForReviewDisplay(
     rawValue: string | null | undefined,
-    maxFractionDigits = MAX_REVIEW_DISPLAY_FRACTION_DIGITS
+    maxFractionDigits = MAX_TRANSFER_AMOUNT_FRACTION_DIGITS
   ): string {
     if (typeof rawValue !== 'string') return '';
     const trimmed = rawValue.trim();
@@ -3469,7 +3499,7 @@
             {#if sendResult}
               {@const formattedSentValue = formatAmountForReviewDisplay(
                 sendResult.value,
-                MAX_REVIEW_DISPLAY_FRACTION_DIGITS
+                MAX_TRANSFER_AMOUNT_FRACTION_DIGITS
               )}
               {@const sentValueWithTicker = selectedCoinPresentation?.displayTicker?.trim()
                 ? `${formattedSentValue} ${selectedCoinPresentation.displayTicker.trim()}`

@@ -1,5 +1,6 @@
 use ethers::types::{Address, Bytes};
 
+use super::delegator::{CcurrencyValueMap, CreserveTransfer, CtransferDestination};
 use crate::types::WalletError;
 
 pub const DEST_PKH: u8 = 2;
@@ -41,30 +42,24 @@ pub struct ReserveTransferPayload {
 }
 
 impl ReserveTransferPayload {
-    pub fn into_contract_tuple(
-        self,
-    ) -> (
-        u32,
-        (Address, u64),
-        u32,
-        Address,
-        u64,
-        (u8, Bytes),
-        Address,
-        Address,
-        Address,
-    ) {
-        (
-            self.version,
-            (self.currency_value_currency, self.currency_value_amount),
-            self.flags,
-            self.fee_currency_id,
-            self.fees,
-            (self.destination_type, self.destination_address),
-            self.dest_currency_id,
-            self.dest_system_id,
-            self.second_reserve_id,
-        )
+    pub fn into_contract_struct(self) -> CreserveTransfer {
+        CreserveTransfer {
+            version: self.version,
+            currencyvalue: CcurrencyValueMap {
+                currency: self.currency_value_currency,
+                amount: self.currency_value_amount,
+            },
+            flags: self.flags,
+            feecurrencyid: self.fee_currency_id,
+            fees: self.fees,
+            destination: CtransferDestination {
+                destinationtype: self.destination_type,
+                destinationaddress: self.destination_address,
+            },
+            destcurrencyid: self.dest_currency_id,
+            destsystemid: self.dest_system_id,
+            secondreserveid: self.second_reserve_id,
+        }
     }
 }
 

@@ -10,6 +10,9 @@ use ethers::types::{Address, Eip1559TransactionRequest, U256};
 use tokio::sync::Mutex;
 
 use crate::core::auth::SessionManager;
+use crate::core::channels::eth::bridge::delegator::{
+    CcurrencyValueMap, CreserveTransfer, CtransferDestination, VerusBridgeDelegatorContract,
+};
 use crate::core::channels::eth::preflight::EthPreflightPayload;
 use crate::core::channels::eth::provider::EthProviderPool;
 use crate::core::channels::store::PreflightStore;
@@ -39,49 +42,6 @@ const ERC20_APPROVE_ABI: &str = r#"[
     ],
     "name": "approve",
     "outputs": [{"name": "", "type": "bool"}],
-    "type": "function"
-  }
-]"#;
-
-const SEND_TRANSFER_ABI: &str = r#"[
-  {
-    "inputs": [
-      {
-        "components": [
-          {"internalType": "uint32", "name": "version", "type": "uint32"},
-          {
-            "components": [
-              {"internalType": "address", "name": "currency", "type": "address"},
-              {"internalType": "uint64", "name": "amount", "type": "uint64"}
-            ],
-            "internalType": "struct VerusObjects.CCurrencyValueMap",
-            "name": "currencyvalue",
-            "type": "tuple"
-          },
-          {"internalType": "uint32", "name": "flags", "type": "uint32"},
-          {"internalType": "address", "name": "feecurrencyid", "type": "address"},
-          {"internalType": "uint64", "name": "fees", "type": "uint64"},
-          {
-            "components": [
-              {"internalType": "uint8", "name": "destinationtype", "type": "uint8"},
-              {"internalType": "bytes", "name": "destinationaddress", "type": "bytes"}
-            ],
-            "internalType": "struct VerusObjectsCommon.CTransferDestination",
-            "name": "destination",
-            "type": "tuple"
-          },
-          {"internalType": "address", "name": "destcurrencyid", "type": "address"},
-          {"internalType": "address", "name": "destsystemid", "type": "address"},
-          {"internalType": "address", "name": "secondreserveid", "type": "address"}
-        ],
-        "internalType": "struct VerusObjects.CReserveTransfer",
-        "name": "_transfer",
-        "type": "tuple"
-      }
-    ],
-    "name": "sendTransfer",
-    "outputs": [],
-    "stateMutability": "payable",
     "type": "function"
   }
 ]"#;
@@ -370,28 +330,27 @@ pub async fn send(
                 }
             }
 
-            let reserve_transfer = (
-                reserve_transfer_version,
-                (reserve_currency, reserve_amount),
-                reserve_transfer_flags,
-                reserve_fee_currency,
-                reserve_transfer_fees,
-                (
-                    reserve_transfer_destination_type,
-                    reserve_destination_address,
-                ),
-                reserve_dest_currency,
-                reserve_dest_system,
-                reserve_second_reserve,
-            );
+            let reserve_transfer = CreserveTransfer {
+                version: reserve_transfer_version,
+                currencyvalue: CcurrencyValueMap {
+                    currency: reserve_currency,
+                    amount: reserve_amount,
+                },
+                flags: reserve_transfer_flags,
+                feecurrencyid: reserve_fee_currency,
+                fees: reserve_transfer_fees,
+                destination: CtransferDestination {
+                    destinationtype: reserve_transfer_destination_type,
+                    destinationaddress: reserve_destination_address,
+                },
+                destcurrencyid: reserve_dest_currency,
+                destsystemid: reserve_dest_system,
+                secondreserveid: reserve_second_reserve,
+            };
 
-            let send_transfer_abi: Abi = serde_json::from_str(SEND_TRANSFER_ABI)
-                .map_err(|_| WalletError::OperationFailed)?;
-            let delegator = Contract::new(bridge_contract, send_transfer_abi, signer.clone());
+            let delegator = VerusBridgeDelegatorContract::new(bridge_contract, signer.clone());
             let send_transfer_call = delegator
-                .method::<_, ()>("sendTransfer", reserve_transfer)
-                .map_err(|_| WalletError::OperationFailed)?;
-            let send_transfer_call = send_transfer_call
+                .send_transfer(reserve_transfer)
                 .from(parsed_from)
                 .gas(transfer_gas_limit)
                 .gas_price(max_fee_per_gas.max(max_priority_fee_per_gas))
