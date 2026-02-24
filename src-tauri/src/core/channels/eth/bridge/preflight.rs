@@ -104,8 +104,13 @@ pub async fn preflight(
     let bridge_iaddress =
         extract_currency_id(&bridge_definition).ok_or(WalletError::BridgeRouteInvalid)?;
     let bridge_hex = to_eth_address_from_iaddress(&bridge_iaddress)?;
-    let veth_iaddress = bridge_iaddress.clone();
-    let veth_hex = bridge_hex;
+    let veth_definition = match vrpc_provider.getcurrency("vETH").await {
+        Ok(value) => value,
+        Err(_) => bridge_definition.clone(),
+    };
+    let veth_iaddress =
+        extract_currency_id(&veth_definition).ok_or(WalletError::BridgeRouteInvalid)?;
+    let veth_hex = to_eth_address_from_iaddress(&veth_iaddress)?;
 
     let delegator_address = delegator_contract_for_chain_id(provider.chain_id)?;
     let delegator = VerusBridgeDelegatorContract::new(
@@ -232,7 +237,7 @@ pub async fn preflight(
 
         let transfer_gas_limit = if source_is_eth {
             let transfer = reserve_transfer.clone().into_contract_struct();
-            match delegator
+            let estimated_gas = match delegator
                 .send_transfer(transfer)
                 .from(from)
                 .gas(U256::from(INITIAL_GAS_LIMIT))
@@ -241,10 +246,11 @@ pub async fn preflight(
                 .estimate_gas()
                 .await
             {
-                Ok(gas) => add_fraction(gas, GAS_PRICE_MODIFIER_DELEGATOR_CONTRACT)
-                    .max(U256::from(FALLBACK_GAS_BRIDGE_TRANSFER)),
+                Ok(gas) => gas,
                 Err(_) => U256::from(FALLBACK_GAS_BRIDGE_TRANSFER),
-            }
+            };
+
+            add_fraction(estimated_gas, GAS_PRICE_MODIFIER_DELEGATOR_CONTRACT)
         } else {
             transfer_gas_limit_for_token(&source_contract_str)
         };
@@ -297,16 +303,19 @@ pub async fn preflight(
             .map_err(|_| WalletError::NetworkError)?;
 
         let insufficient = if source_is_eth {
-            max_total_fee.saturating_add(sats_to_wei(submitted_sats)) > balance
+            let max_total_fee_sats = wei_to_sats_round(max_total_fee);
+            let balance_sats = wei_to_sats_round(balance);
+            max_total_fee_sats.saturating_add(submitted_sats) > balance_sats
         } else {
             max_total_fee > balance
         };
 
         if insufficient {
             if source_is_eth && attempt == 0 {
-                let max_total_fee_sats = wei_to_sats(max_total_fee)?;
-                if submitted_sats > max_total_fee_sats {
-                    submitted_sats = submitted_sats.saturating_sub(max_total_fee_sats);
+                if let Some(adjusted_sats) =
+                    adjust_submitted_sats_for_fee_envelope(submitted_sats, max_total_fee)
+                {
+                    submitted_sats = adjusted_sats;
                     adjusted_amount = Some(sats_to_decimal_string(submitted_sats));
                     continue;
                 }
@@ -316,15 +325,20 @@ pub async fn preflight(
 
         if source_is_eth {
             let transfer = reserve_transfer.clone().into_contract_struct();
-            delegator
+            let call_result = delegator
                 .send_transfer(transfer)
                 .from(from)
                 .gas(transfer_gas_limit)
                 .gas_price(max_fee_per_gas)
                 .value(transfer_value_wei)
                 .call()
-                .await
-                .map_err(|_| WalletError::BridgeRouteInvalid)?;
+                .await;
+            if call_result.is_err() {
+                if adjusted_amount.is_some() {
+                    return Err(WalletError::BridgeInsufficientEthFeeEnvelope);
+                }
+                return Err(WalletError::BridgeRouteInvalid);
+            }
         }
 
         final_payload = Some((
@@ -414,11 +428,10 @@ pub async fn preflight(
     );
 
     let mut warnings = Vec::<PreflightWarning>::new();
-    if is_conversion || export_to.is_some() {
+    if is_conversion {
         warnings.push(PreflightWarning {
             warning_type: "estimated_fee".to_string(),
-            message: "Final reserve-transfer amounts may vary slightly after chain execution."
-                .to_string(),
+            message: "Final amount you receive may vary slightly.".to_string(),
         });
     }
 
@@ -588,6 +601,20 @@ fn wei_to_sats(wei: U256) -> Result<U256, WalletError> {
     Ok(wei / U256::from(WEI_PER_SAT_U64))
 }
 
+fn wei_to_sats_round(wei: U256) -> U256 {
+    let divisor = U256::from(WEI_PER_SAT_U64);
+    let half_divisor = divisor / U256::from(2u64);
+    wei.saturating_add(half_divisor) / divisor
+}
+
+fn adjust_submitted_sats_for_fee_envelope(submitted_sats: U256, max_total_fee_wei: U256) -> Option<U256> {
+    let max_total_fee_sats = wei_to_sats_round(max_total_fee_wei);
+    if submitted_sats <= max_total_fee_sats {
+        return None;
+    }
+    Some(submitted_sats.saturating_sub(max_total_fee_sats))
+}
+
 fn u256_to_u64(value: U256) -> Result<u64, WalletError> {
     if value > U256::from(u64::MAX) {
         return Err(WalletError::OperationFailed);
@@ -631,4 +658,53 @@ fn extract_stringish(value: &Value) -> Option<String> {
         return Some(raw.to_string());
     }
     value.as_f64().map(|raw| raw.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        adjust_submitted_sats_for_fee_envelope, sats_to_wei, wei_to_sats_round, WEI_PER_SAT_U64,
+    };
+    use ethers::types::U256;
+
+    #[test]
+    fn wei_to_sats_round_keeps_exact_division() {
+        let sats = U256::from(123u64);
+        let wei = sats_to_wei(sats);
+        assert_eq!(wei_to_sats_round(wei), sats);
+    }
+
+    #[test]
+    fn wei_to_sats_round_rounds_down_below_half_sat() {
+        let divisor = U256::from(WEI_PER_SAT_U64);
+        let wei = divisor.saturating_mul(U256::from(123u64)).saturating_add(U256::from(1u64));
+        assert_eq!(wei_to_sats_round(wei), U256::from(123u64));
+    }
+
+    #[test]
+    fn wei_to_sats_round_rounds_up_at_half_sat() {
+        let divisor = U256::from(WEI_PER_SAT_U64);
+        let half = divisor / U256::from(2u64);
+        let wei = divisor
+            .saturating_mul(U256::from(123u64))
+            .saturating_add(half);
+        assert_eq!(wei_to_sats_round(wei), U256::from(124u64));
+    }
+
+    #[test]
+    fn adjust_submitted_sats_for_fee_envelope_returns_adjusted_amount() {
+        let submitted = U256::from(1_000_000u64);
+        let fee_wei = sats_to_wei(U256::from(900_000u64)).saturating_add(U256::from(1u64));
+        let adjusted =
+            adjust_submitted_sats_for_fee_envelope(submitted, fee_wei).expect("should adjust");
+        assert_eq!(adjusted, U256::from(100_000u64));
+    }
+
+    #[test]
+    fn adjust_submitted_sats_for_fee_envelope_rejects_non_positive_adjustment() {
+        let submitted = U256::from(100_000u64);
+        let fee_wei = sats_to_wei(U256::from(100_000u64)).saturating_add(U256::from(1u64));
+        let adjusted = adjust_submitted_sats_for_fee_envelope(submitted, fee_wei);
+        assert!(adjusted.is_none());
+    }
 }

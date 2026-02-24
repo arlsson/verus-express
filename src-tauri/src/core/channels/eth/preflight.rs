@@ -241,7 +241,7 @@ pub async fn preflight_erc20(
         .map_err(|_| WalletError::NetworkError)?;
 
     if eth_balance < max_fee_cap {
-        return Err(WalletError::InsufficientFunds);
+        return Err(WalletError::InsufficientEthForGas);
     }
 
     let fee_display = format_units(max_fee_cap, 18).map_err(|_| WalletError::OperationFailed)?;

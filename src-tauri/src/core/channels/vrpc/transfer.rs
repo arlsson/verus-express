@@ -422,13 +422,30 @@ fn build_sendcurrency_output(
         out.insert("preconvert".to_string(), Value::Bool(v));
     }
     if let Some(v) = &params.map_to {
-        out.insert("mapto".to_string(), Value::String(v.clone()));
+        if destination_supports_map_to(normalized_destination) {
+            out.insert("mapto".to_string(), Value::String(v.clone()));
+        }
     }
     if let Some(v) = &params.vdxf_tag {
         out.insert("vdxftag".to_string(), Value::String(v.clone()));
     }
 
     Ok(Value::Object(out))
+}
+
+fn destination_supports_map_to(normalized_destination: &str) -> bool {
+    !is_eth_hex_destination(normalized_destination)
+}
+
+fn is_eth_hex_destination(value: &str) -> bool {
+    let trimmed = value.trim();
+    trimmed.len() == 42
+        && trimmed.starts_with("0x")
+        && trimmed
+            .as_bytes()
+            .iter()
+            .skip(2)
+            .all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn parse_funded_input_refs(funded_hex: &str) -> Result<Vec<(String, u32)>, WalletError> {
@@ -595,10 +612,10 @@ pub async fn preflight_transfer(
         return Err(WalletError::OperationFailed);
     }
 
-    if params.convert_to.is_some() || params.export_to.is_some() {
+    if params.convert_to.is_some() {
         warnings.push(PreflightWarning {
             warning_type: "estimated_fee".to_string(),
-            message: "Final reserve-transfer amounts may vary slightly after funding and chain execution.".to_string(),
+            message: "Final amount you receive may vary slightly.".to_string(),
         });
     }
 
@@ -690,6 +707,18 @@ mod tests {
                 "vdxftag": "iTag"
             })
         );
+    }
+
+    #[test]
+    fn build_sendcurrency_output_omits_mapto_for_eth_destination() {
+        let mut params = base_params();
+        params.export_to = Some("i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X".to_string());
+        params.map_to = Some("i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd".to_string());
+
+        let output = build_sendcurrency_output(&params, "0x8fda30a676fbc8f1406adeac7921998b1af4fd05", 1.0)
+            .expect("output");
+        let mapto = output.get("mapto");
+        assert!(mapto.is_none(), "mapto must be omitted for ETH destination outputs");
     }
 
     #[test]

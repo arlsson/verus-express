@@ -105,6 +105,36 @@ fn p2pkh_script_from_hash160(hash: &[u8; 20]) -> ScriptBuf {
         .into_script()
 }
 
+fn resolve_send_value_after_fee(
+    submitted_sat: u64,
+    total_sat: u64,
+    fee_sat: u64,
+) -> Result<(u64, bool, Option<String>), WalletError> {
+    if submitted_sat == 0 || fee_sat == 0 || total_sat == 0 {
+        return Err(WalletError::InsufficientFunds);
+    }
+
+    if total_sat < submitted_sat {
+        return Err(WalletError::InsufficientFunds);
+    }
+
+    let needed = submitted_sat.saturating_add(fee_sat);
+    if total_sat >= needed {
+        return Ok((submitted_sat, false, None));
+    }
+
+    let adjusted = total_sat.saturating_sub(fee_sat);
+    if adjusted == 0 {
+        return Err(WalletError::InsufficientFunds);
+    }
+
+    Ok((
+        adjusted,
+        true,
+        Some("Fee was deducted from the submitted amount due to available balance.".to_string()),
+    ))
+}
+
 /// Run BTC preflight: validate, fetch UTXOs, build unsigned tx, store record, return PreflightResult.
 pub async fn preflight(
     params: PreflightParams,
@@ -145,11 +175,10 @@ pub async fn preflight(
             break;
         }
     }
-    if total < amount_sat {
-        return Err(WalletError::InsufficientFunds);
-    }
+    let (send_value_sat, fee_taken_from_amount, fee_taken_message) =
+        resolve_send_value_after_fee(amount_sat, total, fee_sat)?;
 
-    let change = total.saturating_sub(amount_sat).saturating_sub(fee_sat);
+    let change = total.saturating_sub(send_value_sat).saturating_sub(fee_sat);
     let from_hash = validate_btc_source_address(from_address, network)?;
     let from_script = p2pkh_script_from_hash160(&from_hash);
 
@@ -172,7 +201,7 @@ pub async fn preflight(
 
     let mut outputs: Vec<TxOut> = Vec::new();
     outputs.push(TxOut {
-        value: Amount::from_sat(amount_sat),
+        value: Amount::from_sat(send_value_sat),
         script_pubkey: to_script,
     });
     if change >= DUST_SATOSHI {
@@ -194,7 +223,7 @@ pub async fn preflight(
     let unsigned_hex = hex::encode(&raw);
 
     let preflight_id = Uuid::new_v4().to_string();
-    let value_str = format!("{:.8}", amount_sat as f64 / SATOSHI_PER_COIN);
+    let value_str = format!("{:.8}", send_value_sat as f64 / SATOSHI_PER_COIN);
     let fee_str = format!("{:.8}", fee_sat as f64 / SATOSHI_PER_COIN);
     let payload = BtcPreflightPayload {
         unsigned_hex: unsigned_hex.clone(),
@@ -229,8 +258,8 @@ pub async fn preflight(
         amount_submitted: params.amount,
         to_address: params.to_address,
         from_address: from_address.to_string(),
-        fee_taken_from_amount: false,
-        fee_taken_message: None,
+        fee_taken_from_amount,
+        fee_taken_message,
         warnings,
         memo: params.memo,
     })
@@ -267,5 +296,29 @@ mod tests {
         )
         .expect("testnet bech32 address should be valid");
         assert!(script.is_witness_program());
+    }
+
+    #[test]
+    fn resolve_send_value_after_fee_keeps_submitted_when_total_covers_fee() {
+        let (value, adjusted, message) =
+            resolve_send_value_after_fee(100_000, 102_000, 2_000).expect("should resolve");
+        assert_eq!(value, 100_000);
+        assert!(!adjusted);
+        assert!(message.is_none());
+    }
+
+    #[test]
+    fn resolve_send_value_after_fee_adjusts_when_fee_must_be_deducted() {
+        let (value, adjusted, message) =
+            resolve_send_value_after_fee(100_000, 100_000, 2_000).expect("should resolve");
+        assert_eq!(value, 98_000);
+        assert!(adjusted);
+        assert!(message.is_some());
+    }
+
+    #[test]
+    fn resolve_send_value_after_fee_fails_when_total_below_submitted() {
+        let result = resolve_send_value_after_fee(100_000, 99_000, 2_000);
+        assert!(matches!(result, Err(WalletError::InsufficientFunds)));
     }
 }

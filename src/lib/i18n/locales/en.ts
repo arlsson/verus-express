@@ -223,7 +223,11 @@ export const en: Record<string, string> = {
   'wallet.assetDetails.readOnly': 'Read-only',
   'wallet.assetDetails.readOnlyHelper':
     'Send and convert are only available from your primary address.',
-  'wallet.assetDetails.privateSyncInlineHelper': 'Shielded balance still syncing',
+  'wallet.assetDetails.privateSyncInlineHelper': 'Syncing balance',
+  'wallet.assetDetails.sendCapabilityInline': 'Send sync {percent}%',
+  'wallet.assetDetails.privateSendEtaLine': 'Private send available in {eta}',
+  'wallet.assetDetails.privateSendEtaMinutes': '~{minutes} min',
+  'wallet.assetDetails.privateSendEtaPending': '. . .',
   'wallet.assetDetails.privateSyncHelper':
     'Private transfers are unavailable while shielded sync is in progress.',
   'wallet.assetDetails.transactions': 'Transaction history',
@@ -415,13 +419,13 @@ export const en: Record<string, string> = {
   'wallet.transfer.summary.estimatedTime': 'Estimated time',
   'wallet.transfer.summary.estimatedTimeSimple': '1-5 minutes',
   'wallet.transfer.summary.estimatedTimePbaas': '2-10 minutes',
-  'wallet.transfer.summary.estimatedTimeBridge': '1-3 hours',
+  'wallet.transfer.summary.estimatedTimeBridge': '1-4 hours',
   'wallet.transfer.summary.estimatedTimeTooltipSimple':
     'Most standard sends confirm in about 1-5 minutes, depending on network conditions.',
   'wallet.transfer.summary.estimatedTimeTooltipPbaas':
     'PBaaS conversions complete in about 2-10 blocks (roughly 2-10 minutes) and are bundled together for fair pricing.',
   'wallet.transfer.summary.estimatedTimeTooltipBridge':
-    'Bridge and cross-chain transfers typically take 1-3 hours due to additional decentralized verification.',
+    'Bridge and cross-chain transfers typically take 1-4 hours due to additional decentralized verification.',
   'wallet.transfer.summary.route': 'Route',
   'wallet.transfer.summary.notSet': 'Not set',
   'wallet.transfer.viewSummary': 'View summary',
@@ -472,6 +476,7 @@ export const en: Record<string, string> = {
   'wallet.transfer.routeSectionTitle': 'Route',
   'wallet.transfer.warningsTitle': 'Warnings',
   'wallet.transfer.noWarnings': 'No warnings.',
+  'wallet.transfer.warning.finalAmountMayVary': 'Final amount you receive may vary slightly.',
   'wallet.transfer.review.changeRoute': 'Change route',
   'wallet.transfer.review.changeAmount': 'Change amount',
   'wallet.transfer.review.changeDetails': 'Change details',
@@ -480,6 +485,8 @@ export const en: Record<string, string> = {
   'wallet.transfer.review.receiving': "You'll receive",
   'wallet.transfer.review.selfSuffix': '(self)',
   'wallet.transfer.review.savedRecipient': 'Saved recipient: {contact} ({endpoint})',
+  'wallet.transfer.review.amountAdjustedWarning':
+    'Amount changed from {submitted} to {adjusted} {ticker} to cover network fees.',
   'wallet.transfer.review.unsavedRecipient': 'This recipient is not saved in your address book.',
   'wallet.transfer.review.unsavedWarningTitle': 'Unsaved recipient',
   'wallet.transfer.review.unsavedWarningBody':
@@ -529,6 +536,8 @@ export const en: Record<string, string> = {
     'Network gas moved too far after preflight. Refresh review and try again.',
   'wallet.transfer.error.unsupportedChannel': 'This channel is not supported for transfer.',
   'wallet.transfer.error.invalidAddress': 'The destination address is invalid.',
+  'wallet.transfer.error.insufficientEthForGas':
+    'Insufficient ETH to cover gas fees for this transfer.',
   'wallet.transfer.error.insufficientFunds': 'Insufficient funds for this transfer.',
   'wallet.transfer.error.dlightProverUnavailable':
     'Private send prover is unavailable. Install valid Sapling params and try again.',

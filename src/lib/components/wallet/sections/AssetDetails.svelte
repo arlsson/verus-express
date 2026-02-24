@@ -35,11 +35,19 @@
   import { formatUsdAmount } from '$lib/utils/walletOverview.js';
   import { extractWalletErrorMessage, extractWalletErrorType } from '$lib/utils/walletErrors.js';
   import * as walletService from '$lib/services/walletService.js';
-  import type { CoinScope, ScopeKind, Transaction, WalletEntryKind } from '$lib/types/wallet.js';
+  import type {
+    CoinScope,
+    DlightRuntimeStatusResult,
+    ScopeKind,
+    Transaction,
+    WalletEntryKind
+  } from '$lib/types/wallet.js';
   import type { TransferEntryContext } from './transfer-wizard/types';
 
   const TRANSACTION_PAGE_SIZE = 50;
   const TRANSACTION_LOAD_MORE_THRESHOLD_PX = 160;
+  const DLIGHT_STATUS_POLL_MS = 4000;
+  const SPEND_RATE_SMOOTHING = 0.25;
   const initialTransactionSkeletonRows = [0, 1, 2, 3, 4, 5];
   const loadMoreTransactionSkeletonRows = [0, 1];
 
@@ -106,6 +114,9 @@
   let showScopeSheet = $state(false);
   let addressSearchTerm = $state('');
   let copiedAddressKey = $state<string | null>(null);
+  let dlightRuntimeStatus = $state<DlightRuntimeStatusResult | null>(null);
+  let spendRateBlocksPerSec = $state<number | null>(null);
+  let spendRateSample = $state<{ scannedHeight: number; updatedAt: number } | null>(null);
 
   let loadedBalanceByChannel = $state<Record<string, boolean>>({});
   let txPagesByScopeKey = $state<Record<string, ScopeTransactionPageState>>({});
@@ -144,6 +155,10 @@
   const selectedScope = $derived(
     allScopes.find((scope) => scope.address === selectedAddress && scope.systemId === selectedSystem) ??
       null
+  );
+  const isDlightShieldedScope = $derived(
+    selectedScope?.scopeKind === 'shielded' &&
+      selectedScope.channelId.toLowerCase().startsWith('dlight_private.')
   );
 
   const selectedScopeBalance = $derived(
@@ -233,16 +248,68 @@
   const selectedSyncPercent = $derived(
     selectedScope ? toFiniteNumber(chainInfo[selectedScope.channelId]?.percent) : null
   );
-  const isShieldedSyncBlocked = $derived(
-    selectedScope?.scopeKind === 'shielded' &&
-      selectedSyncPercent !== null &&
-      selectedSyncPercent !== 100 &&
-      selectedSyncPercent !== -1
+  const selectedBalanceSyncPercent = $derived(
+    isDlightShieldedScope
+      ? toFiniteNumber(dlightRuntimeStatus?.percent) ?? selectedSyncPercent
+      : selectedSyncPercent
   );
-  const selectedSyncPercentDisplay = $derived(
-    isShieldedSyncBlocked && selectedSyncPercent !== null
-      ? `${formatSyncPercent(selectedSyncPercent)}%`
-      : ''
+  const selectedSendSyncPercent = $derived(
+    isDlightShieldedScope
+      ? toFiniteNumber(dlightRuntimeStatus?.spendCachePercent) ?? selectedBalanceSyncPercent
+      : selectedBalanceSyncPercent
+  );
+  const isShieldedSyncBlocked = $derived(
+    (() => {
+      if (selectedScope?.scopeKind !== 'shielded') return false;
+      if (isDlightShieldedScope && dlightRuntimeStatus) {
+        const runtimeReady = dlightRuntimeStatus.statusKind.trim().toLowerCase() === 'synced';
+        const spendReady = dlightRuntimeStatus.spendCacheReady === true;
+        return !(runtimeReady && spendReady);
+      }
+      return (
+        selectedSyncPercent !== null &&
+        selectedSyncPercent !== 100 &&
+        selectedSyncPercent !== -1
+      );
+    })()
+  );
+  const balanceSyncReady = $derived(
+    !isDlightShieldedScope
+      ? true
+      : dlightRuntimeStatus?.statusKind?.trim().toLowerCase() === 'synced' ||
+          (selectedBalanceSyncPercent !== null && selectedBalanceSyncPercent >= 100)
+  );
+  const sendSyncReady = $derived(
+    !isDlightShieldedScope
+      ? true
+      : dlightRuntimeStatus?.spendCacheReady === true ||
+          (selectedSendSyncPercent !== null && selectedSendSyncPercent >= 100)
+  );
+  const showBalanceSyncProgress = $derived(isDlightShieldedScope && !balanceSyncReady);
+  const balanceSyncPercentDisplay = $derived(formatSyncPercentLabel(selectedBalanceSyncPercent));
+  const sendSyncPercentDisplay = $derived(
+    formatSyncPercentLabel(selectedSendSyncPercent)
+  );
+  const showSendSyncProgressHelper = $derived(
+    isDlightShieldedScope && !selectedScope?.isReadOnly && !sendSyncReady
+  );
+  const privateSendEtaSeconds = $derived(
+    (() => {
+      const lagBlocks = toFiniteNumber(dlightRuntimeStatus?.spendCacheLagBlocks);
+      if (lagBlocks === null || lagBlocks <= 0) return null;
+      if (spendRateBlocksPerSec === null || spendRateBlocksPerSec <= 0) return null;
+      return lagBlocks / spendRateBlocksPerSec;
+    })()
+  );
+  const privateSendEtaDisplay = $derived(
+    privateSendEtaSeconds === null
+      ? null
+      : i18n.t('wallet.assetDetails.privateSendEtaMinutes', {
+          minutes: formatEtaMinutes(privateSendEtaSeconds)
+        })
+  );
+  const privateSendEtaOrPlaceholder = $derived(
+    privateSendEtaDisplay ?? i18n.t('wallet.assetDetails.privateSendEtaPending')
   );
   const canSendOrConvert = $derived(
     !!selectedScope && !selectedScope.isReadOnly && !isShieldedSyncBlocked
@@ -346,6 +413,49 @@
         loadingSelectedBalance = false;
       }
     })();
+  });
+
+  $effect(() => {
+    const scope = selectedScope;
+    const currentCoin = coin;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let cancelled = false;
+
+    if (
+      !scope ||
+      !currentCoin ||
+      scope.scopeKind !== 'shielded' ||
+      !scope.channelId.toLowerCase().startsWith('dlight_private.')
+    ) {
+      dlightRuntimeStatus = null;
+      spendRateBlocksPerSec = null;
+      spendRateSample = null;
+    } else {
+      const channelId = scope.channelId;
+      const currentCoinId = currentCoin.id;
+
+      const refreshStatus = async () => {
+        try {
+          const status = await walletService.getDlightRuntimeStatus(channelId, currentCoinId);
+          if (cancelled) return;
+          dlightRuntimeStatus = status;
+          updateSpendRate(status);
+        } catch {
+          if (cancelled) return;
+          dlightRuntimeStatus = null;
+        }
+      };
+
+      void refreshStatus();
+      intervalId = globalThis.setInterval(() => {
+        void refreshStatus();
+      }, DLIGHT_STATUS_POLL_MS);
+    }
+
+    return () => {
+      cancelled = true;
+      if (intervalId !== null) globalThis.clearInterval(intervalId);
+    };
   });
 
   $effect(() => {
@@ -708,14 +818,47 @@
     return `${formatted}%`;
   }
 
-  function formatSyncPercent(percent: number): string {
-    const clamped = Math.max(0, Math.min(percent, 100));
-    if (clamped > 0 && clamped < 1) return '<1';
-    const floored = Math.floor(clamped * 10) / 10;
+  function formatSyncPercentLabel(percent: number | null): string {
+    const value = percent === null ? 0 : Math.max(0, Math.min(percent, 100));
+    const floored = Math.floor(value * 10) / 10;
     return i18n.formatNumber(floored, {
-      minimumFractionDigits: 0,
+      minimumFractionDigits: 1,
       maximumFractionDigits: 1
     });
+  }
+
+  function formatEtaMinutes(seconds: number): string {
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    return i18n.formatNumber(minutes, {
+      maximumFractionDigits: 0
+    });
+  }
+
+  function updateSpendRate(status: DlightRuntimeStatusResult): void {
+    const scannedHeight = toFiniteNumber(status.spendCacheScannedHeight);
+    const updatedAt = toFiniteNumber(status.spendCacheLastUpdated);
+    if (scannedHeight === null || updatedAt === null) return;
+
+    const previous = spendRateSample;
+    if (previous && updatedAt > previous.updatedAt) {
+      const deltaHeight = scannedHeight - previous.scannedHeight;
+      const deltaSeconds = updatedAt - previous.updatedAt;
+      if (deltaHeight > 0 && deltaSeconds > 0) {
+        const instantaneousRate = deltaHeight / deltaSeconds;
+        if (Number.isFinite(instantaneousRate) && instantaneousRate > 0) {
+          spendRateBlocksPerSec =
+            spendRateBlocksPerSec === null
+              ? instantaneousRate
+              : spendRateBlocksPerSec * (1 - SPEND_RATE_SMOOTHING) +
+                instantaneousRate * SPEND_RATE_SMOOTHING;
+        }
+      }
+    }
+
+    spendRateSample = {
+      scannedHeight,
+      updatedAt
+    };
   }
 
   function toFiniteNumber(value: unknown): number | null {
@@ -887,11 +1030,13 @@
             </div>
 
             <div class="shrink-0 text-right">
-              {#if selectedSyncPercentDisplay}
+              {#if showBalanceSyncProgress}
                 <p class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
-                  <span class="inline-flex items-center justify-end gap-1.5">
+                  <span class="inline-flex items-center justify-end gap-2">
+                    <span class="font-mono text-sm font-semibold tracking-tight tabular-nums">
+                      {balanceSyncPercentDisplay}%
+                    </span>
                     <Spinner class="size-4" />
-                    <span>{selectedSyncPercentDisplay}</span>
                   </span>
                 </p>
                 <p class="text-muted-foreground mt-1 text-[11px]">
@@ -1009,7 +1154,24 @@
             </div>
           </div>
 
-          {#if !canSendOrConvert && !isShieldedSyncBlocked}
+          {#if showSendSyncProgressHelper}
+            <p class="text-muted-foreground mt-2 text-right text-[11px] leading-snug">
+              <span class="inline-flex items-center justify-end gap-1.5 tabular-nums">
+                <span>
+                  {i18n.t('wallet.assetDetails.sendCapabilityInline', {
+                    percent: sendSyncPercentDisplay
+                  })}
+                </span>
+                <span aria-hidden="true" class="text-muted-foreground/70">·</span>
+                <span>
+                  {i18n.t('wallet.assetDetails.privateSendEtaLine', {
+                    eta: privateSendEtaOrPlaceholder
+                  })}
+                </span>
+                <Spinner class="size-3" />
+              </span>
+            </p>
+          {:else if !canSendOrConvert && !isShieldedSyncBlocked}
             <p class="text-muted-foreground mt-2 text-right text-[11px] leading-snug">
               {i18n.t('wallet.assetDetails.readOnlyHelper')}
             </p>

@@ -36,6 +36,9 @@ pub enum WalletError {
     #[error("Insufficient funds")]
     InsufficientFunds,
 
+    #[error("Insufficient ETH to cover transaction gas")]
+    InsufficientEthForGas,
+
     #[error("Network error")]
     NetworkError,
 

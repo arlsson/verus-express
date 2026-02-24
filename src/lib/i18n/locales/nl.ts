@@ -226,7 +226,11 @@ export const nl: Record<string, string> = {
   'wallet.assetDetails.readOnly': 'Alleen lezen',
   'wallet.assetDetails.readOnlyHelper':
     'Versturen en omwisselen is alleen beschikbaar vanaf je primaire adres.',
-  'wallet.assetDetails.privateSyncInlineHelper': 'Shielded saldo synchroniseert nog',
+  'wallet.assetDetails.privateSyncInlineHelper': 'Saldo synchroniseren',
+  'wallet.assetDetails.sendCapabilityInline': 'Verzendsync {percent}%',
+  'wallet.assetDetails.privateSendEtaLine': 'Private send beschikbaar over {eta}',
+  'wallet.assetDetails.privateSendEtaMinutes': '~{minutes} min',
+  'wallet.assetDetails.privateSendEtaPending': '. . .',
   'wallet.assetDetails.privateSyncHelper':
     'Private transfers zijn niet beschikbaar terwijl shielded synchronisatie nog bezig is.',
   'wallet.assetDetails.transactions': 'Transactiegeschiedenis',
@@ -422,13 +426,13 @@ export const nl: Record<string, string> = {
   'wallet.transfer.summary.estimatedTime': 'Geschatte duur',
   'wallet.transfer.summary.estimatedTimeSimple': '1-5 minuten',
   'wallet.transfer.summary.estimatedTimePbaas': '2-10 minuten',
-  'wallet.transfer.summary.estimatedTimeBridge': '1-3 uur',
+  'wallet.transfer.summary.estimatedTimeBridge': '1-4 uur',
   'wallet.transfer.summary.estimatedTimeTooltipSimple':
     'De meeste standaardtransacties worden binnen 1-5 minuten bevestigd, afhankelijk van de netwerkomstandigheden.',
   'wallet.transfer.summary.estimatedTimeTooltipPbaas':
     'PBaaS-conversies worden in ongeveer 2-10 blokken afgerond (ongeveer 2-10 minuten) en gebundeld voor eerlijke prijsbepaling.',
   'wallet.transfer.summary.estimatedTimeTooltipBridge':
-    'Bridge- en cross-chaintransacties duren meestal 1-3 uur door extra gedecentraliseerde verificatie.',
+    'Bridge- en cross-chaintransacties duren meestal 1-4 uur door extra gedecentraliseerde verificatie.',
   'wallet.transfer.summary.route': 'Route',
   'wallet.transfer.summary.notSet': 'Niet ingesteld',
   'wallet.transfer.viewSummary': 'Overzicht bekijken',
@@ -481,6 +485,7 @@ export const nl: Record<string, string> = {
   'wallet.transfer.routeSectionTitle': 'Route',
   'wallet.transfer.warningsTitle': 'Waarschuwingen',
   'wallet.transfer.noWarnings': 'Geen waarschuwingen.',
+  'wallet.transfer.warning.finalAmountMayVary': 'Definitieve hoeveelheid die je ontvangt kan iets afwijken.',
   'wallet.transfer.review.changeRoute': 'Route wijzigen',
   'wallet.transfer.review.changeAmount': 'Bedrag wijzigen',
   'wallet.transfer.review.changeDetails': 'Details wijzigen',
@@ -489,6 +494,8 @@ export const nl: Record<string, string> = {
   'wallet.transfer.review.receiving': 'Je ontvangt',
   'wallet.transfer.review.selfSuffix': '(zelf)',
   'wallet.transfer.review.savedRecipient': 'Opgeslagen ontvanger: {contact} ({endpoint})',
+  'wallet.transfer.review.amountAdjustedWarning':
+    'Bedrag aangepast van {submitted} naar {adjusted} {ticker} om netwerkkosten te dekken.',
   'wallet.transfer.review.unsavedRecipient':
     'Deze ontvanger staat niet in je adresboek.',
   'wallet.transfer.review.unsavedWarningTitle': 'Niet-opgeslagen ontvanger',
@@ -543,6 +550,8 @@ export const nl: Record<string, string> = {
     'Netwerkgas is te veel veranderd na preflight. Vernieuw de review en probeer opnieuw.',
   'wallet.transfer.error.unsupportedChannel': 'Dit kanaal wordt niet ondersteund voor transfers.',
   'wallet.transfer.error.invalidAddress': 'Het bestemmingsadres is ongeldig.',
+  'wallet.transfer.error.insufficientEthForGas':
+    'Onvoldoende ETH om gaskosten voor deze transfer te betalen.',
   'wallet.transfer.error.insufficientFunds': 'Onvoldoende saldo voor deze transfer.',
   'wallet.transfer.error.dlightProverUnavailable':
     'Private send-prover is niet beschikbaar. Installeer geldige Sapling-params en probeer opnieuw.',

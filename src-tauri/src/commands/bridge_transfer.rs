@@ -665,11 +665,18 @@ async fn preflight_bridge_vrpc(
         vrpc_provider_pool.for_system(network, &resolved.system_id),
     )
     .await?;
+    let network_fee_currency = params
+        .fee_currency
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .unwrap_or_else(|| resolved.system_id.clone());
 
     Ok(BridgeTransferPreflightResult {
         preflight_id: vrpc_result.preflight_id,
         fee: vrpc_result.fee,
-        fee_currency: vrpc_result.fee_currency,
+        fee_currency: network_fee_currency,
         value: vrpc_result.value,
         amount_submitted: vrpc_result.amount_submitted,
         amount_adjusted: vrpc_result.amount_adjusted,

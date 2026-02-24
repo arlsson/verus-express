@@ -4,8 +4,10 @@
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
   import ArrowLeftRightIcon from '@lucide/svelte/icons/arrow-left-right';
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+  import CheckIcon from '@lucide/svelte/icons/check';
   import CheckCircle2Icon from '@lucide/svelte/icons/check-circle-2';
   import BookUserIcon from '@lucide/svelte/icons/book-user';
+  import CopyIcon from '@lucide/svelte/icons/copy';
   import InfoIcon from '@lucide/svelte/icons/info';
   import PencilIcon from '@lucide/svelte/icons/pencil';
   import UserRoundIcon from '@lucide/svelte/icons/user-round';
@@ -75,6 +77,7 @@
     BridgeExportFeeEstimateResult,
     BridgeTransferPreflightResult,
     DlightRuntimeStatusResult,
+    PreflightWarning,
     PreflightResult,
     SendResult,
     TxSendProgressEventPayload,
@@ -269,6 +272,8 @@
   let saveRecipientError = $state('');
   let savingRecipient = $state(false);
   let savedRecipientOnSuccess = $state(false);
+  let copiedSuccessField = $state<'recipient' | 'txid' | null>(null);
+  let copiedSuccessFieldTimer: ReturnType<typeof setTimeout> | null = null;
 
   const selectedCoin = $derived(selectedCoinOption?.coin ?? null);
 
@@ -373,10 +378,7 @@
       sourceCurrencyAliases: [
         selectedCoin?.currencyId,
         selectedCoin?.id,
-        selectedCoin?.systemId,
-        selectedCoin?.mappedTo,
-        selectedCoinPresentation?.currencyId,
-        selectedCoinPresentation?.mappedTo
+        selectedCoinPresentation?.currencyId
       ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     })
   );
@@ -424,10 +426,7 @@
       [
         selectedCoin?.currencyId,
         selectedCoin?.id,
-        selectedCoin?.systemId,
-        selectedCoin?.mappedTo,
-        selectedCoinPresentation?.currencyId,
-        selectedCoinPresentation?.mappedTo
+        selectedCoinPresentation?.currencyId
       ]
         .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
         .map((value) => value.trim().toLowerCase())
@@ -446,7 +445,7 @@
       return canonical;
     })()
   );
-  const sendSameAssetOption = $derived<ReceiveAssetOption | null>(
+  const matchedSendSameAssetOption = $derived<ReceiveAssetOption | null>(
     (() => {
       if (!selectedCoin) return null;
       for (const option of selectableReceiveAssetOptions) {
@@ -480,6 +479,118 @@
       return null;
     })()
   );
+  const sendRawExportOptions = $derived<ExportRouteOption[]>(
+    (() => {
+      const dedupe = new Map<string, ExportRouteOption>();
+
+      for (const pathList of Object.values(discoveredPathQuotes)) {
+        if (!Array.isArray(pathList) || pathList.length === 0) continue;
+
+        for (const quote of pathList) {
+          if (quote.prelaunch) continue;
+          const exportTo = quote.exportTo?.trim() ?? '';
+          if (!exportTo) continue;
+
+          const destinationKey = quote.destinationId.trim().toLowerCase();
+          const convertToKey = quote.convertTo?.trim().toLowerCase() ?? '';
+          const isSameCurrencyRoute =
+            sourceRouteAliasKeys.has(destinationKey) ||
+            (!!convertToKey && sourceRouteAliasKeys.has(convertToKey));
+
+          if (isSameCurrencyRoute) {
+            upsertSendExportOption(dedupe, {
+              exportTo,
+              exportToName: quote.exportToDisplayName?.trim() || exportTo,
+              gateway: quote.gateway,
+              via: null,
+              price: quote.price ?? null,
+              mappingDestination: undefined
+            });
+            continue;
+          }
+
+          if (quote.mapping) {
+            upsertSendExportOption(dedupe, {
+              exportTo,
+              exportToName: quote.exportToDisplayName?.trim() || exportTo,
+              gateway: quote.gateway,
+              via: null,
+              price: quote.price ?? null,
+              mappingDestination: resolveSendMappingDestination(quote)
+            });
+          }
+        }
+      }
+
+      return Array.from(dedupe.values());
+    })()
+  );
+  const sendRawMapToByExportKey = $derived(
+    (() => {
+      const map = new Map<string, string>();
+
+      for (const pathList of Object.values(discoveredPathQuotes)) {
+        if (!Array.isArray(pathList) || pathList.length === 0) continue;
+
+        for (const quote of pathList) {
+          if (quote.prelaunch || !quote.mapping) continue;
+          const exportTo = quote.exportTo?.trim() ?? '';
+          const mapTo = quote.mapTo?.trim() ?? '';
+          if (!exportTo || !mapTo) continue;
+
+          const exportKey = normalizeSendExportKey(exportTo);
+          if (!exportKey || map.has(exportKey)) continue;
+          map.set(exportKey, mapTo);
+        }
+      }
+
+      return map;
+    })()
+  );
+  const sendSameAssetOption = $derived<ReceiveAssetOption | null>(
+    (() => {
+      if (!selectedCoin) return null;
+
+      const mergedExportOptions = mergeSendExportOptions(
+        sendRawExportOptions,
+        matchedSendSameAssetOption?.exportOptions ?? []
+      );
+
+      if (matchedSendSameAssetOption) {
+        return {
+          ...matchedSendSameAssetOption,
+          isCrossChain: mergedExportOptions.length > 0,
+          exportOptions: mergedExportOptions
+        };
+      }
+
+      const sourceLabel =
+        selectedCoinPresentation?.displayName?.trim() ||
+        selectedCoin.displayName?.trim() ||
+        selectedCoin.id;
+      const sourceTicker =
+        selectedCoinPresentation?.displayTicker?.trim() ||
+        selectedCoin.displayTicker?.trim() ||
+        sourceLabel;
+
+      return {
+        id: `send-${selectedCoin.id}`,
+        key: `send-${selectedCoin.id}`.toLowerCase(),
+        label: sourceLabel,
+        ticker: sourceTicker,
+        subtitle: undefined,
+        fullyqualifiedname: sourceTicker,
+        destinationId: selectedCoin.currencyId || selectedCoin.id,
+        canonicalKey: sourceCanonicalKey || canonicalizeBridgeTicker(sourceTicker),
+        hasOnChainPath: true,
+        isCrossChain: mergedExportOptions.length > 0,
+        viaOptions: [],
+        exportOptions: mergedExportOptions,
+        gateway: mergedExportOptions.some((option) => option.gateway),
+        isEthDestination: false
+      };
+    })()
+  );
   const sendCrossChainAvailable = $derived(
     !!sendSameAssetOption && sendSameAssetOption.exportOptions.length > 0
   );
@@ -499,6 +610,13 @@
     sendSameAssetOption && activeSendExportSystemId
       ? sendSameAssetOption.exportOptions.find((option) => option.exportTo === activeSendExportSystemId) ?? null
       : null
+  );
+  const activeSendMapTo = $derived(
+    (() => {
+      if (!activeSendExportSystemId) return null;
+      const exportKey = normalizeSendExportKey(activeSendExportSystemId);
+      return sendRawMapToByExportKey.get(exportKey) ?? null;
+    })()
   );
   const sendSameAssetViaOptions = $derived(
     sendSameAssetOption
@@ -535,9 +653,9 @@
           ethDestination: activeSendRoute?.ethDestination ?? false,
           convertTo: null,
           exportTo: activeSendExportSystemId,
-          via: activeSendRoute?.via ?? null,
-          mapTo: selectedSendExportRouteOption?.mappingDestination ?? activeSendRoute?.mapTo ?? null,
-          price: activeSendRoute?.price ?? null
+          via: null,
+          mapTo: activeSendMapTo ?? activeSendRoute?.mapTo ?? null,
+          price: selectedSendExportRouteOption?.price ?? activeSendRoute?.price ?? null
         }
       : null
   );
@@ -782,6 +900,43 @@
     formatFiatEstimate(estimatedConversionValue ?? '0', receiveUsdRate)
   );
 
+  const effectiveSendAmount = $derived((activePreflight?.value ?? amount.trim()).trim());
+  const submittedSendAmount = $derived((activePreflight?.amountSubmitted ?? amount.trim()).trim());
+  const preflightIndicatesAmountAdjustment = $derived(
+    isSimplePreflight(activePreflight)
+      ? !!activePreflight.feeTakenFromAmount
+      : isBridgePreflight(activePreflight)
+        ? !!activePreflight.amountAdjusted
+        : false
+  );
+  const amountAdjustedForReview = $derived(
+    (() => {
+      if (!activePreflight) return false;
+      if (preflightIndicatesAmountAdjustment) return true;
+      const normalizedSubmitted = normalizeAmountString(submittedSendAmount);
+      const normalizedActual = normalizeAmountString(effectiveSendAmount);
+      return !!normalizedSubmitted && !!normalizedActual && normalizedSubmitted !== normalizedActual;
+    })()
+  );
+
+  const reviewEstimatedConversionValue = $derived(
+    (() => {
+      if (!conversionEnabled) return null;
+      if (!amountAdjustedForReview) return estimatedConversionValue;
+      if (!activeConvertRoute) return estimatedConversionValue;
+      const numericPrice = parsePrice(activeConvertRoute.price);
+      const numericAmount = parseNonNegativeAmount(effectiveSendAmount);
+      if (numericPrice === null || numericAmount === null || numericAmount <= 0) {
+        return estimatedConversionValue;
+      }
+      return (numericAmount * numericPrice).toFixed(8);
+    })()
+  );
+  const reviewSourceAmountFiatDisplay = $derived(formatFiatEstimate(effectiveSendAmount, sourceUsdRate));
+  const reviewReceiveAmountFiatDisplay = $derived(
+    formatFiatEstimate(reviewEstimatedConversionValue ?? '0', receiveUsdRate)
+  );
+
   const activeConvertRouteRate = $derived(formatRouteRateValue(activeConvertRoute?.price));
 
   const activeConvertRouteRateValueText = $derived(
@@ -820,7 +975,7 @@
   const reviewSendingValue = $derived(
     (() => {
       if (!selectedCoinPresentation) return '';
-      const baseAmount = (activePreflight?.value ?? amount.trim()).trim();
+      const baseAmount = effectiveSendAmount;
       if (!baseAmount) return '';
       const formattedAmount = formatAmountForReviewDisplay(baseAmount, MAX_TRANSFER_AMOUNT_FRACTION_DIGITS);
       return `${formattedAmount} ${selectedCoinPresentation.displayTicker}`;
@@ -829,9 +984,11 @@
 
   const reviewReceivingValue = $derived(
     (() => {
-      if (!conversionEnabled || !estimatedConversionValue) return '';
+      if (!conversionEnabled || !reviewEstimatedConversionValue) return '';
       const receiveLabel = resolveReceiveLabel(selectedReceiveAssetOption, activeExportSystemId);
-      return receiveLabel ? `~${estimatedConversionValue} ${receiveLabel}` : `~${estimatedConversionValue}`;
+      return receiveLabel
+        ? `~${reviewEstimatedConversionValue} ${receiveLabel}`
+        : `~${reviewEstimatedConversionValue}`;
     })()
   );
 
@@ -848,10 +1005,13 @@
           )
       : selectedDestinationNetworkValue
   );
+  const reviewNetworkFeeCurrencyLabel = $derived(
+    activePreflight ? resolveCurrencyLabelForDisplay(activePreflight.feeCurrency) : ''
+  );
 
   const reviewNetworkFeeValue = $derived(
     activePreflight
-      ? `${formatAmountForReviewDisplay(activePreflight.fee, MAX_TRANSFER_AMOUNT_FRACTION_DIGITS)} ${activePreflight.feeCurrency}`
+      ? `${formatAmountForReviewDisplay(activePreflight.fee, MAX_TRANSFER_AMOUNT_FRACTION_DIGITS)} ${reviewNetworkFeeCurrencyLabel || activePreflight.feeCurrency}`
       : ''
   );
   const reviewTotalFeesFiat = $derived(
@@ -891,6 +1051,15 @@
       return `≈ ${formatUsdAmountDynamic(totalFiat)}`;
     })()
   );
+  const showReviewTotalFeesFiat = $derived(
+    (() => {
+      if (reviewTotalFeesFiat === '≈ —') return false;
+      if (!activeExportSystemId || !isEthereumExport(activeExportSystemId)) return true;
+      if (!bridgeFeeParityEligible || !bridgeFeeEstimateSecondary) return true;
+      if (conversionEnabled && conversionFeeInfo) return true;
+      return bridgeFeeEstimateSecondary !== reviewTotalFeesFiat;
+    })()
+  );
   const estimatedArrivalInfo = $derived(
     (() => {
       if (!activePreflight) return null;
@@ -902,7 +1071,13 @@
         };
       }
 
-      if (activeConvertRoute?.exportTo || selectedChannelPrefix === 'eth' || selectedChannelPrefix === 'erc20') {
+      const hasEthereumBridgeRoute =
+        (!!activeExportSystemId && isEthereumExport(activeExportSystemId)) ||
+        !!activeConvertRoute?.exportTo ||
+        selectedChannelPrefix === 'eth' ||
+        selectedChannelPrefix === 'erc20';
+
+      if (hasEthereumBridgeRoute) {
         return {
           value: i18n.t('wallet.transfer.summary.estimatedTimeBridge'),
           tooltip: i18n.t('wallet.transfer.summary.estimatedTimeTooltipBridge')
@@ -1003,7 +1178,40 @@
 
   const showSummaryAside = $derived(currentStep !== 'review' && currentStep !== 'success');
 
-  const warningsSummary = $derived(activePreflight?.warnings.map((warning) => warning.message) ?? []);
+  const amountAdjustedWarning = $derived(
+    (() => {
+      if (!activePreflight || !amountAdjustedForReview) return null;
+      const submittedDisplay = formatAmountForReviewDisplay(
+        submittedSendAmount,
+        MAX_TRANSFER_AMOUNT_FRACTION_DIGITS
+      );
+      const adjustedDisplay = formatAmountForReviewDisplay(
+        effectiveSendAmount,
+        MAX_TRANSFER_AMOUNT_FRACTION_DIGITS
+      );
+      if (!submittedDisplay || !adjustedDisplay) return null;
+      const ticker = selectedCoinPresentation?.displayTicker?.trim() || selectedCoin?.id || '';
+      return i18n.t('wallet.transfer.review.amountAdjustedWarning', {
+        submitted: submittedDisplay,
+        adjusted: adjustedDisplay,
+        ticker
+      });
+    })()
+  );
+  const mergedPreflightWarnings = $derived(
+    (() => {
+      const warnings =
+        activePreflight?.warnings
+          .map((warning) => mapPreflightWarningMessage(warning))
+          .filter((warning) => warning.trim().length > 0) ?? [];
+      if (amountAdjustedWarning && !warnings.includes(amountAdjustedWarning)) {
+        warnings.unshift(amountAdjustedWarning);
+      }
+      return warnings;
+    })()
+  );
+  const warningsSummary = $derived(mergedPreflightWarnings);
+  const reviewWarnings = $derived(currentStep === 'review' ? mergedPreflightWarnings : []);
 
   const summaryRows = $derived<SummaryRow[]>(
     (() => {
@@ -1126,7 +1334,10 @@
           activePreflight.fee.trim(),
           MAX_TRANSFER_AMOUNT_FRACTION_DIGITS
         );
-        const feeSecondary = normalizeSummarySecondary(feePrimary, activePreflight.feeCurrency);
+        const feeSecondary = normalizeSummarySecondary(
+          feePrimary,
+          reviewNetworkFeeCurrencyLabel || activePreflight.feeCurrency
+        );
         if (feePrimary) {
           rows.push({
             label: i18n.t('wallet.transfer.summary.networkFee'),
@@ -1646,6 +1857,10 @@
       disposed = true;
       clearInterval(tickInterval);
       if (unlistenTxSendProgress) unlistenTxSendProgress();
+      if (copiedSuccessFieldTimer) {
+        clearTimeout(copiedSuccessFieldTimer);
+        copiedSuccessFieldTimer = null;
+      }
     };
   });
 
@@ -1705,6 +1920,35 @@
       transferError = '';
     } catch {
       // Ignore clipboard read errors and keep manual entry available.
+    }
+  }
+
+  async function copySuccessFieldValue(value: string, field: 'recipient' | 'txid') {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+
+    const clipboard = globalThis.navigator?.clipboard;
+    if (!clipboard) {
+      copiedSuccessField = null;
+      return;
+    }
+
+    try {
+      await clipboard.writeText(trimmed);
+      copiedSuccessField = field;
+      if (copiedSuccessFieldTimer) {
+        clearTimeout(copiedSuccessFieldTimer);
+      }
+      copiedSuccessFieldTimer = setTimeout(() => {
+        copiedSuccessField = null;
+        copiedSuccessFieldTimer = null;
+      }, 1800);
+    } catch {
+      copiedSuccessField = null;
+      if (copiedSuccessFieldTimer) {
+        clearTimeout(copiedSuccessFieldTimer);
+        copiedSuccessFieldTimer = null;
+      }
     }
   }
 
@@ -1934,7 +2178,14 @@
   }
 
   function isEthereumExport(systemId: string | null | undefined): boolean {
-    return systemId?.trim().toLowerCase() === VETH_SYSTEM_ID.toLowerCase();
+    const normalized = systemId?.trim().toLowerCase() ?? '';
+    if (!normalized) return false;
+    return (
+      normalized === VETH_SYSTEM_ID.toLowerCase() ||
+      normalized === '.eth' ||
+      normalized === 'veth' ||
+      normalized === 'bridge.veth'
+    );
   }
 
   function normalizeNetworkDisplayName(systemId: string | null | undefined, fallback: string): string {
@@ -2101,6 +2352,96 @@
     return stripped.toUpperCase();
   }
 
+  function isLikelyEvmAddress(value: string): boolean {
+    return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+  }
+
+  function normalizeSendExportKey(value: string): string {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return '';
+    if (isEthereumExport(value) || normalized === '.eth' || normalized === 'bridge.veth' || normalized === 'veth') {
+      return 'ethereum';
+    }
+    return normalized;
+  }
+
+  function upsertSendExportOption(
+    dedupe: Map<string, ExportRouteOption>,
+    incoming: ExportRouteOption
+  ): void {
+    const key = normalizeSendExportKey(incoming.exportTo);
+    if (!key) return;
+
+    const existing = dedupe.get(key);
+    if (!existing) {
+      dedupe.set(key, incoming);
+      return;
+    }
+
+    const preferIncomingExportTo =
+      (!isEthereumExport(existing.exportTo) || existing.exportTo.toLowerCase() === 'bridge.veth') &&
+      isEthereumExport(incoming.exportTo);
+
+    dedupe.set(key, {
+      exportTo: preferIncomingExportTo ? incoming.exportTo : existing.exportTo,
+      exportToName:
+        (preferIncomingExportTo ? incoming.exportToName : existing.exportToName) ||
+        incoming.exportToName ||
+        existing.exportToName,
+      gateway: existing.gateway || incoming.gateway,
+      via: existing.via ?? incoming.via ?? null,
+      price: existing.price ?? incoming.price ?? null,
+      mappingDestination: existing.mappingDestination ?? incoming.mappingDestination,
+    });
+  }
+
+  function mergeSendExportOptions(
+    primary: ExportRouteOption[],
+    fallback: ExportRouteOption[]
+  ): ExportRouteOption[] {
+    const dedupe = new Map<string, ExportRouteOption>();
+    for (const option of primary) upsertSendExportOption(dedupe, option);
+    for (const option of fallback) upsertSendExportOption(dedupe, option);
+    return Array.from(dedupe.values());
+  }
+
+  function resolveSendMappingDestination(quote: BridgeConversionPathQuote): string | undefined {
+    const candidates = [
+      quote.destinationDisplayTicker,
+      quote.convertToDisplayName,
+      quote.destinationDisplayName,
+      quote.convertTo,
+      quote.destinationId,
+      quote.mapTo
+    ];
+    let fallback: string | undefined;
+
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      const trimmed = candidate.trim();
+      if (!trimmed) continue;
+      if (!fallback) fallback = trimmed;
+      if (!isLikelyEvmAddress(trimmed)) return trimmed;
+    }
+
+    return fallback;
+  }
+
+  function targetOptionLikelyBridgedAsset(targetOption: ReceiveAssetOption): boolean {
+    const candidates = [targetOption.fullyqualifiedname, targetOption.ticker, targetOption.label];
+    return candidates.some((candidate) => candidate?.toLowerCase().includes('.veth'));
+  }
+
+  function normalizeEthereumReceiveLabel(value: string, targetOption: ReceiveAssetOption): string {
+    const stripped = stripBridgeSuffix(value).trim();
+    if (!stripped) return '';
+    if (/^bridge$/i.test(stripped)) return 'ETH';
+    if (targetOptionLikelyBridgedAsset(targetOption) && /^v[A-Za-z0-9]+$/.test(stripped)) {
+      return stripped.slice(1);
+    }
+    return stripped;
+  }
+
   function receiveLabelForExportOption(option: ExportRouteOption, targetOption: ReceiveAssetOption): string {
     const exportTarget = option.exportTo?.trim() ?? '';
     const ethereumExport = isEthereumExport(exportTarget) || exportTarget.toLowerCase() === '.eth';
@@ -2109,17 +2450,25 @@
       const ethDestinationLabel =
         targetOption.ethDisplayTicker?.trim() || targetOption.ethDisplayName?.trim() || '';
       if (ethDestinationLabel) {
-        return stripBridgeSuffix(ethDestinationLabel);
+        const normalizedEthDestinationLabel = normalizeEthereumReceiveLabel(ethDestinationLabel, targetOption);
+        if (normalizedEthDestinationLabel && !isLikelyEvmAddress(normalizedEthDestinationLabel)) {
+          return normalizedEthDestinationLabel;
+        }
       }
 
-      const targetPresentation = resolveCoinPresentationById(targetOption.destinationId);
-      const mappedToId = targetPresentation?.mappedTo?.trim() ?? '';
-      if (mappedToId) {
-        const mappedPresentation = resolveCoinPresentationById(mappedToId);
-        const mappedLabel =
-          mappedPresentation?.displayTicker?.trim() || mappedPresentation?.displayName?.trim() || '';
-        if (mappedLabel) {
-          return stripBridgeSuffix(mappedLabel);
+      const mappingDestinationRef = option.mappingDestination?.trim() ?? '';
+      if (mappingDestinationRef) {
+        const mappedDestinationPresentation = resolveCoinPresentationById(mappingDestinationRef);
+        const mappedDestinationLabel =
+          mappedDestinationPresentation?.displayTicker?.trim() ||
+          mappedDestinationPresentation?.displayName?.trim() ||
+          mappingDestinationRef;
+        const normalizedMappedDestinationLabel = normalizeEthereumReceiveLabel(
+          mappedDestinationLabel,
+          targetOption
+        );
+        if (normalizedMappedDestinationLabel && !isLikelyEvmAddress(normalizedMappedDestinationLabel)) {
+          return normalizedMappedDestinationLabel;
         }
       }
 
@@ -2128,9 +2477,27 @@
         targetOption.fullyqualifiedname?.trim() ||
         targetOption.label?.trim() ||
         '';
-      const strippedTargetLabel = stripBridgeSuffix(targetLabel);
-      if (strippedTargetLabel) {
-        return strippedTargetLabel;
+      const targetPresentation = resolveCoinPresentationById(targetOption.destinationId);
+      const mappedToId = targetPresentation?.mappedTo?.trim() ?? '';
+      if (mappedToId) {
+        const mappedPresentation = resolveCoinPresentationById(mappedToId);
+        const mappedLabel =
+          mappedPresentation?.displayTicker?.trim() || mappedPresentation?.displayName?.trim() || '';
+        if (mappedLabel) {
+          return normalizeEthereumReceiveLabel(mappedLabel, targetOption);
+        }
+      }
+
+      const normalizedTargetLabel = normalizeEthereumReceiveLabel(targetLabel, targetOption);
+      if (normalizedTargetLabel && !isLikelyEvmAddress(normalizedTargetLabel)) {
+        return normalizedTargetLabel;
+      }
+
+      if (sourceCanonicalKey) {
+        const canonicalFallback = sourceCanonicalKey.trim();
+        if (canonicalFallback) {
+          return canonicalFallback;
+        }
       }
     }
 
@@ -2254,6 +2621,29 @@
     return truncatedFraction ? `${normalizedInteger}.${truncatedFraction}` : normalizedInteger;
   }
 
+  function isSimplePreflight(
+    result: PreflightResult | BridgeTransferPreflightResult | null
+  ): result is PreflightResult {
+    return !!result && 'feeTakenFromAmount' in result;
+  }
+
+  function isBridgePreflight(
+    result: PreflightResult | BridgeTransferPreflightResult | null
+  ): result is BridgeTransferPreflightResult {
+    return !!result && 'amountAdjusted' in result;
+  }
+
+  function normalizeAmountString(value?: string | null): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = parseDecimalParts(trimmed);
+    if (!parsed) return trimmed;
+    const normalizedInteger = normalizeIntegerPart(parsed.integerPart);
+    const normalizedFraction = parsed.fractionPart.replace(/0+$/, '');
+    return normalizedFraction ? `${normalizedInteger}.${normalizedFraction}` : normalizedInteger;
+  }
+
   function parseNonNegativeAmount(value?: string | null): number | null {
     if (typeof value !== 'string') return null;
     const trimmed = value.trim();
@@ -2349,6 +2739,7 @@
       if (
         coin.id.toLowerCase() === normalizedLabel ||
         coin.currencyId.toLowerCase() === normalizedLabel ||
+        coin.systemId.toLowerCase() === normalizedLabel ||
         presentation.displayTicker.toLowerCase() === normalizedLabel ||
         presentation.displayName.toLowerCase() === normalizedLabel
       ) {
@@ -2357,6 +2748,28 @@
     }
 
     return null;
+  }
+
+  function resolveCurrencyLabelForDisplay(label?: string | null): string {
+    if (typeof label !== 'string') return '';
+    const trimmedLabel = label.trim();
+    if (!trimmedLabel) return '';
+    const normalizedLabel = trimmedLabel.toLowerCase();
+
+    for (const coin of coins) {
+      const presentation = resolveCoinPresentation(coin);
+      if (
+        coin.id.toLowerCase() === normalizedLabel ||
+        coin.currencyId.toLowerCase() === normalizedLabel ||
+        coin.systemId.toLowerCase() === normalizedLabel ||
+        presentation.displayTicker.toLowerCase() === normalizedLabel ||
+        presentation.displayName.toLowerCase() === normalizedLabel
+      ) {
+        return presentation.displayTicker;
+      }
+    }
+
+    return trimmedLabel;
   }
 
   function formatFiatEstimate(amountValue: string | null | undefined, usdRate: number | null): string {
@@ -2482,6 +2895,13 @@
     return null;
   }
 
+  function mapPreflightWarningMessage(warning: PreflightWarning): string {
+    if (warning.warningType === 'estimated_fee') {
+      return i18n.t('wallet.transfer.warning.finalAmountMayVary');
+    }
+    return warning.message.trim();
+  }
+
   function mapWalletError(error: unknown): string {
     const errorType = extractWalletErrorType(error);
     const rawMessage = extractWalletErrorMessage(error);
@@ -2507,6 +2927,7 @@
     }
     if (errorType === 'UnsupportedChannel') return i18n.t('wallet.transfer.error.unsupportedChannel');
     if (errorType === 'InvalidAddress') return i18n.t('wallet.transfer.error.invalidAddress');
+    if (errorType === 'InsufficientEthForGas') return i18n.t('wallet.transfer.error.insufficientEthForGas');
     if (errorType === 'InsufficientFunds') return i18n.t('wallet.transfer.error.insufficientFunds');
     if (errorType === 'NetworkError') return i18n.t('wallet.transfer.error.network');
     if (errorType === 'OperationFailed') {
@@ -3308,8 +3729,8 @@
                       {reviewSendingValue || i18n.t('wallet.transfer.summary.notSet')}
                     </p>
                   </div>
-                  {#if sourceAmountFiatDisplay && sourceAmountFiatDisplay !== '≈ —'}
-                    <p class="text-muted-foreground text-[11px] tabular-nums">{sourceAmountFiatDisplay}</p>
+                  {#if reviewSourceAmountFiatDisplay && reviewSourceAmountFiatDisplay !== '≈ —'}
+                    <p class="text-muted-foreground text-[11px] tabular-nums">{reviewSourceAmountFiatDisplay}</p>
                   {/if}
                 </div>
 
@@ -3334,8 +3755,8 @@
                         {reviewReceivingValue || i18n.t('wallet.transfer.summary.notSet')}
                       </p>
                     </div>
-                    {#if receiveAmountFiatDisplay && receiveAmountFiatDisplay !== '≈ —'}
-                      <p class="text-muted-foreground text-[11px] tabular-nums">{receiveAmountFiatDisplay}</p>
+                    {#if reviewReceiveAmountFiatDisplay && reviewReceiveAmountFiatDisplay !== '≈ —'}
+                      <p class="text-muted-foreground text-[11px] tabular-nums">{reviewReceiveAmountFiatDisplay}</p>
                     {/if}
                   </div>
                 {/if}
@@ -3446,10 +3867,25 @@
                     </div>
                   {/if}
 
-                  {#if reviewTotalFeesFiat !== '≈ —'}
+                  {#if showReviewTotalFeesFiat}
                     <p class="text-muted-foreground text-right text-[11px] tabular-nums">{reviewTotalFeesFiat}</p>
                   {/if}
                 </div>
+
+                {#if reviewWarnings.length > 0}
+                  <div class="rounded-lg border border-amber-500/35 bg-amber-500/10 px-2.5 py-2">
+                    <p class="text-amber-700 dark:text-amber-300 text-[11px] font-semibold">
+                      {i18n.t('wallet.transfer.warningsTitle')}
+                    </p>
+                    <div class="mt-1 space-y-1">
+                      {#each reviewWarnings as warning}
+                        <p class="text-amber-700 dark:text-amber-300 text-[11px] leading-snug">
+                          {warning}
+                        </p>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
 
                 {#if estimatedArrivalInfo}
                   <div class="rounded-lg bg-muted/35 px-2.5 py-2 dark:bg-muted/40">
@@ -3501,6 +3937,9 @@
                 sendResult.value,
                 MAX_TRANSFER_AMOUNT_FRACTION_DIGITS
               )}
+              {@const successRecipientFullAddress = sendResult.toAddress}
+              {@const successRecipientAddress = truncateAddressMiddle(successRecipientFullAddress, 10, 10)}
+              {@const successTxid = sendResult.txid}
               {@const sentValueWithTicker = selectedCoinPresentation?.displayTicker?.trim()
                 ? `${formattedSentValue} ${selectedCoinPresentation.displayTicker.trim()}`
                 : formattedSentValue}
@@ -3511,23 +3950,57 @@
                 </div>
                 <div class="flex items-start justify-between gap-3">
                   <dt class="text-muted-foreground mt-0.5 text-[11px]">{i18n.t('wallet.transfer.summary.recipient')}</dt>
-                  <dd class="min-w-0 text-right">
-                    {#if matchedSavedRecipient}
-                      <p class="truncate text-[13px] font-medium">{matchedSavedRecipient.contact.displayName}</p>
-                      <p class="text-muted-foreground identifier-text mt-0.5 text-[10px]">{sendResult.toAddress}</p>
-                    {:else}
-                      <p class="identifier-text text-[13px] font-medium break-all">{sendResult.toAddress}</p>
-                    {/if}
+                  <dd class="min-w-0 flex-1">
+                    <div class="flex items-start justify-end gap-1.5">
+                      <div class="min-w-0 text-right">
+                        {#if matchedSavedRecipient}
+                          <p class="truncate text-[13px] font-medium">{matchedSavedRecipient.contact.displayName}</p>
+                          <p class="text-muted-foreground identifier-text mt-0.5 truncate text-[10px]">{successRecipientAddress}</p>
+                        {:else}
+                          <p class="identifier-text truncate text-[13px] font-medium">{successRecipientAddress}</p>
+                        {/if}
+                      </div>
+                      <button
+                        type="button"
+                        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2"
+                        onclick={() => copySuccessFieldValue(successRecipientFullAddress, 'recipient')}
+                        title={i18n.t('wallet.receive.copy')}
+                        aria-label={i18n.t('wallet.receive.copy')}
+                      >
+                        {#if copiedSuccessField === 'recipient'}
+                          <CheckIcon class="size-3 text-emerald-600 dark:text-emerald-400" />
+                        {:else}
+                          <CopyIcon class="size-3" />
+                        {/if}
+                      </button>
+                    </div>
                   </dd>
                 </div>
                 <div class="flex items-start justify-between gap-3">
                   <dt class="text-muted-foreground mt-0.5 text-[11px]">{i18n.t('wallet.transfer.step.success.txidLabel')}</dt>
-                  <dd class="identifier-text text-[11px] leading-5 break-all">{sendResult.txid}</dd>
+                  <dd class="min-w-0 flex-1">
+                    <div class="flex items-start justify-end gap-1.5">
+                      <p class="identifier-text min-w-0 text-right text-[11px] leading-5 break-all">{successTxid}</p>
+                      <button
+                        type="button"
+                        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2"
+                        onclick={() => copySuccessFieldValue(successTxid, 'txid')}
+                        title={i18n.t('wallet.receive.copy')}
+                        aria-label={i18n.t('wallet.receive.copy')}
+                      >
+                        {#if copiedSuccessField === 'txid'}
+                          <CheckIcon class="size-3 text-emerald-600 dark:text-emerald-400" />
+                        {:else}
+                          <CopyIcon class="size-3" />
+                        {/if}
+                      </button>
+                    </div>
+                  </dd>
                 </div>
               </dl>
 
               {#if !isSavedRecipient}
-                <div class="bg-muted/35 mx-auto w-full max-w-[380px] rounded-md p-3 text-left dark:bg-muted/40">
+                <div class="bg-muted/35 w-full rounded-md p-3 text-left dark:bg-muted/40">
                   <p class="text-sm font-medium">{i18n.t('wallet.transfer.saveRecipient.title')}</p>
                   <p class="text-muted-foreground mt-1 text-xs">{i18n.t('wallet.transfer.saveRecipient.description')}</p>
                   <div class="mt-3 w-full max-w-64">

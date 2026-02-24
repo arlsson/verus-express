@@ -57,20 +57,31 @@ type DestinationEntry = {
 };
 
 function resolveMappingDestination(quote: BridgeConversionPathQuote): string | undefined {
-  if (quote.mapTo && quote.mapTo.trim()) {
-    return quote.mapTo.trim();
-  }
-
   if (!quote.mapping) return undefined;
 
-  const fallback =
-    quote.convertToDisplayName ||
-    quote.destinationDisplayName ||
-    quote.convertTo ||
-    quote.destinationId;
-  if (!fallback) return undefined;
-  const trimmed = fallback.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  const candidates = [
+    quote.destinationDisplayTicker,
+    quote.convertToDisplayName,
+    quote.destinationDisplayName,
+    quote.convertTo,
+    quote.destinationId,
+    quote.mapTo,
+  ];
+  let fallback: string | undefined;
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const trimmed = candidate.trim();
+    if (trimmed.length === 0) continue;
+    if (!fallback) fallback = trimmed;
+    if (!isLikelyEvmAddress(trimmed)) return trimmed;
+  }
+
+  return fallback;
+}
+
+function isLikelyEvmAddress(value: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
 }
 
 export type ViaRouteOption = {

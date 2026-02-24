@@ -634,7 +634,7 @@ async fn get_conversion_paths_from_evm_source(
                 export_to_display_name: Some(system_display_name.clone()),
                 via: None,
                 via_display_name: None,
-                map_to: None,
+                map_to: Some(source_currency_id.clone()),
                 price: Some("1".to_string()),
                 via_price_in_root: None,
                 dest_price_in_via: None,
@@ -676,9 +676,9 @@ async fn append_eth_mappings_for_vrpc_source(
         return Ok(());
     }
 
-    let veth_definition = match vrpc_provider.getcurrency("Bridge.vETH").await {
+    let veth_definition = match vrpc_provider.getcurrency("vETH").await {
         Ok(value) => Some(value),
-        Err(_) => vrpc_provider.getcurrency("vETH").await.ok(),
+        Err(_) => vrpc_provider.getcurrency("Bridge.vETH").await.ok(),
     };
 
     let export_to = veth_definition
@@ -711,7 +711,7 @@ async fn append_eth_mappings_for_vrpc_source(
                 export_to_display_name: export_to_label.clone(),
                 via: None,
                 via_display_name: None,
-                map_to: None,
+                map_to: Some(source_currency_id.clone()),
                 price: Some("1".to_string()),
                 via_price_in_root: None,
                 dest_price_in_via: None,
