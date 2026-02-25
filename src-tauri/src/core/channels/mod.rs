@@ -1308,6 +1308,7 @@ mod tests {
         is_shielded_z_destination, resolve_vrpc_coin_context, TransactionHistoryCursor,
     };
     use crate::core::coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
+    use crate::core::runtime_config;
     use crate::types::wallet::WalletNetwork;
 
     const VRSC_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
@@ -1335,7 +1336,7 @@ mod tests {
             proto: Protocol::Vrsc,
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
-            vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+            vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
             dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,

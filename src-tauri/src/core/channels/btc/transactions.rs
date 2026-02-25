@@ -1,5 +1,5 @@
 //
-// Module 5d: BTC transaction history via Mempool.space address/txs/chain and mempool.
+// Module 5d: BTC transaction history via configured address/txs/chain and mempool endpoints.
 
 use std::collections::HashSet;
 

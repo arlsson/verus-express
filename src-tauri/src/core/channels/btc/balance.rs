@@ -1,5 +1,5 @@
 //
-// Module 5d: BTC balance via Mempool.space address API. Maps to BalanceResult (decimal strings).
+// Module 5d: BTC balance via configured address API. Maps to BalanceResult (decimal strings).
 
 use crate::core::channels::btc::provider::{BtcProvider, UtxoEntry};
 use crate::types::transaction::BalanceResult;

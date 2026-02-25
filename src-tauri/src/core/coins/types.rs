@@ -1,6 +1,6 @@
 //
 // Module 3: Coin Registry — Protocol, Channel, and CoinDefinition types.
-// Used for static and dynamic coin definitions; endpoints are allowlist-only.
+// Used for static and dynamic coin definitions; endpoint defaults come from runtime config.
 
 use serde::{Deserialize, Serialize};
 

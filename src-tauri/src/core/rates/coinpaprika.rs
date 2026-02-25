@@ -232,6 +232,7 @@ fn value_to_f64(value: &Value) -> Option<f64> {
 mod tests {
     use super::*;
     use crate::core::coins::{Channel, CoinDefinition, Protocol};
+    use crate::core::runtime_config;
     use serde_json::json;
     use std::time::Duration;
 
@@ -358,7 +359,7 @@ mod tests {
                     proto: Protocol::Vrsc,
                     compatible_channels: vec![Channel::Vrpc],
                     decimals: 8,
-                    vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+                    vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
                     dlight_endpoints: None,
                     electrum_endpoints: None,
                     seconds_per_block: 60,
@@ -378,7 +379,7 @@ mod tests {
                     proto: Protocol::Vrsc,
                     compatible_channels: vec![Channel::Vrpc],
                     decimals: 8,
-                    vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+                    vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
                     dlight_endpoints: None,
                     electrum_endpoints: None,
                     seconds_per_block: 60,
@@ -398,7 +399,7 @@ mod tests {
                     proto: Protocol::Vrsc,
                     compatible_channels: vec![Channel::Vrpc],
                     decimals: 8,
-                    vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+                    vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
                     dlight_endpoints: None,
                     electrum_endpoints: None,
                     seconds_per_block: 60,
@@ -426,7 +427,7 @@ mod tests {
             proto: Protocol::Vrsc,
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
-            vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+            vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
             dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
@@ -443,7 +444,7 @@ mod tests {
             proto: Protocol::Vrsc,
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
-            vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+            vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
             dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
@@ -485,7 +486,7 @@ mod tests {
                 proto: Protocol::Vrsc,
                 compatible_channels: vec![Channel::Vrpc],
                 decimals: 8,
-                vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+                vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
                 dlight_endpoints: None,
                 electrum_endpoints: None,
                 seconds_per_block: 60,
@@ -502,7 +503,7 @@ mod tests {
                 proto: Protocol::Vrsc,
                 compatible_channels: vec![Channel::Vrpc],
                 decimals: 8,
-                vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+                vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
                 dlight_endpoints: None,
                 electrum_endpoints: None,
                 seconds_per_block: 60,
@@ -519,7 +520,7 @@ mod tests {
                 proto: Protocol::Vrsc,
                 compatible_channels: vec![Channel::Vrpc],
                 decimals: 8,
-                vrpc_endpoints: vec!["https://api.verus.services/".to_string()],
+                vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
                 dlight_endpoints: None,
                 electrum_endpoints: None,
                 seconds_per_block: 60,

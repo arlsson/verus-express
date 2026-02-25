@@ -8,6 +8,7 @@ pub mod channels;
 pub mod coins;
 pub mod crypto;
 pub mod rates;
+pub mod runtime_config;
 pub mod updates;
 pub mod wallet;
 

@@ -1,6 +1,6 @@
 //
 // Module 5d: BTC channel — balance, transactions, preflight, send for Bitcoin (P2PKH, same key as VRSC/ETH).
-// Uses Mempool.space REST API (allowlist). Never sign UI-supplied tx hex.
+// Uses backend runtime-configured REST API endpoints. Never sign UI-supplied tx hex.
 
 mod balance;
 mod preflight;

@@ -1,6 +1,6 @@
 //
 // Module 3: Coin Registry — static coin definitions and dynamic PBaaS additions.
-// VRPC/Electrum endpoints are allowlist-only; custom endpoints deferred to advanced settings.
+// Endpoint defaults come from backend runtime config.
 
 use std::collections::HashMap;
 use std::fs;
@@ -8,17 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::core::coins::types::{Channel, CoinDefinition, Protocol};
+use crate::core::runtime_config;
+use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
-
-/// Trusted VRPC allowlist (per backend architecture plan).
-const VRPC_MAINNET: &str = "https://api.verus.services/";
-const VRPC_TESTNET: &str = "https://api.verustest.net/";
-const DLIGHT_MAINNET: &[&str] = &["lightwallet.verus.services:8120"];
-const DLIGHT_TESTNET: &[&str] = &["lightwalletd.verustest.net:8125"];
-
-/// Default Electrum allowlist for BTC (well-known public servers).
-const ELECTRUM_MAINNET: &[&str] = &["https://electrum.blockstream.info"];
-const ELECTRUM_TESTNET: &[&str] = &["https://electrum.blockstream.info/testnet"];
 
 /// Verus mainnet system ID (i-address format).
 const VRSC_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
@@ -142,6 +134,62 @@ impl CoinRegistry {
         Ok(())
     }
 
+    fn apply_runtime_endpoint_defaults(mut def: CoinDefinition) -> CoinDefinition {
+        let network = if def.is_testnet {
+            WalletNetwork::Testnet
+        } else {
+            WalletNetwork::Mainnet
+        };
+
+        match def.proto {
+            Protocol::Vrsc => {
+                if def
+                    .compatible_channels
+                    .iter()
+                    .any(|channel| matches!(channel, Channel::Vrpc))
+                    && def.vrpc_endpoints.is_empty()
+                {
+                    def.vrpc_endpoints =
+                        vec![runtime_config::default_vrpc_endpoint_for_network(network)];
+                }
+
+                if def
+                    .compatible_channels
+                    .iter()
+                    .any(|channel| matches!(channel, Channel::DlightPrivate))
+                    && def
+                        .dlight_endpoints
+                        .as_ref()
+                        .map(|endpoints| endpoints.is_empty())
+                        .unwrap_or(true)
+                {
+                    def.dlight_endpoints = Some(
+                        runtime_config::default_dlight_endpoints_for_network(network),
+                    );
+                }
+            }
+            Protocol::Btc => {
+                if def
+                    .compatible_channels
+                    .iter()
+                    .any(|channel| matches!(channel, Channel::Btc))
+                    && def
+                        .electrum_endpoints
+                        .as_ref()
+                        .map(|endpoints| endpoints.is_empty())
+                        .unwrap_or(true)
+                {
+                    def.electrum_endpoints = Some(
+                        runtime_config::default_electrum_endpoints_for_network(network),
+                    );
+                }
+            }
+            Protocol::Eth | Protocol::Erc20 => {}
+        }
+
+        def
+    }
+
     fn canonical_asset_key(def: &CoinDefinition) -> String {
         let network = if def.is_testnet { "testnet" } else { "mainnet" };
         match def.proto {
@@ -193,6 +241,7 @@ impl CoinRegistry {
             return Err(WalletError::WalletLocked);
         }
 
+        let def = Self::apply_runtime_endpoint_defaults(def);
         Self::validate_coin_definition(&def)?;
 
         let static_coins = Self::default_coins();
@@ -268,8 +317,15 @@ impl CoinRegistry {
         }
     }
 
-    /// Static coin definitions. VRPC endpoints are allowlist-only.
+    /// Static coin definitions. Endpoint defaults come from runtime config.
     fn default_coins() -> Vec<CoinDefinition> {
+        let vrpc_mainnet = runtime_config::vrpc_mainnet_url();
+        let vrpc_testnet = runtime_config::vrpc_testnet_url();
+        let dlight_mainnet = runtime_config::dlight_mainnet_endpoints();
+        let dlight_testnet = runtime_config::dlight_testnet_endpoints();
+        let electrum_mainnet = runtime_config::electrum_mainnet_endpoints();
+        let electrum_testnet = runtime_config::electrum_testnet_endpoints();
+
         vec![
             // VRSC mainnet
             CoinDefinition {
@@ -282,13 +338,8 @@ impl CoinRegistry {
                 proto: Protocol::Vrsc,
                 compatible_channels: vec![Channel::Vrpc, Channel::DlightPrivate],
                 decimals: 8,
-                vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
-                dlight_endpoints: Some(
-                    DLIGHT_MAINNET
-                        .iter()
-                        .map(|endpoint| endpoint.to_string())
-                        .collect(),
-                ),
+                vrpc_endpoints: vec![vrpc_mainnet.clone()],
+                dlight_endpoints: Some(dlight_mainnet.clone()),
                 electrum_endpoints: None,
                 seconds_per_block: 60,
                 mapped_to: None,
@@ -305,13 +356,8 @@ impl CoinRegistry {
                 proto: Protocol::Vrsc,
                 compatible_channels: vec![Channel::Vrpc, Channel::DlightPrivate],
                 decimals: 8,
-                vrpc_endpoints: vec![VRPC_TESTNET.to_string()],
-                dlight_endpoints: Some(
-                    DLIGHT_TESTNET
-                        .iter()
-                        .map(|endpoint| endpoint.to_string())
-                        .collect(),
-                ),
+                vrpc_endpoints: vec![vrpc_testnet.clone()],
+                dlight_endpoints: Some(dlight_testnet.clone()),
                 electrum_endpoints: None,
                 seconds_per_block: 60,
                 mapped_to: None,
@@ -330,9 +376,7 @@ impl CoinRegistry {
                 decimals: 8,
                 vrpc_endpoints: vec![],
                 dlight_endpoints: None,
-                electrum_endpoints: Some(
-                    ELECTRUM_MAINNET.iter().map(|s| (*s).to_string()).collect(),
-                ),
+                electrum_endpoints: Some(electrum_mainnet.clone()),
                 seconds_per_block: 600,
                 mapped_to: None,
                 is_testnet: false,
@@ -350,9 +394,7 @@ impl CoinRegistry {
                 decimals: 8,
                 vrpc_endpoints: vec![],
                 dlight_endpoints: None,
-                electrum_endpoints: Some(
-                    ELECTRUM_TESTNET.iter().map(|s| (*s).to_string()).collect(),
-                ),
+                electrum_endpoints: Some(electrum_testnet.clone()),
                 seconds_per_block: 600,
                 mapped_to: None,
                 is_testnet: true,
@@ -422,7 +464,7 @@ impl CoinRegistry {
                 proto: Protocol::Vrsc,
                 compatible_channels: vec![Channel::Vrpc],
                 decimals: 8,
-                vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+                vrpc_endpoints: vec![vrpc_mainnet.clone()],
                 dlight_endpoints: None,
                 electrum_endpoints: None,
                 seconds_per_block: 60,
@@ -459,7 +501,7 @@ mod tests {
             proto: Protocol::Vrsc,
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
-            vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+            vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
             dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
@@ -529,7 +571,7 @@ mod tests {
             proto: Protocol::Vrsc,
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
-            vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+            vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
             dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
@@ -548,7 +590,7 @@ mod tests {
             proto: Protocol::Vrsc,
             compatible_channels: vec![Channel::Vrpc],
             decimals: 8,
-            vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+            vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
             dlight_endpoints: None,
             electrum_endpoints: None,
             seconds_per_block: 60,
@@ -654,7 +696,7 @@ mod tests {
                 proto: Protocol::Vrsc,
                 compatible_channels: vec![Channel::Vrpc],
                 decimals: 8,
-                vrpc_endpoints: vec![VRPC_MAINNET.to_string()],
+                vrpc_endpoints: vec![runtime_config::vrpc_mainnet_url()],
                 dlight_endpoints: None,
                 electrum_endpoints: None,
                 seconds_per_block: 60,

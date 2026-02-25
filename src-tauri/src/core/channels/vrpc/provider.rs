@@ -1,5 +1,5 @@
 //
-// Module 5: VRPC HTTP JSON-RPC client. Allowlist-only endpoints; TTL cache; no sensitive data in logs.
+// Module 5: VRPC HTTP JSON-RPC client. Runtime-configured endpoints; TTL cache; no sensitive data in logs.
 
 use std::collections::{HashMap, HashSet};
 use std::error::Error as _;
@@ -10,15 +10,9 @@ use reqwest::Client;
 use serde_json::Value;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 
+use crate::core::runtime_config;
 use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
-
-/// Trusted VRPC allowlist (per backend architecture plan).
-const VRPC_MAINNET: &str = "https://api.verus.services/";
-const VRPC_TESTNET: &str = "https://api.verustest.net/";
-const VRPC_VARRR_MAINNET: &str = "https://vapi.piratechain.com/";
-const VRPC_VDEX_MAINNET: &str = "https://api.vdex.to/";
-const VRPC_CHIPS_MAINNET: &str = "https://api.chips.cash/";
 
 const VRSC_MAINNET_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
 const VRSCTEST_SYSTEM_ID: &str = "iJhCezBExJHvtyH3fGhNnt2NhU4Ztkf2yq";
@@ -91,7 +85,7 @@ struct CachedEntry {
     expires_at: Instant,
 }
 
-/// HTTP JSON-RPC client for Verus daemon API. Endpoints are allowlist-only.
+/// HTTP JSON-RPC client for Verus daemon API. Endpoint comes from runtime config.
 pub struct VrpcProvider {
     client: Client,
     base_url: String,
@@ -123,11 +117,11 @@ impl VrpcProvider {
     }
 
     pub fn new_mainnet() -> Self {
-        Self::new_with_base_url(VRPC_MAINNET)
+        Self::new_with_base_url(&runtime_config::vrpc_mainnet_url())
     }
 
     pub fn new_testnet() -> Self {
-        Self::new_with_base_url(VRPC_TESTNET)
+        Self::new_with_base_url(&runtime_config::vrpc_testnet_url())
     }
 
     /// Default: mainnet.
@@ -895,33 +889,39 @@ impl VrpcProviderPool {
     }
 
     pub fn new() -> Self {
+        let vrpc_mainnet = runtime_config::vrpc_mainnet_url();
+        let vrpc_testnet = runtime_config::vrpc_testnet_url();
+        let vrpc_varrr_mainnet = runtime_config::vrpc_varrr_mainnet_url();
+        let vrpc_vdex_mainnet = runtime_config::vrpc_vdex_mainnet_url();
+        let vrpc_chips_mainnet = runtime_config::vrpc_chips_mainnet_url();
+
         let mut mainnet_by_system = HashMap::<String, VrpcProvider>::new();
         mainnet_by_system.insert(
             Self::normalize_system_id(VRSC_MAINNET_SYSTEM_ID),
-            VrpcProvider::new_with_base_url(VRPC_MAINNET),
+            VrpcProvider::new_with_base_url(&vrpc_mainnet),
         );
         mainnet_by_system.insert(
             Self::normalize_system_id(VARRR_SYSTEM_ID),
-            VrpcProvider::new_with_base_url(VRPC_VARRR_MAINNET),
+            VrpcProvider::new_with_base_url(&vrpc_varrr_mainnet),
         );
         mainnet_by_system.insert(
             Self::normalize_system_id(VDEX_SYSTEM_ID),
-            VrpcProvider::new_with_base_url(VRPC_VDEX_MAINNET),
+            VrpcProvider::new_with_base_url(&vrpc_vdex_mainnet),
         );
         mainnet_by_system.insert(
             Self::normalize_system_id(CHIPS_SYSTEM_ID),
-            VrpcProvider::new_with_base_url(VRPC_CHIPS_MAINNET),
+            VrpcProvider::new_with_base_url(&vrpc_chips_mainnet),
         );
 
         let mut testnet_by_system = HashMap::<String, VrpcProvider>::new();
         testnet_by_system.insert(
             Self::normalize_system_id(VRSCTEST_SYSTEM_ID),
-            VrpcProvider::new_with_base_url(VRPC_TESTNET),
+            VrpcProvider::new_with_base_url(&vrpc_testnet),
         );
 
         Self {
-            mainnet: VrpcProvider::new_mainnet(),
-            testnet: VrpcProvider::new_testnet(),
+            mainnet: VrpcProvider::new_with_base_url(&vrpc_mainnet),
+            testnet: VrpcProvider::new_with_base_url(&vrpc_testnet),
             mainnet_by_system,
             testnet_by_system,
         }
@@ -1077,7 +1077,10 @@ mod tests {
         let candidates = pool.provider_candidates(WalletNetwork::Mainnet, Some(VDEX_SYSTEM_ID));
 
         assert!(!candidates.is_empty());
-        assert_eq!(candidates[0].base_url, VRPC_VDEX_MAINNET);
+        assert_eq!(
+            candidates[0].base_url,
+            runtime_config::vrpc_vdex_mainnet_url()
+        );
 
         let urls = candidates
             .iter()
@@ -1086,10 +1089,18 @@ mod tests {
         let unique = urls.iter().cloned().collect::<HashSet<_>>();
 
         assert_eq!(urls.len(), unique.len());
-        assert!(urls.iter().any(|url| url == VRPC_MAINNET));
-        assert!(urls.iter().any(|url| url == VRPC_VARRR_MAINNET));
-        assert!(urls.iter().any(|url| url == VRPC_VDEX_MAINNET));
-        assert!(urls.iter().any(|url| url == VRPC_CHIPS_MAINNET));
+        assert!(urls
+            .iter()
+            .any(|url| url == &runtime_config::vrpc_mainnet_url()));
+        assert!(urls
+            .iter()
+            .any(|url| url == &runtime_config::vrpc_varrr_mainnet_url()));
+        assert!(urls
+            .iter()
+            .any(|url| url == &runtime_config::vrpc_vdex_mainnet_url()));
+        assert!(urls
+            .iter()
+            .any(|url| url == &runtime_config::vrpc_chips_mainnet_url()));
     }
 
     #[test]
@@ -1097,11 +1108,11 @@ mod tests {
         let pool = VrpcProviderPool::new();
         assert_eq!(
             pool.endpoint_url_for_system(WalletNetwork::Mainnet, VDEX_SYSTEM_ID),
-            VRPC_VDEX_MAINNET
+            runtime_config::vrpc_vdex_mainnet_url()
         );
         assert_eq!(
             pool.endpoint_url_for_system(WalletNetwork::Mainnet, "iUnknownSystemAddress1234567890"),
-            VRPC_MAINNET
+            runtime_config::vrpc_mainnet_url()
         );
     }
 }

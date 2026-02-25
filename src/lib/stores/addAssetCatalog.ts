@@ -54,10 +54,6 @@ const STATUS_ORDER: Record<AddAssetStatus, number> = {
   available: 1
 };
 
-const DEFAULT_ELECTRUM_MAINNET = ['https://electrum.blockstream.info'];
-const DEFAULT_ELECTRUM_TESTNET = ['https://electrum.blockstream.info/testnet'];
-const DEFAULT_VRPC_MAINNET = ['https://api.verus.services/'];
-const DEFAULT_VRPC_TESTNET = ['https://api.verustest.net/'];
 const ETH_ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 function catalogLookupKey(value: string, isTestnet: boolean): string {
@@ -279,7 +275,7 @@ export function catalogEntryToCoinDefinition(
       proto: 'vrsc',
       compatibleChannels: ['vrpc'],
       decimals: 8,
-      vrpcEndpoints: isTestnet ? DEFAULT_VRPC_TESTNET : DEFAULT_VRPC_MAINNET,
+      vrpcEndpoints: [],
       electrumEndpoints: null,
       secondsPerBlock: 60,
       mappedTo: entry.mappedTo,
@@ -322,7 +318,7 @@ export function catalogEntryToCoinDefinition(
       compatibleChannels: ['btc'],
       decimals: 8,
       vrpcEndpoints: [],
-      electrumEndpoints: isTestnet ? DEFAULT_ELECTRUM_TESTNET : DEFAULT_ELECTRUM_MAINNET,
+      electrumEndpoints: null,
       secondsPerBlock: 600,
       mappedTo: entry.mappedTo,
       isTestnet

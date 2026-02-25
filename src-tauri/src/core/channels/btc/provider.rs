@@ -1,6 +1,6 @@
 //
-// Module 5d: BTC REST provider (Mempool.space allowlist). Balance, UTXOs, tx history, broadcast.
-// Security: Endpoints are allowlist-only; no sensitive data in logs.
+// Module 5d: BTC REST provider. Balance, UTXOs, tx history, broadcast.
+// Security: Endpoint comes from backend runtime config; no sensitive data in logs.
 
 use std::time::Duration;
 
@@ -8,12 +8,9 @@ use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::core::runtime_config;
 use crate::types::wallet::WalletNetwork;
 use crate::types::WalletError;
-
-/// Trusted BTC API allowlist (per backend architecture plan).
-const MEMPOOL_MAINNET: &str = "https://mempool.space/api";
-const MEMPOOL_TESTNET: &str = "https://mempool.space/testnet/api";
 
 #[derive(Debug, Deserialize)]
 pub struct AddressInfo {
@@ -67,7 +64,7 @@ pub struct MempoolTxStatus {
     pub block_time: Option<u64>,
 }
 
-/// HTTP REST client for Bitcoin (Mempool.space API). Allowlist-only base URLs.
+/// HTTP REST client for Bitcoin. Base URL comes from runtime config.
 pub struct BtcProvider {
     client: Client,
     base_url: String,
@@ -85,14 +82,14 @@ impl BtcProvider {
     pub fn new_mainnet() -> Self {
         Self {
             client: Self::build_http_client(),
-            base_url: MEMPOOL_MAINNET.to_string(),
+            base_url: runtime_config::btc_mainnet_api_url(),
         }
     }
 
     pub fn new_testnet() -> Self {
         Self {
             client: Self::build_http_client(),
-            base_url: MEMPOOL_TESTNET.to_string(),
+            base_url: runtime_config::btc_testnet_api_url(),
         }
     }
 

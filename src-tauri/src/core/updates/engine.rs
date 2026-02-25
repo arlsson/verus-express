@@ -599,7 +599,7 @@ async fn derive_pbaas_rates_with_provider_candidates(
     coin: &crate::core::coins::CoinDefinition,
     latest_rates: &HashMap<String, HashMap<String, f64>>,
 ) -> Option<HashMap<String, f64>> {
-    // Prefer root-network provider first (api.verus.services / api.verustest.net),
+    // Prefer root-network provider first,
     // then try system-specific endpoints as fallback.
     let mut providers = Vec::new();
     providers.push(vrpc_provider_pool.for_network(active_network));
