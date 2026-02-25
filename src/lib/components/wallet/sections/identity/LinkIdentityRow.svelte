@@ -4,7 +4,7 @@
   import PlusIcon from '@lucide/svelte/icons/plus';
   import { i18nStore } from '$lib/i18n';
   import type { LinkableIdentity } from '$lib/types/wallet.js';
-  import { formatIdentityDisplayName } from '$lib/utils/identityDisplay';
+  import { formatIdentityDisplayName, truncateIdentityAddress } from '$lib/utils/identityDisplay';
 
   const noop = (identity: LinkableIdentity): void => {
     void identity;
@@ -22,16 +22,32 @@
 
   const i18n = $derived($i18nStore);
   const displayName = $derived(formatIdentityDisplayName(identity));
+  const abbreviatedAddress = $derived(truncateIdentityAddress(identity.identityAddress, 6, 6));
+  const displayNameIsAddress = $derived(identity.identityAddress === displayName);
+  const primaryLine = $derived(displayNameIsAddress ? abbreviatedAddress : displayName);
   const secondaryLine = $derived(
-    identity.identityAddress !== displayName ? identity.identityAddress : (identity.status ?? '')
+    displayNameIsAddress ? (identity.status ?? '') : abbreviatedAddress
   );
+  const secondaryLineIsAddress = $derived(!displayNameIsAddress);
 </script>
 
 <li class="flex items-center gap-3 rounded-lg bg-muted/65 px-3.5 py-3 dark:bg-muted/55">
   <div class="min-w-0 flex-1">
-    <p class="truncate text-sm font-semibold text-foreground">{displayName}</p>
+    <p
+      class="truncate text-sm font-semibold text-foreground"
+      class:font-mono={displayNameIsAddress}
+      title={displayNameIsAddress ? identity.identityAddress : undefined}
+    >
+      {primaryLine}
+    </p>
     {#if secondaryLine}
-      <p class="truncate text-xs text-muted-foreground">{secondaryLine}</p>
+      <p
+        class="truncate text-xs text-muted-foreground"
+        class:font-mono={secondaryLineIsAddress}
+        title={secondaryLineIsAddress ? identity.identityAddress : undefined}
+      >
+        {secondaryLine}
+      </p>
     {/if}
   </div>
 

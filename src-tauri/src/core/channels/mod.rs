@@ -999,36 +999,49 @@ pub async fn route_get_transactions_page(
                 );
             }
             let addresses = vec![resolved.address];
-            let vrpc_cursor = match decoded_cursor {
-                Some(TransactionHistoryCursor::Vrpc {
-                    end_block,
-                    include_pending,
-                }) => Some(vrpc::VrpcHistoryCursor {
-                    end_block,
-                    include_pending,
-                }),
-                Some(_) => return Err(WalletError::OperationFailed),
-                None => None,
-            };
-            let res = vrpc::get_transactions_page(
-                vrpc_provider_pool.for_system(network, &resolved.system_id),
-                &addresses,
-                &coin,
-                vrpc_cursor,
-                requested_limit,
-            )
-            .await?;
+            let provider = vrpc_provider_pool.for_system(network, &resolved.system_id);
 
-            ProtocolPageResult {
-                transactions: res.transactions,
-                next_cursor: res
-                    .next_cursor
-                    .map(|cursor| TransactionHistoryCursor::Vrpc {
-                        end_block: cursor.end_block,
-                        include_pending: cursor.include_pending,
+            // Mobile parity: first page should include full history for the selected scope.
+            if decoded_cursor.is_none() {
+                let res = vrpc::get_transactions(provider, &addresses, &coin).await?;
+                ProtocolPageResult {
+                    transactions: res.transactions,
+                    next_cursor: None,
+                    has_more: false,
+                    warning: res.warning,
+                }
+            } else {
+                let vrpc_cursor = match decoded_cursor {
+                    Some(TransactionHistoryCursor::Vrpc {
+                        end_block,
+                        include_pending,
+                    }) => Some(vrpc::VrpcHistoryCursor {
+                        end_block,
+                        include_pending,
                     }),
-                has_more: res.has_more,
-                warning: res.warning,
+                    Some(_) => return Err(WalletError::OperationFailed),
+                    None => None,
+                };
+                let res = vrpc::get_transactions_page(
+                    provider,
+                    &addresses,
+                    &coin,
+                    vrpc_cursor,
+                    requested_limit,
+                )
+                .await?;
+
+                ProtocolPageResult {
+                    transactions: res.transactions,
+                    next_cursor: res
+                        .next_cursor
+                        .map(|cursor| TransactionHistoryCursor::Vrpc {
+                            end_block: cursor.end_block,
+                            include_pending: cursor.include_pending,
+                        }),
+                    has_more: res.has_more,
+                    warning: res.warning,
+                }
             }
         }
         "dlight_private" => {

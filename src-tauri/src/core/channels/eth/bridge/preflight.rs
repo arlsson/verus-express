@@ -499,7 +499,7 @@ async fn resolve_mapped_currency(
         .and_then(Value::as_array)
     {
         for currency in currencies {
-            if let Some(currency_id) = extract_currency_id(currency) {
+            if let Some(currency_id) = extract_currency_ref(currency) {
                 if !convertable
                     .iter()
                     .any(|existing| existing.eq_ignore_ascii_case(&currency_id))
@@ -607,7 +607,10 @@ fn wei_to_sats_round(wei: U256) -> U256 {
     wei.saturating_add(half_divisor) / divisor
 }
 
-fn adjust_submitted_sats_for_fee_envelope(submitted_sats: U256, max_total_fee_wei: U256) -> Option<U256> {
+fn adjust_submitted_sats_for_fee_envelope(
+    submitted_sats: U256,
+    max_total_fee_wei: U256,
+) -> Option<U256> {
     let max_total_fee_sats = wei_to_sats_round(max_total_fee_wei);
     if submitted_sats <= max_total_fee_sats {
         return None;
@@ -647,6 +650,19 @@ fn extract_currency_id(value: &Value) -> Option<String> {
         .or_else(|| value.get("name").and_then(extract_stringish))
 }
 
+fn extract_currency_ref(value: &Value) -> Option<String> {
+    if let Some(raw) = value.as_str() {
+        return Some(raw.to_string());
+    }
+
+    value
+        .get("currencyid")
+        .and_then(extract_stringish)
+        .or_else(|| value.get("address").and_then(extract_stringish))
+        .or_else(|| value.get("fullyqualifiedname").and_then(extract_stringish))
+        .or_else(|| value.get("name").and_then(extract_stringish))
+}
+
 fn extract_stringish(value: &Value) -> Option<String> {
     if let Some(raw) = value.as_str() {
         return Some(raw.to_string());
@@ -663,9 +679,11 @@ fn extract_stringish(value: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        adjust_submitted_sats_for_fee_envelope, sats_to_wei, wei_to_sats_round, WEI_PER_SAT_U64,
+        adjust_submitted_sats_for_fee_envelope, extract_currency_ref, sats_to_wei,
+        wei_to_sats_round, WEI_PER_SAT_U64,
     };
     use ethers::types::U256;
+    use serde_json::json;
 
     #[test]
     fn wei_to_sats_round_keeps_exact_division() {
@@ -677,7 +695,9 @@ mod tests {
     #[test]
     fn wei_to_sats_round_rounds_down_below_half_sat() {
         let divisor = U256::from(WEI_PER_SAT_U64);
-        let wei = divisor.saturating_mul(U256::from(123u64)).saturating_add(U256::from(1u64));
+        let wei = divisor
+            .saturating_mul(U256::from(123u64))
+            .saturating_add(U256::from(1u64));
         assert_eq!(wei_to_sats_round(wei), U256::from(123u64));
     }
 
@@ -706,5 +726,13 @@ mod tests {
         let fee_wei = sats_to_wei(U256::from(100_000u64)).saturating_add(U256::from(1u64));
         let adjusted = adjust_submitted_sats_for_fee_envelope(submitted, fee_wei);
         assert!(adjusted.is_none());
+    }
+
+    #[test]
+    fn extract_currency_ref_accepts_string_entries() {
+        assert_eq!(
+            extract_currency_ref(&json!("i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X")).as_deref(),
+            Some("i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X")
+        );
     }
 }

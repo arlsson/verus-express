@@ -715,10 +715,14 @@ mod tests {
         params.export_to = Some("i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X".to_string());
         params.map_to = Some("i61cV2uicKSi1rSMQCBNQeSYC3UAi9GVzd".to_string());
 
-        let output = build_sendcurrency_output(&params, "0x8fda30a676fbc8f1406adeac7921998b1af4fd05", 1.0)
-            .expect("output");
+        let output =
+            build_sendcurrency_output(&params, "0x8fda30a676fbc8f1406adeac7921998b1af4fd05", 1.0)
+                .expect("output");
         let mapto = output.get("mapto");
-        assert!(mapto.is_none(), "mapto must be omitted for ETH destination outputs");
+        assert!(
+            mapto.is_none(),
+            "mapto must be omitted for ETH destination outputs"
+        );
     }
 
     #[test]

@@ -58,6 +58,12 @@ interface CatalogCoin {
 
 const catalogCoins = verusCoinCatalog as CatalogCoin[];
 const catalogById = new Map<string, CatalogCoin>(catalogCoins.map((coin) => [coin.id, coin]));
+const catalogByCurrencyId = new Map<string, CatalogCoin>();
+for (const coin of catalogCoins) {
+  const key = coin.currencyId.trim().toLowerCase();
+  if (!key || catalogByCurrencyId.has(key)) continue;
+  catalogByCurrencyId.set(key, coin);
+}
 
 function cloneIcon(icon: CoinIcon): CoinIcon {
   if (icon.kind === 'asset') {
@@ -194,7 +200,9 @@ export function resolveCoinPresentationById(
   coinId: string,
   proto?: Protocol | 'fiat'
 ): CoinPresentation | null {
-  const fromCatalogCoin = catalogById.get(coinId);
+  const normalizedCoinId = coinId.trim();
+  const fromCatalogCoin =
+    catalogById.get(normalizedCoinId) ?? catalogByCurrencyId.get(normalizedCoinId.toLowerCase());
   if (fromCatalogCoin) {
     return fromCatalog(fromCatalogCoin);
   }
@@ -203,7 +211,7 @@ export function resolveCoinPresentationById(
     return null;
   }
 
-  return buildFallbackPresentation(coinId, proto, coinId, coinId, null, false);
+  return buildFallbackPresentation(normalizedCoinId, proto, normalizedCoinId, normalizedCoinId, null, false);
 }
 
 export function resolveCoinPresentation(coin: CoinDefinition): CoinPresentation {

@@ -14,6 +14,7 @@ use crate::types::WalletError;
 const RESERVE_TRANSFER_DESTINATION_ADDRESS: &str = "RTqQe58LSj2yr5CrwYFwcsAQ1edQwmrkUU";
 const VRPC_WINDOW_BLOCK_COUNT: u64 = 2000;
 const MAX_VRPC_WINDOW_REQUESTS: usize = 24;
+const SATOSHIS_PER_COIN: f64 = 100_000_000.0;
 
 #[derive(Debug, Clone, Copy)]
 pub struct VrpcHistoryCursor {
@@ -493,16 +494,111 @@ fn aggregate_transactions_with_meta(
 
 fn extract_delta(obj: &serde_json::Map<String, Value>, coin: &VrpcCoinContext) -> f64 {
     if coin.currency_id == coin.system_id {
-        return obj
-            .get("satoshis")
-            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
-            .unwrap_or(0) as f64;
+        let satoshis = obj.get("satoshis").and_then(value_as_f64).unwrap_or(0.0);
+        if satoshis.abs() >= f64::EPSILON {
+            return satoshis;
+        }
+
+        let native_currency_value =
+            extract_currency_value_delta(obj, &coin.currency_id).unwrap_or(0.0);
+        if native_currency_value.abs() >= f64::EPSILON {
+            return native_currency_value * SATOSHIS_PER_COIN;
+        }
+
+        if obj
+            .get("spending")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            let scope_address = obj.get("address").and_then(Value::as_str).unwrap_or("");
+            let sent_total = extract_sent_output_total(obj, &coin.currency_id, scope_address);
+            if sent_total.abs() >= f64::EPSILON {
+                return -sent_total * SATOSHIS_PER_COIN;
+            }
+        }
+
+        return 0.0;
     }
 
+    let currency_value = extract_currency_value_delta(obj, &coin.currency_id).unwrap_or(0.0);
+    if currency_value.abs() >= f64::EPSILON {
+        return currency_value;
+    }
+
+    if obj
+        .get("spending")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        let scope_address = obj.get("address").and_then(Value::as_str).unwrap_or("");
+        let sent_total = extract_sent_output_total(obj, &coin.currency_id, scope_address);
+        if sent_total.abs() >= f64::EPSILON {
+            return -sent_total;
+        }
+    }
+
+    0.0
+}
+
+fn extract_currency_value_delta(
+    obj: &serde_json::Map<String, Value>,
+    currency_id: &str,
+) -> Option<f64> {
     obj.get("currencyvalues")
-        .and_then(|cv| cv.get(&coin.currency_id))
+        .and_then(|value| value.get(currency_id))
         .and_then(value_as_f64)
-        .unwrap_or(0.0)
+}
+
+fn extract_sent_output_total(
+    obj: &serde_json::Map<String, Value>,
+    currency_id: &str,
+    scope_address: &str,
+) -> f64 {
+    let Some(outputs) = obj
+        .get("sent")
+        .and_then(|value| value.get("outputs"))
+        .and_then(Value::as_array)
+    else {
+        return 0.0;
+    };
+
+    let mut total = 0.0;
+    for output in outputs {
+        let Some(output_object) = output.as_object() else {
+            continue;
+        };
+
+        if !scope_address.trim().is_empty()
+            && output_addresses_contains(output_object.get("addresses"), scope_address)
+        {
+            continue;
+        }
+
+        let amount = output_object
+            .get("amounts")
+            .and_then(|amounts| amounts.get(currency_id))
+            .and_then(value_as_f64)
+            .unwrap_or(0.0);
+        total += amount;
+    }
+
+    total
+}
+
+fn output_addresses_contains(addresses: Option<&Value>, candidate: &str) -> bool {
+    let normalized = candidate.trim();
+    if normalized.is_empty() {
+        return false;
+    }
+
+    match addresses {
+        Some(Value::String(address)) => address.eq_ignore_ascii_case(normalized),
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|address| address.eq_ignore_ascii_case(normalized)),
+        _ => false,
+    }
 }
 
 fn value_as_f64(v: &Value) -> Option<f64> {
@@ -873,5 +969,60 @@ mod tests {
 
         let delta = extract_delta(map, &coin);
         assert!((delta - (-0.1003001f64)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn extract_delta_uses_currencyvalues_for_native_when_satoshis_missing() {
+        let coin = VrpcCoinContext {
+            currency_id: "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV".to_string(),
+            system_id: "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV".to_string(),
+            decimals: 8,
+            seconds_per_block: 60,
+        };
+        let obj = serde_json::json!({
+            "satoshis": 0,
+            "currencyvalues": {
+                "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV": 0.5
+            }
+        });
+        let map = obj.as_object().expect("delta object");
+
+        let delta = extract_delta(map, &coin);
+        assert_eq!(delta, 50_000_000.0);
+    }
+
+    #[test]
+    fn extract_delta_uses_sent_outputs_for_native_identity_spends() {
+        let coin = VrpcCoinContext {
+            currency_id: "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV".to_string(),
+            system_id: "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV".to_string(),
+            decimals: 8,
+            seconds_per_block: 60,
+        };
+        let obj = serde_json::json!({
+            "address": "iIdentityAddress",
+            "satoshis": 0,
+            "spending": true,
+            "sent": {
+                "outputs": [
+                    {
+                        "addresses": "RRecipientAddress",
+                        "amounts": {
+                            "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV": 0.01001903
+                        }
+                    },
+                    {
+                        "addresses": "iIdentityAddress",
+                        "amounts": {
+                            "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV": 0.0
+                        }
+                    }
+                ]
+            }
+        });
+        let map = obj.as_object().expect("delta object");
+
+        let delta = extract_delta(map, &coin);
+        assert_eq!(delta, -1_001_903.0);
     }
 }

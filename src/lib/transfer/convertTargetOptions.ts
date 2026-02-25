@@ -265,7 +265,11 @@ export function buildReceiveAssetSections(input: TargetBuildInput): ReceiveAsset
 
   const groupedByCanonicalKey = new Map<string, ReceiveAssetOption[]>();
   for (const option of ungroupedOptions) {
-    const canonicalKey = getCanonicalAssetKey(option.destinationId, option.ticker, option.label);
+    const canonicalKey = getCanonicalAssetKey(
+      option.destinationId,
+      option.ticker,
+      option.fullyqualifiedname || option.label
+    );
     option.canonicalKey = canonicalKey;
     const current = groupedByCanonicalKey.get(canonicalKey) ?? [];
     current.push(option);
@@ -293,8 +297,10 @@ export function buildReceiveAssetSections(input: TargetBuildInput): ReceiveAsset
       sortedNetworkOptions.flatMap((option) => option.exportOptions)
     );
     const iconId =
-      sortedNetworkOptions.find((option) => !option.destinationId.startsWith('0x'))?.destinationId ??
+      displayInfo.ticker.trim() ||
+      sortedNetworkOptions.find((option) => !option.destinationId.startsWith('0x'))?.destinationId ||
       sortedNetworkOptions[0].destinationId;
+    const groupedFqn = displayInfo.ticker.trim() || displayInfo.name;
 
     mergedOptions.push({
       id: canonicalKey,
@@ -302,7 +308,7 @@ export function buildReceiveAssetSections(input: TargetBuildInput): ReceiveAsset
       label: displayInfo.name,
       ticker: displayInfo.ticker,
       subtitle: undefined,
-      fullyqualifiedname: displayInfo.name,
+      fullyqualifiedname: groupedFqn,
       destinationId: iconId,
       canonicalKey,
       hasOnChainPath: sortedNetworkOptions.some((option) => option.hasOnChainPath),
@@ -392,7 +398,11 @@ export function filterReceiveAssetSectionsByQuery(
 }
 
 function toReceiveAssetOption(entry: DestinationEntry): ReceiveAssetOption {
-  const canonicalKey = getCanonicalAssetKey(entry.destinationId, entry.ticker, entry.label);
+  const canonicalKey = getCanonicalAssetKey(
+    entry.destinationId,
+    entry.ticker,
+    entry.fullyqualifiedname || entry.label
+  );
   return {
     id: entry.destinationId,
     key: normalizeCase(entry.destinationId),
@@ -469,7 +479,7 @@ function getCanonicalAssetKey(currencyId: string, ticker = '', name = ''): strin
     return CANONICAL_ASSET_MAP[currencyId];
   }
 
-  const tickerUpper = ticker.toUpperCase();
+  const tickerUpper = ticker.trim().toUpperCase();
   if (tickerUpper.endsWith('.VETH')) {
     return tickerUpper.replace('.VETH', '');
   }
@@ -480,11 +490,17 @@ function getCanonicalAssetKey(currencyId: string, ticker = '', name = ''): strin
     return tickerUpper.replace(/\s*\[ERC20\]\s*/gi, '').trim();
   }
 
-  const nameUpper = name.toUpperCase();
+  const nameUpper = name.trim().toUpperCase();
   const onVerusMatch = nameUpper.match(/^(.+?)\s+ON\s+VERUS$/);
   if (onVerusMatch) return onVerusMatch[1].trim().toUpperCase();
   const onEthMatch = nameUpper.match(/^(.+?)\s+ON\s+ETHEREUM$/);
   if (onEthMatch) return onEthMatch[1].trim().toUpperCase();
+
+  // Distinguish bridge currencies that resolve to generic "Bridge" tickers
+  // so unrelated Bridge.* assets do not collapse into one grouped entry.
+  if (tickerUpper === 'BRIDGE' && nameUpper.startsWith('BRIDGE.')) {
+    return nameUpper === 'BRIDGE.VETH' ? 'BRIDGE' : nameUpper;
+  }
 
   return tickerUpper || currencyId.toUpperCase();
 }

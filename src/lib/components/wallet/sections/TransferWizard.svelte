@@ -890,6 +890,7 @@
   const receiveUsdRate = $derived(
     getUsdRateForCoinIds([
       selectedReceiveAssetOption?.destinationId,
+      selectedReceiveAssetPresentation?.id,
       selectedReceiveAssetPresentation?.currencyId,
       selectedReceiveAssetPresentation?.mappedTo
     ])
@@ -1058,6 +1059,13 @@
       if (!bridgeFeeParityEligible || !bridgeFeeEstimateSecondary) return true;
       if (conversionEnabled && conversionFeeInfo) return true;
       return bridgeFeeEstimateSecondary !== reviewTotalFeesFiat;
+    })()
+  );
+  const hideBridgeFeeEstimateFiatBreakdown = $derived(
+    (() => {
+      if (bridgeFeeInsufficient) return false;
+      if (!conversionEnabled || !conversionFeeInfo) return false;
+      return showReviewTotalFeesFiat;
     })()
   );
   const estimatedArrivalInfo = $derived(
@@ -3251,7 +3259,8 @@
   function selectReceiveNetworkOption(optionId: string) {
     const selected = pendingGroupedReceiveOption?.networkOptions?.find((option) => option.id === optionId);
     if (!selected) return;
-    beginReceiveSelection(selected);
+    const selectedExportSystemId = selected.hasOnChainPath ? null : (selected.exportOptions[0]?.exportTo ?? null);
+    finalizeReceiveSelection(selected, selectedExportSystemId);
   }
 
   function selectExportOption(exportSystemId: string) {
@@ -3845,7 +3854,7 @@
                             ? bridgeFeeEstimateValue
                             : i18n.t('wallet.transfer.bridgeFeeUnavailable')}
                         </p>
-                        {#if bridgeFeeParityEligible && bridgeFeeEstimateSecondary}
+                        {#if bridgeFeeParityEligible && bridgeFeeEstimateSecondary && !hideBridgeFeeEstimateFiatBreakdown}
                           <p
                             class={`mt-0.5 text-[11px] ${bridgeFeeInsufficient ? 'text-destructive' : 'text-muted-foreground'} tabular-nums`}
                           >
@@ -4252,7 +4261,13 @@
         <ScrollArea.Viewport class="h-full pr-1">
           <div class="space-y-2 pb-1">
             {#each pendingGroupedReceiveOption.networkOptions ?? [] as option}
-              {@const optionExportSystemId = option.exportOptions[0]?.exportTo ?? null}
+              {@const optionExportSystemId = option.hasOnChainPath ? null : (option.exportOptions[0]?.exportTo ?? null)}
+              {@const optionNetworkIconId = networkIconCoinIdForExportOption(
+                optionExportSystemId ?? selectedSourceSystemId,
+                optionExportSystemId
+                  ? (option.exportOptions[0]?.exportToName ?? optionExportSystemId)
+                  : sourceNetworkDisplayName
+              )}
               {@const optionDisabled = isBridgeFeeSelectionDisabled(optionExportSystemId)}
               {@const optionBridgeFeeLine = bridgeFeeLineForExportOption(optionExportSystemId)}
               {@const optionBridgeFeeMeta = bridgeFeeMetaLineForExportOption(optionExportSystemId)}
@@ -4261,7 +4276,7 @@
                 class="group flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
                   {optionDisabled ? 'cursor-not-allowed opacity-60' : ''}
-                  {selectedReceiveAssetId === option.id && (selectedExportSystemId === null || selectedExportSystemId === option.exportOptions[0]?.exportTo)
+                  {selectedReceiveAssetId === option.id && selectedExportSystemId === optionExportSystemId
                     ? 'bg-primary/14 hover:bg-primary/20 dark:bg-primary/28 dark:hover:bg-primary/36'
                     : 'bg-muted/65 hover:bg-muted/70 dark:bg-muted/55 dark:hover:bg-muted/65'}"
                 disabled={optionDisabled}
@@ -4272,7 +4287,7 @@
               >
                 <div class="flex min-w-0 items-center gap-2">
                   <CoinIcon
-                    coinId={option.exportOptions[0]?.exportTo ?? option.destinationId}
+                    coinId={optionNetworkIconId}
                     coinName={networkLabelForGroupedOption(option)}
                     size={18}
                     decorative={true}

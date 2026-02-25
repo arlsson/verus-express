@@ -2,6 +2,7 @@ import type { WalletChannelsState } from '$lib/stores/walletChannels.js';
 import type { CoinRatesSnapshot } from '$lib/stores/rates.js';
 import type { BalanceResult, CoinDefinition, WalletNetwork } from '$lib/types/wallet.js';
 import { resolveCoinPresentation } from '$lib/coins/presentation.js';
+import { parseVrpcChannelId } from '$lib/utils/channelId.js';
 
 export const OVERVIEW_UNAVAILABLE_DISPLAY = '—';
 export const OVERVIEW_FIAT_CODE = 'USD';
@@ -40,6 +41,7 @@ export interface BuildWalletOverviewParams {
   coins: CoinDefinition[];
   walletChannels: WalletChannelsState;
   balances: Record<string, Record<string, BalanceResult>>;
+  scopeChannelIdsByCoinId?: Record<string, string[]>;
   rates: Record<string, CoinRatesSnapshot>;
   intlLocale: string;
   network?: WalletNetwork;
@@ -126,6 +128,69 @@ function getChangeDirection(changePct: number | null): WalletOverviewRowViewMode
   return 'down';
 }
 
+function equalsIgnoreCase(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+function resolveCoinBalanceSnapshot(
+  coin: CoinDefinition,
+  walletChannels: WalletChannelsState,
+  balances: Record<string, Record<string, BalanceResult>>,
+  scopeChannelIdsByCoinId?: Record<string, string[]>
+): { hasSnapshot: boolean; amountValue: number } {
+  if (coin.compatibleChannels.includes('vrpc')) {
+    const scopedChannelIds = scopeChannelIdsByCoinId?.[coin.id] ?? [];
+    if (scopedChannelIds.length > 0) {
+      let hasSnapshot = false;
+      let amountValue = 0;
+
+      for (const channelId of scopedChannelIds) {
+        const snapshot = balances[channelId]?.[coin.id];
+        if (snapshot === undefined) continue;
+
+        hasSnapshot = true;
+        const amount = toFiniteNumber(snapshot.total);
+        if (amount !== null) amountValue += amount;
+      }
+
+      if (hasSnapshot) {
+        return { hasSnapshot, amountValue };
+      }
+    }
+
+    let hasSnapshot = false;
+    let amountValue = 0;
+
+    for (const [channelId, channelBalances] of Object.entries(balances)) {
+      if (!channelId.startsWith('vrpc.')) continue;
+      const parsed = parseVrpcChannelId(channelId);
+      if (!parsed || !equalsIgnoreCase(parsed.systemId, coin.systemId)) continue;
+
+      const snapshot = channelBalances?.[coin.id];
+      if (snapshot === undefined) continue;
+
+      hasSnapshot = true;
+      const amount = toFiniteNumber(snapshot.total);
+      if (amount !== null) amountValue += amount;
+    }
+
+    if (hasSnapshot) {
+      return { hasSnapshot, amountValue };
+    }
+  }
+
+  const channelId = walletChannels.byCoinId[coin.id];
+  const snapshot = channelId ? balances[channelId]?.[coin.id] : undefined;
+  if (snapshot === undefined) {
+    return { hasSnapshot: false, amountValue: 0 };
+  }
+
+  return {
+    hasSnapshot: true,
+    amountValue: toFiniteNumber(snapshot.total) ?? 0
+  };
+}
+
 function formatPercentChange(changePct: number, intlLocale: string): string {
   const formatter = new Intl.NumberFormat(intlLocale, {
     minimumFractionDigits: 2,
@@ -183,6 +248,7 @@ export function buildWalletOverviewViewModel({
   coins,
   walletChannels,
   balances,
+  scopeChannelIdsByCoinId,
   rates,
   intlLocale,
   network
@@ -191,22 +257,22 @@ export function buildWalletOverviewViewModel({
   const primaryPresentation = primaryCoin ? resolveCoinPresentation(primaryCoin) : null;
   const fallbackPrimaryTicker = network === 'testnet' ? 'VRSCTEST' : 'VRSC';
   const primaryTicker = primaryPresentation?.displayTicker ?? fallbackPrimaryTicker;
-  const primaryChannelId =
-    (primaryCoin ? walletChannels.byCoinId[primaryCoin.id] : null) ?? walletChannels.primaryChannelId;
-  const primarySnapshot =
-    primaryCoin && primaryChannelId ? balances[primaryChannelId]?.[primaryCoin.id] : undefined;
-  const hasPrimarySnapshot = primarySnapshot !== undefined;
-  const primaryTotal = hasPrimarySnapshot ? toFiniteNumber(primarySnapshot?.total) : null;
+  const primaryBalanceSnapshot = primaryCoin
+    ? resolveCoinBalanceSnapshot(primaryCoin, walletChannels, balances, scopeChannelIdsByCoinId)
+    : null;
+  const hasPrimarySnapshot = primaryBalanceSnapshot?.hasSnapshot ?? false;
+  const primaryTotal = hasPrimarySnapshot ? (primaryBalanceSnapshot?.amountValue ?? 0) : null;
 
   const rows = coins.map<WalletOverviewRowViewModel>((coin) => {
     const coinPresentation = resolveCoinPresentation(coin);
     const displayTicker = coinPresentation.displayTicker;
     const displayName = coinPresentation.displayName;
-    const channelId = walletChannels.byCoinId[coin.id];
-    const balanceSnapshot = channelId ? balances[channelId]?.[coin.id] : undefined;
-    const hasSnapshot = balanceSnapshot !== undefined;
-    const totalAmount = hasSnapshot ? toFiniteNumber(balanceSnapshot?.total) : null;
-    const amountValue = totalAmount ?? 0;
+    const { hasSnapshot, amountValue } = resolveCoinBalanceSnapshot(
+      coin,
+      walletChannels,
+      balances,
+      scopeChannelIdsByCoinId
+    );
     const hasBalance = hasSnapshot && amountValue > 0;
     const rateSnapshot = rates[coin.id];
     const usdRate = getUsdRate(rateSnapshot?.rates);

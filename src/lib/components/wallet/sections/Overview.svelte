@@ -85,6 +85,10 @@
   let privateScopes = $state<CoinScope[]>([]);
   let dlightStatusRequestSequence = 0;
   let privateScopesRequestSequence = 0;
+  let transparentScopeChannelIdsByCoinId = $state<Record<string, string[]>>({});
+  let loadedTransparentAggregateByChannel = $state<Record<string, true>>({});
+  const inFlightTransparentAggregateByChannel = new Set<string>();
+  const inFlightTransparentScopeCoins = new Set<string>();
 
   type WalletEntryRow = WalletOverviewRowViewModel & {
     walletEntryKind: WalletEntryKind;
@@ -175,11 +179,19 @@
     void loadPrivateScopes(baseCoin.id);
   });
 
+  $effect(() => {
+    const vrpcCoins = coins.filter((coin) => coin.compatibleChannels.includes('vrpc'));
+    for (const coin of vrpcCoins) {
+      void loadTransparentAggregateBalances(coin);
+    }
+  });
+
   const liveOverview = $derived(
     buildWalletOverviewViewModel({
       coins,
       walletChannels,
       balances,
+      scopeChannelIdsByCoinId: transparentScopeChannelIdsByCoinId,
       rates,
       intlLocale: i18n.intlLocale,
       network: walletData.network
@@ -410,6 +422,73 @@
     } catch {
       if (requestSequence !== privateScopesRequestSequence) return;
       privateScopes = [];
+    }
+  }
+
+  async function fetchTransparentAggregateBalance(scope: CoinScope, coinId: string): Promise<void> {
+    const channelKey = `${scope.channelId}::${coinId}`;
+    if (inFlightTransparentAggregateByChannel.has(channelKey)) return;
+    inFlightTransparentAggregateByChannel.add(channelKey);
+
+    try {
+      const balance = await walletService.getBalances(scope.channelId, coinId);
+      balanceStore.update((state) => ({
+        ...state,
+        [scope.channelId]: {
+          ...(state[scope.channelId] ?? {}),
+          [coinId]: balance
+        }
+      }));
+      loadedTransparentAggregateByChannel = {
+        ...loadedTransparentAggregateByChannel,
+        [channelKey]: true
+      };
+    } catch {
+      // Best effort preload for overview totals.
+    } finally {
+      inFlightTransparentAggregateByChannel.delete(channelKey);
+    }
+  }
+
+  async function loadTransparentAggregateBalances(coin: CoinDefinition): Promise<void> {
+    if (!coin.compatibleChannels.includes('vrpc')) return;
+    if (inFlightTransparentScopeCoins.has(coin.id)) return;
+    inFlightTransparentScopeCoins.add(coin.id);
+
+    try {
+      const scopeResult = await walletService.getCoinScopes(coin.id);
+      const scopes = scopeResult.scopes.filter((scope) => scope.scopeKind === 'transparent');
+      transparentScopeChannelIdsByCoinId = {
+        ...transparentScopeChannelIdsByCoinId,
+        [coin.id]: Array.from(new Set(scopes.map((scope) => scope.channelId)))
+      };
+      const pendingScopes = scopes.filter((scope) => {
+        const channelKey = `${scope.channelId}::${coin.id}`;
+        return (
+          !loadedTransparentAggregateByChannel[channelKey] &&
+          !inFlightTransparentAggregateByChannel.has(channelKey)
+        );
+      });
+
+      if (pendingScopes.length === 0) return;
+
+      const concurrency = Math.min(3, pendingScopes.length);
+      let cursor = 0;
+      const workers = Array.from({ length: concurrency }, async () => {
+        while (cursor < pendingScopes.length) {
+          const next = cursor;
+          cursor += 1;
+          const scope = pendingScopes[next];
+          if (!scope) return;
+          await fetchTransparentAggregateBalance(scope, coin.id);
+        }
+      });
+
+      await Promise.all(workers);
+    } catch {
+      // Best effort preload for overview totals.
+    } finally {
+      inFlightTransparentScopeCoins.delete(coin.id);
     }
   }
 </script>

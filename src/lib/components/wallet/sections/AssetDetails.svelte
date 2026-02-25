@@ -18,6 +18,7 @@
   import { Spinner } from '$lib/components/ui/spinner';
   import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
   import PrivateVerusWordmark from '$lib/components/wallet/PrivateVerusWordmark.svelte';
+  import { get } from 'svelte/store';
   import { i18nStore } from '$lib/i18n';
   import { resolveCoinPresentation } from '$lib/coins/presentation.js';
   import { coinsStore } from '$lib/stores/coins.js';
@@ -118,7 +119,7 @@
   let spendRateBlocksPerSec = $state<number | null>(null);
   let spendRateSample = $state<{ scannedHeight: number; updatedAt: number } | null>(null);
 
-  let loadedBalanceByChannel = $state<Record<string, boolean>>({});
+  let loadedBalanceByScopeKey = $state<Record<string, boolean>>({});
   let txPagesByScopeKey = $state<Record<string, ScopeTransactionPageState>>({});
   let txScrollElement = $state<HTMLElement | null>(null);
   let canScrollTxDown = $state(false);
@@ -155,6 +156,9 @@
   const selectedScope = $derived(
     allScopes.find((scope) => scope.address === selectedAddress && scope.systemId === selectedSystem) ??
       null
+  );
+  const selectedScopeDisplayAddress = $derived(
+    selectedScope ? preferredScopeDisplayValue(selectedScope) : selectedAddress
   );
   const isDlightShieldedScope = $derived(
     selectedScope?.scopeKind === 'shielded' &&
@@ -243,6 +247,32 @@
 
   const selectedCryptoAmountDisplay = $derived(
     formatCryptoValue(selectedAmountValue, coin?.decimals ?? 8)
+  );
+  const totalAmountValue = $derived(
+    (() => {
+      if (!coin) return 0;
+
+      let total = 0;
+      const seenScopeChannels = new Set<string>();
+      for (const scope of allScopes) {
+        if (seenScopeChannels.has(scope.channelId)) continue;
+        seenScopeChannels.add(scope.channelId);
+
+        const amount = toFiniteNumber(getBalance(scope.channelId, coin.id, balances)?.total);
+        if (amount === null) continue;
+        total += amount;
+      }
+
+      return total;
+    })()
+  );
+  const totalFiatDisplay = $derived(
+    selectedUsdRate === null
+      ? '—'
+      : formatUsdAmount(totalAmountValue * selectedUsdRate, i18n.intlLocale)
+  );
+  const totalCryptoAmountDisplay = $derived(
+    formatCryptoValue(totalAmountValue, coin?.decimals ?? 8)
   );
 
   const selectedSyncPercent = $derived(
@@ -402,10 +432,11 @@
     const currentCoin = coin;
     if (!activeScope || !currentCoin) return;
 
+    const cachedBalance = getBalance(activeScope.channelId, currentCoin.id, get(balanceStore));
     const requestKey = `${activeScope.channelId}::${currentCoin.id}`;
     selectedBalanceRequestSequence += 1;
     const requestSequence = selectedBalanceRequestSequence;
-    loadingSelectedBalance = true;
+    loadingSelectedBalance = !cachedBalance;
 
     void (async () => {
       await fetchBalanceForScope(activeScope, currentCoin.id);
@@ -473,7 +504,7 @@
 
   $effect(() => {
     const currentCoin = coin;
-    if (!showScopeSheet || !currentCoin || allScopes.length === 0) return;
+    if (!currentCoin || allScopes.length === 0) return;
     void fetchSiblingBalances(allScopes, currentCoin.id);
   });
 
@@ -541,6 +572,7 @@
   async function fetchBalanceForScope(scope: CoinScope, currentCoinId: string): Promise<void> {
     if (inFlightBalanceChannels.has(scope.channelId)) return;
     inFlightBalanceChannels.add(scope.channelId);
+    const loadKey = getScopeBalanceLoadKey(scope.channelId, currentCoinId);
 
     try {
       const balance = await walletService.getBalances(scope.channelId, currentCoinId);
@@ -551,9 +583,9 @@
           [currentCoinId]: balance
         }
       }));
-      loadedBalanceByChannel = {
-        ...loadedBalanceByChannel,
-        [scope.channelId]: true
+      loadedBalanceByScopeKey = {
+        ...loadedBalanceByScopeKey,
+        [loadKey]: true
       };
     } catch {
       // Balance refresh is best effort for sibling scopes.
@@ -564,7 +596,9 @@
 
   async function fetchSiblingBalances(scopes: CoinScope[], currentCoinId: string): Promise<void> {
     const pendingScopes = scopes.filter(
-      (scope) => !loadedBalanceByChannel[scope.channelId] && !inFlightBalanceChannels.has(scope.channelId)
+      (scope) =>
+        !loadedBalanceByScopeKey[getScopeBalanceLoadKey(scope.channelId, currentCoinId)] &&
+        !inFlightBalanceChannels.has(scope.channelId)
     );
     if (pendingScopes.length === 0) return;
 
@@ -585,6 +619,10 @@
   }
 
   function getScopePageKey(channelId: string, currentCoinId: string): string {
+    return `${channelId}::${currentCoinId}`;
+  }
+
+  function getScopeBalanceLoadKey(channelId: string, currentCoinId: string): string {
     return `${channelId}::${currentCoinId}`;
   }
 
@@ -932,6 +970,12 @@
     return displayName || '—';
   }
 
+  function preferredScopeDisplayValue(scope: CoinScope): string {
+    const label = scope.addressLabel.trim();
+    if (label.endsWith('@')) return label;
+    return scope.address;
+  }
+
   function scopeAmountValue(scope: CoinScope): number | null {
     if (!coin) return null;
     return toFiniteNumber(getBalance(scope.channelId, coin.id, balances)?.total);
@@ -1029,7 +1073,7 @@
               </div>
             </div>
 
-            <div class="shrink-0 text-right">
+            <div class="relative shrink-0 text-right">
               {#if showBalanceSyncProgress}
                 <p class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
                   <span class="inline-flex items-center justify-end gap-2">
@@ -1044,12 +1088,15 @@
                 </p>
               {:else}
                 <p class="text-foreground text-2xl leading-tight font-semibold tracking-tight">
-                  {selectedCryptoAmountDisplay}
+                  {totalCryptoAmountDisplay}
                 </p>
-                <p class="text-muted-foreground mt-1 text-sm leading-tight">{selectedFiatDisplay}</p>
+                <p class="text-muted-foreground mt-1 text-sm leading-tight">{totalFiatDisplay}</p>
               {/if}
               {#if loadingSelectedBalance}
-                <p class="text-muted-foreground mt-1 text-[11px]">{i18n.t('common.loading')}</p>
+                <div class="pointer-events-none absolute right-0 top-full mt-1 flex items-center justify-end">
+                  <Skeleton class="h-[11px] w-14 rounded-sm" />
+                  <span class="sr-only">{i18n.t('common.loading')}</span>
+                </div>
               {/if}
             </div>
           </div>
@@ -1058,12 +1105,12 @@
             {#if useStaticAddressRow}
               <div class="flex h-[52px] min-w-0 flex-1 items-center justify-between gap-2 rounded-md bg-muted/55 pl-3 pr-1.5">
                 <p class="identifier-text truncate text-sm font-medium text-foreground">
-                  {truncateMiddle(selectedAddress || '—', 10, 10)}
+                  {truncateMiddle(selectedScopeDisplayAddress || '—', 10, 10)}
                 </p>
                 <button
                   type="button"
                   class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 -mr-0.5 h-8 w-8 shrink-0 rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2"
-                  onclick={() => copyAddress(selectedAddress, 'selected-static')}
+                  onclick={() => copyAddress(selectedScopeDisplayAddress, 'selected-static')}
                   title={i18n.t('wallet.receive.copy')}
                   aria-label={i18n.t('wallet.receive.copy')}
                 >
@@ -1085,7 +1132,7 @@
                 >
                   <div class="min-w-0 flex-1 text-left">
                     <p class="identifier-text truncate text-sm font-medium text-primary-foreground">
-                      {truncateMiddle(selectedAddress || '—', 10, 10)}
+                      {truncateMiddle(selectedScopeDisplayAddress || '—', 10, 10)}
                       <span class="ml-1.5 font-normal text-primary-foreground/80">• {selectedNetworkDisplay}</span>
                     </p>
                     <p class="mt-0.5 truncate text-xs text-primary-foreground/80">
@@ -1099,7 +1146,7 @@
                 <button
                   type="button"
                   class="text-primary-foreground/75 hover:text-primary-foreground focus-visible:ring-primary-foreground/60 -mr-0.5 h-8 w-8 shrink-0 rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2"
-                  onclick={() => copyAddress(selectedAddress, 'selected-interactive')}
+                  onclick={() => copyAddress(selectedScopeDisplayAddress, 'selected-interactive')}
                   title={i18n.t('wallet.receive.copy')}
                   aria-label={i18n.t('wallet.receive.copy')}
                 >
@@ -1322,7 +1369,7 @@
                   <button
                     type="button"
                     class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 -mr-0.5 h-8 w-8 shrink-0 rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2"
-                    onclick={() => copyAddress(scopeOption.address, `scope:${scopeOption.channelId}`)}
+                    onclick={() => copyAddress(preferredScopeDisplayValue(scopeOption), `scope:${scopeOption.channelId}`)}
                     title={i18n.t('wallet.receive.copy')}
                     aria-label={i18n.t('wallet.receive.copy')}
                   >
