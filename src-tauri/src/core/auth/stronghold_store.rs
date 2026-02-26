@@ -186,6 +186,19 @@ impl StrongholdStore {
         account_dir.join("dlight_seed.snapshot.stronghold")
     }
 
+    #[cfg(debug_assertions)]
+    fn read_snapshot_encrypt_work_factor(path: &std::path::Path) -> Option<u8> {
+        // Snapshot format stores age header as plaintext after magic/version bytes.
+        let bytes = std::fs::read(path).ok()?;
+        let scan_len = bytes.len().min(256);
+        let header = String::from_utf8_lossy(&bytes[..scan_len]);
+        let marker = "-> scrypt ";
+        let marker_offset = header.find(marker)?;
+        let line = header[marker_offset + marker.len()..].lines().next()?;
+        let (_, factor) = line.rsplit_once(' ')?;
+        factor.trim().parse::<u8>().ok()
+    }
+
     async fn load_watched_vrpc_addresses_snapshot(
         &self,
         account_id: &str,
@@ -489,6 +502,8 @@ impl StrongholdStore {
         let password_hash = Self::hash_password(password);
         let keyprovider = Self::keyprovider_from_hash(&password_hash)?;
         let snapshot_path = SnapshotPath::from_path(&path);
+        #[cfg(debug_assertions)]
+        let snapshot_work_factor_before_unlock = Self::read_snapshot_encrypt_work_factor(&path);
 
         let stronghold = Stronghold::default();
         let client = stronghold
@@ -508,11 +523,20 @@ impl StrongholdStore {
         let seed = String::from_utf8(bytes).map_err(|_| WalletError::OperationFailed)?;
 
         #[cfg(debug_assertions)]
-        {
-            // Re-commit after load so existing debug snapshots migrate to the current
-            // (lower) debug work factor for faster subsequent unlocks.
-            if let Err(e) = stronghold.commit_with_keyprovider(&snapshot_path, &keyprovider) {
-                println!("[AUTH] Debug snapshot re-commit failed: {}", e);
+        if let Some(existing_work_factor) = snapshot_work_factor_before_unlock {
+            let target_work_factor = iota_stronghold::engine::snapshot::get_encrypt_work_factor();
+            if existing_work_factor > target_work_factor {
+                println!(
+                    "[AUTH] Migrating snapshot work factor for account {} from {} to {}",
+                    account_id, existing_work_factor, target_work_factor
+                );
+                if let Err(error) = stronghold.commit_with_keyprovider(&snapshot_path, &keyprovider)
+                {
+                    println!(
+                        "[AUTH] Snapshot work-factor migration commit failed for account {}: {}",
+                        account_id, error
+                    );
+                }
             }
         }
 

@@ -24,6 +24,11 @@ use tauri::Manager;
 use tokio::sync::Mutex;
 
 #[cfg(debug_assertions)]
+const DEBUG_STRONGHOLD_WORK_FACTOR_ENV: &str = "VERUS_STRONGHOLD_ENCRYPT_WORK_FACTOR";
+#[cfg(debug_assertions)]
+const DEBUG_STRONGHOLD_ENCRYPT_WORK_FACTOR: u8 = 15;
+
+#[cfg(debug_assertions)]
 fn load_runtime_env_files() {
     // Load local env files for desktop dev/runtime convenience without committing secrets.
     // Existing process environment variables keep precedence.
@@ -52,9 +57,42 @@ fn load_runtime_env_files() {
 #[cfg(not(debug_assertions))]
 fn load_runtime_env_files() {}
 
+#[cfg(debug_assertions)]
+fn configure_stronghold_encrypt_work_factor() {
+    let configured = std::env::var(DEBUG_STRONGHOLD_WORK_FACTOR_ENV)
+        .ok()
+        .and_then(|value| value.trim().parse::<u8>().ok())
+        .unwrap_or(DEBUG_STRONGHOLD_ENCRYPT_WORK_FACTOR);
+
+    match iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(configured) {
+        Ok(()) => {
+            println!(
+                "[APP] Stronghold encrypt work factor set to {} (debug build)",
+                configured
+            );
+            if configured < 15 {
+                eprintln!(
+                    "[APP] Warning: Stronghold work factor {} is below secure floor (15)",
+                    configured
+                );
+            }
+        }
+        Err(error) => {
+            eprintln!(
+                "[APP] Invalid Stronghold work factor {} from {}: {:?}",
+                configured, DEBUG_STRONGHOLD_WORK_FACTOR_ENV, error
+            );
+        }
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn configure_stronghold_encrypt_work_factor() {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     load_runtime_env_files();
+    configure_stronghold_encrypt_work_factor();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -69,18 +107,6 @@ pub fn run() {
             .build(),
         )
         .setup(|app| {
-            #[cfg(debug_assertions)]
-            {
-                // Speed up snapshot encrypt/decrypt during local development.
-                // Do not use reduced work factors in production builds.
-                match iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0) {
-                    Ok(()) => println!("[APP] Stronghold debug work factor set to 0"),
-                    Err(e) => {
-                        eprintln!("[APP] Failed to set Stronghold debug work factor: {:?}", e)
-                    }
-                }
-            }
-
             // Initialize wallet manager with app data dir (unified with Stronghold storage)
             let app_dir = app.path().app_data_dir().map_err(|e| {
                 eprintln!("[APP] Failed to get app data directory: {:?}", e);

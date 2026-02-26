@@ -16,6 +16,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
+  import { Spinner } from '$lib/components/ui/spinner';
   import InlineTextActionButton from '$lib/components/common/InlineTextActionButton.svelte';
   import StandardRightSheet from '$lib/components/common/StandardRightSheet.svelte';
   import { i18nStore, networkLocaleKey } from '$lib/i18n';
@@ -291,7 +292,12 @@
               onclick={handleUnlock}
               disabled={!effectiveAccountId || !password.trim() || isLoading}
             >
-              {isLoading ? i18n.t('unlock.button.unlocking') : i18n.t('unlock.button.unlock')}
+              <span class="inline-flex items-center gap-2">
+                {#if isLoading}
+                  <Spinner class="h-4 w-4" />
+                {/if}
+                <span>{isLoading ? i18n.t('unlock.button.unlocking') : i18n.t('unlock.button.unlock')}</span>
+              </span>
             </Button>
 
             <Button
