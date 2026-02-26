@@ -44,8 +44,9 @@ pub use vrpc_transfer::{VrpcTransferPreflightParams, VrpcTransferPreflightResult
 pub use wallet::{
     AccountRecord, ActiveAssetsState, ActiveWalletResponse, AddressResponse, CoinScope,
     CoinScopesResult, CreateWalletRequest, CreateWalletResult, DlightProverFileStatusResult,
-    DlightProverStatusResult, DlightRuntimeStatusResult, DlightSeedStatusResult,
+    DlightProverStatusResult, DlightRecoverySecretKind, DlightRuntimeStatusResult,
+    DlightSeedStatusResult,
     GenerateMnemonicRequest, ImportWalletTextRequest, MnemonicResult, ScopeKind,
-    SetupDlightSeedRequest, SetupDlightSeedResult, WalletListItem, WalletMetadata,
-    WalletSecretKind,
+    SetupDlightSeedRequest, SetupDlightSeedResult, RecoverySecretKind, WalletListItem,
+    WalletMetadata, WalletRecoverySecretsResult, WalletSecretKind,
 };

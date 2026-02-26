@@ -24,15 +24,15 @@
   import { ratesStore } from '$lib/stores/rates.js';
   import { walletBootstrapStore } from '$lib/stores/walletBootstrap.js';
   import { walletChannelsStore } from '$lib/stores/walletChannels.js';
+  import { settingsStore } from '$lib/stores/settings.js';
   import { i18nStore } from '$lib/i18n';
   import {
     buildWalletOverviewViewModel,
     formatCryptoAmount,
-    formatUsdAmount,
-    formatUsdAmountParts,
     OVERVIEW_UNAVAILABLE_DISPLAY,
     type WalletOverviewRowViewModel
   } from '$lib/utils/walletOverview.js';
+  import { formatFiatAmount, formatFiatAmountParts, getRateForCurrency } from '$lib/utils/fiatDisplay.js';
   import CoinIcon from '$lib/components/wallet/CoinIcon.svelte';
   import PrivateVerusWordmark from '$lib/components/wallet/PrivateVerusWordmark.svelte';
   import AddAssetSheet from '$lib/components/wallet/AddAssetSheet.svelte';
@@ -74,6 +74,8 @@
   const balances = $derived($balanceStore);
   const chainInfo = $derived($networkStore);
   const rates = $derived($ratesStore);
+  const settings = $derived($settingsStore);
+  const displayCurrency = $derived(settings.displayCurrency);
   const isBootstrapping = $derived($walletBootstrapStore);
   let showAddAssetSheet = $state(false);
   let listScrollElement = $state<HTMLElement | null>(null);
@@ -194,6 +196,7 @@
       scopeChannelIdsByCoinId: transparentScopeChannelIdsByCoinId,
       rates,
       intlLocale: i18n.intlLocale,
+      displayCurrency,
       network: walletData.network
     })
   );
@@ -223,9 +226,9 @@
 
       const hasBalance = hasSnapshot && totalAmount > 0;
       const rateMetrics = resolveRateMetrics(baseCoin, rates);
-      const usdRate = rateMetrics?.usdRate ?? null;
+      const fiatRate = rateMetrics?.fiatRate ?? null;
       const change24hPct = rateMetrics?.change24hPct ?? null;
-      const fiatValue = hasSnapshot && usdRate !== null ? totalAmount * usdRate : null;
+      const fiatValue = hasSnapshot && fiatRate !== null ? totalAmount * fiatRate : null;
       const rowFractionDigits = Math.max(0, Math.min(4, baseCoin.decimals));
       const syncSnapshot = getPrivateSyncSnapshot(
         privateScopes,
@@ -258,13 +261,18 @@
             )
           : `${OVERVIEW_UNAVAILABLE_DISPLAY} ${baseCoin.displayTicker}`,
         fiatValueDisplay:
-          fiatValue === null ? OVERVIEW_UNAVAILABLE_DISPLAY : formatUsdAmount(fiatValue, i18n.intlLocale),
+          fiatValue === null
+            ? OVERVIEW_UNAVAILABLE_DISPLAY
+            : formatFiatAmount(fiatValue, i18n.intlLocale, displayCurrency),
         marketPriceDisplay:
-          usdRate === null ? OVERVIEW_UNAVAILABLE_DISPLAY : formatUsdAmount(usdRate, i18n.intlLocale),
+          fiatRate === null
+            ? OVERVIEW_UNAVAILABLE_DISPLAY
+            : formatFiatAmount(fiatRate, i18n.intlLocale, displayCurrency),
         change24hDisplay:
           change24hPct === null ? OVERVIEW_UNAVAILABLE_DISPLAY : formatPercentChange(change24hPct),
         change24hDirection: getChangeDirection(change24hPct),
-        unitRateDisplay: usdRate === null ? null : formatUsdAmount(usdRate, i18n.intlLocale),
+        unitRateDisplay:
+          fiatRate === null ? null : formatFiatAmount(fiatRate, i18n.intlLocale, displayCurrency),
         fiatSortValue: hasBalance && fiatValue !== null ? fiatValue : Number.NEGATIVE_INFINITY,
         walletEntryKind: 'private_verus',
         baseCoinId: baseCoin.id,
@@ -308,7 +316,7 @@
         };
       }
 
-      const parts = formatUsdAmountParts(totalFiat, i18n.intlLocale);
+      const parts = formatFiatAmountParts(totalFiat, i18n.intlLocale, displayCurrency);
       return {
         symbol: parts.symbol,
         value: parts.value,
@@ -348,20 +356,19 @@
   function resolveRateMetrics(
     coin: CoinDefinition,
     allRates: typeof rates
-  ): { usdRate: number | null; change24hPct: number | null } | null {
+  ): { fiatRate: number | null; change24hPct: number | null } | null {
     const candidates = [coin.id, coin.currencyId, coin.mappedTo].filter(
       (value): value is string => typeof value === 'string' && value.trim().length > 0
     );
     for (const candidate of candidates) {
       const snapshot = allRates[candidate];
       if (!snapshot) continue;
-      const usd = snapshot.rates?.USD ?? snapshot.rates?.usd;
-      const usdRate = typeof usd === 'number' && Number.isFinite(usd) ? usd : null;
+      const fiatRate = getRateForCurrency(snapshot.rates, displayCurrency);
       const rawChange = snapshot.usdChange24hPct;
       const change24hPct =
         typeof rawChange === 'number' && Number.isFinite(rawChange) ? rawChange : null;
-      if (usdRate !== null || change24hPct !== null) {
-        return { usdRate, change24hPct };
+      if (fiatRate !== null || change24hPct !== null) {
+        return { fiatRate, change24hPct };
       }
     }
     return null;

@@ -20,7 +20,8 @@ use crate::core::channels::eth::EthProviderPool;
 use crate::core::channels::vrpc::VrpcProviderPool;
 use crate::core::coins::Channel;
 use crate::core::coins::{CoinDefinition, CoinRegistry};
-use crate::core::crypto::wif_encoding::decode_wif_unchecked_network;
+use crate::core::crypto::wif_encoding::{decode_wif_unchecked_network, encode_btc_wif};
+use crate::core::crypto::{derive_keys_from_material, Network};
 use crate::core::updates::UpdateEngineStartConfig;
 use crate::core::wallet::WalletManager;
 use crate::core::{GuardSessionManager, PreflightStore, UpdateEngine};
@@ -28,10 +29,11 @@ use crate::types::wallet::{DlightSeedSetupMode, ScopeKind, WalletNetwork};
 use crate::types::{
     AccountRecord, ActiveAssetsState, ActiveWalletResponse, AddressEndpointKind, AddressResponse,
     CoinScope, CoinScopesResult, CreateWalletRequest, CreateWalletResult,
-    DlightProverFileStatusResult, DlightProverStatusResult, DlightRuntimeStatusResult,
-    DlightSeedStatusResult, GenerateMnemonicRequest, ImportWalletTextRequest, LinkedIdentity,
-    MnemonicResult, SetupDlightSeedRequest, SetupDlightSeedResult, WalletError, WalletListItem,
-    WalletSecretKind,
+    DlightProverFileStatusResult, DlightProverStatusResult, DlightRecoverySecretKind,
+    DlightRuntimeStatusResult, DlightSeedStatusResult, GenerateMnemonicRequest,
+    ImportWalletTextRequest, LinkedIdentity, MnemonicResult, RecoverySecretKind,
+    SetupDlightSeedRequest, SetupDlightSeedResult, WalletError, WalletListItem,
+    WalletRecoverySecretsResult, WalletSecretKind,
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -548,6 +550,29 @@ async fn is_valid_24_word_mnemonic(
 fn is_probable_dlight_spending_key(seed: &str) -> bool {
     let normalized = seed.trim();
     normalized.starts_with("secret-extended-key-")
+}
+
+fn crypto_network_for_wallet(network: WalletNetwork) -> Network {
+    match network {
+        WalletNetwork::Mainnet => Network::Mainnet,
+        WalletNetwork::Testnet => Network::Testnet,
+    }
+}
+
+fn recovery_secret_kind_from_wallet_secret_kind(secret_kind: WalletSecretKind) -> RecoverySecretKind {
+    match secret_kind {
+        WalletSecretKind::SeedText => RecoverySecretKind::SeedText,
+        WalletSecretKind::Wif => RecoverySecretKind::Wif,
+        WalletSecretKind::PrivateKeyHex => RecoverySecretKind::PrivateKeyHex,
+    }
+}
+
+fn dlight_recovery_secret_kind_from_seed(seed: &str) -> DlightRecoverySecretKind {
+    if is_probable_dlight_spending_key(seed) {
+        DlightRecoverySecretKind::SpendingKey
+    } else {
+        DlightRecoverySecretKind::Mnemonic
+    }
 }
 
 /// Create a new wallet with Stronghold encryption
@@ -1139,6 +1164,90 @@ pub async fn setup_dlight_seed(
     })
 }
 
+/// Returns wallet recovery secrets after an explicit password re-check.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_wallet_recovery_secrets(
+    password: String,
+    app_handle: AppHandle,
+    wallet_manager: State<'_, WalletManager>,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<WalletRecoverySecretsResult, WalletError> {
+    if password.trim().is_empty() {
+        return Err(WalletError::InvalidPassword);
+    }
+
+    let session = session_manager.lock().await;
+    if !session.is_unlocked() {
+        return Err(WalletError::WalletLocked);
+    }
+
+    let account_id = session
+        .active_account_id()
+        .cloned()
+        .ok_or(WalletError::WalletLocked)?;
+    let network = session.active_network().unwrap_or(WalletNetwork::Mainnet);
+    let stronghold_store = session.stronghold_store().clone();
+    drop(session);
+
+    let account = wallet_manager
+        .get_account_record_by_account_id(&account_id)
+        .await?
+        .ok_or(WalletError::OperationFailed)?;
+    let primary_secret = stronghold_store
+        .load_seed(&account_id, &password, &app_handle)
+        .await?;
+    let primary_secret_kind = recovery_secret_kind_from_wallet_secret_kind(account.secret_kind);
+    let keys = derive_keys_from_material(
+        &primary_secret,
+        account.secret_kind,
+        crypto_network_for_wallet(network),
+    )
+    .map_err(|_| WalletError::OperationFailed)?;
+
+    let private_bytes =
+        decode_wif_unchecked_network(&keys.wif).map_err(|_| WalletError::OperationFailed)?;
+    let btc_wif = encode_btc_wif(&private_bytes, crypto_network_for_wallet(network))?;
+
+    let password_hash = crate::core::auth::stronghold_store::StrongholdStore::hash_password(&password);
+    let dlight_secret = stronghold_store
+        .load_dlight_seed(&account_id, password_hash.as_slice(), network)
+        .await?;
+    let (dlight_secret_kind, dlight_shielded_address, dlight_derived_spending_key) =
+        if let Some(secret) = dlight_secret.as_deref() {
+            let secret_kind = dlight_recovery_secret_kind_from_seed(secret);
+            let shielded_address = dlight_private::derive_scope_address(secret, network).ok();
+            let derived_spending_key = if matches!(secret_kind, DlightRecoverySecretKind::Mnemonic)
+            {
+                dlight_private::derive_spending_key(secret, network).ok()
+            } else {
+                None
+            };
+
+            (
+                Some(secret_kind),
+                shielded_address,
+                derived_spending_key,
+            )
+        } else {
+            (None, None, None)
+        };
+
+    Ok(WalletRecoverySecretsResult {
+        primary_secret_kind,
+        primary_secret,
+        verus_wif: keys.wif.clone(),
+        btc_wif,
+        eth_private_key: keys.eth_private_key.clone(),
+        verus_address: keys.address.clone(),
+        btc_address: keys.btc_address.clone(),
+        eth_address: keys.eth_address.clone(),
+        dlight_secret,
+        dlight_secret_kind,
+        dlight_shielded_address,
+        dlight_derived_spending_key,
+    })
+}
+
 /// Returns runtime diagnostics for a dlight channel. Intended for support/debug visibility.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_dlight_runtime_status(
@@ -1384,12 +1493,15 @@ pub async fn list_wallets(
 mod tests {
     use super::{
         channel_id_for_non_vrpc_coin, collect_vrpc_scope_addresses,
-        collect_vrpc_system_descriptors, dedupe_preserve_order, sanitize_active_coin_ids,
+        collect_vrpc_system_descriptors, dedupe_preserve_order,
+        dlight_recovery_secret_kind_from_seed, recovery_secret_kind_from_wallet_secret_kind,
+        sanitize_active_coin_ids,
     };
     use crate::core::coins::{Channel, CoinDefinition, CoinRegistry, Protocol};
     use crate::core::runtime_config;
-    use crate::types::wallet::WalletNetwork;
+    use crate::types::wallet::{DlightRecoverySecretKind, RecoverySecretKind, WalletNetwork};
     use crate::types::LinkedIdentity;
+    use crate::types::WalletSecretKind;
 
     const VRSC_SYSTEM_ID: &str = "i5w5MuNik5NtLcYmNzcvaoixooEebB6MGV";
     const VETH_SYSTEM_ID: &str = "i9nwxtKuVYX4MSbeULLiK2ttVi6rUEhh4X";
@@ -1443,6 +1555,36 @@ mod tests {
                 "RGamma".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn recovery_secret_kind_mapping_matches_wallet_secret_kind() {
+        assert!(matches!(
+            recovery_secret_kind_from_wallet_secret_kind(WalletSecretKind::SeedText),
+            RecoverySecretKind::SeedText
+        ));
+        assert!(matches!(
+            recovery_secret_kind_from_wallet_secret_kind(WalletSecretKind::Wif),
+            RecoverySecretKind::Wif
+        ));
+        assert!(matches!(
+            recovery_secret_kind_from_wallet_secret_kind(WalletSecretKind::PrivateKeyHex),
+            RecoverySecretKind::PrivateKeyHex
+        ));
+    }
+
+    #[test]
+    fn dlight_recovery_secret_kind_detects_spending_key_prefix() {
+        assert!(matches!(
+            dlight_recovery_secret_kind_from_seed("secret-extended-key-main1abcd"),
+            DlightRecoverySecretKind::SpendingKey
+        ));
+        assert!(matches!(
+            dlight_recovery_secret_kind_from_seed(
+                "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+            ),
+            DlightRecoverySecretKind::Mnemonic
+        ));
     }
 
     #[test]

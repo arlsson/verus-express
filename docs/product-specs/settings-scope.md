@@ -1,113 +1,135 @@
 ---
 owner: lite-wallet-team
-last_reviewed: 2026-02-22
+last_reviewed: 2026-02-26
 ---
 
 # Settings scope (desktop)
 
-This spec defines what belongs in the wallet `Settings` screen for lite-wallet
-desktop and what does not.
+This spec defines the `Settings` information architecture and ownership for
+lite-wallet desktop.
 
 ## Scope decisions (explicit)
 
-- Coin add/disable controls are out of scope for `Settings`.
-- Coin add/disable remains in the `Wallet` screen flow as the single source of
-  truth.
-- Fiat display currency selection is required in `Settings` and must be easy to
-  find.
+1. `Settings` uses a **hub + detail** structure.
+2. Coin add/disable controls are out of scope for `Settings`; they stay in the
+   `Wallet` screen flow.
+3. Fiat display currency and language are required, first-class controls in
+   `Settings`.
+4. First-launch language gate remains in place when no wallet exists.
+5. Recovery scope is account-level **seed + derived keys** (not per-scope or
+   per-address bulk export).
+6. Recovery lives under **Profile & security**.
+7. Sensitive recovery reveal is gated by password re-check on each access.
+8. Private Verus setup actions are hidden by default when already configured,
+   but reconfiguration remains available in advanced detail.
 
 ## Goals
 
-- Keep settings focused on account-level and app-level preferences.
-- Keep one primary job per screen and avoid duplicate controls across screens.
-- Make fiat display currency changes fast and predictable (for example:
-  `USD`/`EUR`/`GBP`).
+- Keep settings focused on account-level and app-level controls.
+- Keep one primary task per detail page.
+- Improve discoverability with clear category rows and summaries.
+- Preserve valu-mobile parity intent for recovery while keeping desktop security
+  guardrails explicit.
 
 ## Settings information architecture
 
-### 1) Display and currency
+### 1) Settings hub (home)
 
 In scope:
 
-- **Display currency** selector (required).
-- Selector supports fiat codes from app-supported fiat catalog.
-- Current selection is always visible at rest (not hidden behind advanced
-  disclosure).
+- Category rows with drill-down navigation and summaries:
+  - Display and language (summary: selected fiat + language).
+  - Profile & security (summary: recovery and keys).
+  - Private Verus (summary: configured/not configured).
+  - About and support (summary: app version).
 
-Discoverability requirements:
+Design constraints:
 
-- Category appears first in `Settings`.
-- Display currency appears as the first interactive control in this category.
-- User can reach and change display currency in two interactions or fewer after
-  entering `Settings`.
+- Desktop-first list layout with clear click targets.
+- Consistent back/header pattern in each detail page.
+- Keep detail views focused; avoid mixed multi-purpose forms.
 
-Notes:
-
-- `USD` default is acceptable for first run, but user choice must persist.
-- Portfolio fiat value rendering should consistently follow this setting across
-  overview/detail screens.
-
-### 2) Security and private wallet
+### 2) Display and language detail
 
 In scope:
 
-- `Private Verus` setup and status controls (existing behavior).
-- Setup paths: reuse primary seed, create new seed, import private seed/spending
-  key.
+- Display currency selector with quick picks, search, and full list.
+- Language selector using the same locale set as onboarding.
+- Immediate app-wide language update and persistent storage.
+- Persistent display currency used consistently across overview/details/send.
 
-Out of scope in this category (for now):
+### 3) Profile & security detail
 
-- Biometric toggle.
-- Key derivation version switch.
-- Profile deletion/reset actions.
+In scope:
 
-### 3) Advanced wallet configuration
+- Entry row to **Recovery and keys** detail.
+- Minimal v1 surface (no extra toggles added in this iteration).
 
-In scope now:
+### 4) Recovery and keys detail
 
-- No required v1 controls.
+In scope:
 
-Deferred (advanced-only candidates, not default Settings surface):
+- Password-gated reveal flow with re-authentication for each access.
+- Seed/primary secret and derived keys for account-level addresses.
+- Optional dlight recovery material only when Private Verus is configured.
+- Per-item reveal/hide and copy actions.
+- Clear in-memory secret data when leaving the screen.
 
-- Custom VRPC endpoint overrides.
-- Address blocklist source/manual editing.
-- User-configurable ETH minimum gas floor.
-- Per-coin verification-level controls.
+Explicit v1 exclusions:
 
-## About and support
+- QR rendering for secrets.
+- Per-scope/per-address private key export across all derived variants.
+- Biometric gating.
+
+### 5) Private Verus detail
+
+In scope:
+
+- Status-first screen.
+- When configured:
+  - Show configured status and full shielded address.
+  - Hide setup actions by default.
+  - Show advanced disclosure before reconfiguration actions.
+- When not configured:
+  - Show setup actions directly (reuse primary, create new, import).
+
+### 6) About and support
 
 In scope:
 
 - App version/build metadata.
-- Useful links (privacy/license/support/community) if available in existing app
-  nav model.
+- Existing support/community links.
 
 ## Explicitly out of Settings
 
-- Coin add/disable and asset catalog management (owner screen: `Wallet`
-  overview/add-asset flow).
-- Per-asset operational controls that already belong to asset/wallet flows.
+- Coin add/disable and asset catalog management.
+- Per-asset controls that belong to wallet/asset flows.
+- Runtime endpoint or blockchain provider configuration.
+- Any background export/backup automation for secrets in v1.
 
 ## Implementation guardrails
 
-- Avoid duplicate ownership: if a control already exists in a stronger task
-  context (for example asset management in wallet overview), do not re-home it
-  into `Settings`.
+- Avoid duplicate ownership across Wallet and Settings.
 - Keep copy short and sentence case.
 - Use translation keys for all user-facing text.
 - Verify behavior in light and dark mode.
+- Never persist recovery secrets in localStorage or logs.
 
 ## Acceptance criteria for this scope
 
-- `Settings` includes a first-class display currency selector that is easy to
-  locate.
-- User can switch `USD` to another fiat (for example `EUR` or `GBP`) from
-  `Settings` without navigating to asset management.
-- `Settings` does not include coin add/disable controls.
-- `Private Verus` controls remain available in `Settings`.
+1. `Settings` opens to a category hub (not a long mixed control page).
+2. Each category row navigates to a dedicated detail screen and back.
+3. Display currency and language are both editable in Display and language.
+4. Currency and language changes persist and apply across the app.
+5. Private Verus configured state shows status + full shielded address and hides
+   setup actions by default.
+6. Recovery and keys requires password confirmation each reveal access.
+7. Recovery secret material is cleared when leaving recovery detail.
+8. Coin add/disable does not appear in `Settings`.
 
 ## Cross-reference
 
 - Current `Settings` UI: `src/lib/components/wallet/sections/Settings.svelte`
+- Settings detail components: `src/lib/components/wallet/settings/`
 - Wallet route and active assets loading: `src/routes/wallet/+page.svelte`
-- Current settings store placeholder: `src/lib/stores/settings.ts`
+- Current settings store: `src/lib/stores/settings.ts`

@@ -50,7 +50,15 @@ Optional ETH URL overrides:
 - Endpoint and key config is runtime-only and should live in untracked `.env` files.
 - Frontend does not own runtime endpoint/key secrets.
 - ETH private keys are accessed only from backend session state at send-time.
-- Frontend never sends signed payloads or private key material.
+- Frontend never sends signed payloads.
+- Recovery exception: frontend may receive seed/key material only in the explicit
+  password-gated recovery flow (`get_wallet_recovery_secrets`) and only for
+  direct user reveal/copy actions.
+- Recovery guardrails:
+  - Re-authenticate password for each access.
+  - Do not persist secret material to storage.
+  - Clear secret state on screen exit/back.
+  - Never log secret values in frontend or backend command handlers.
 - Preflight payloads remain backend-owned and single-use via `PreflightStore`.
 
 ## Phase-1 parity exclusions

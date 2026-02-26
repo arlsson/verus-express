@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use serde_json::Value;
 use zcash_client_backend::encoding::{decode_extended_spending_key, encode_payment_address};
 use zcash_client_backend::keys::{ReceiverRequirement, UnifiedAddressRequest, UnifiedSpendingKey};
+use zcash_keys::encoding::encode_extended_spending_key;
 use zcash_protocol::consensus::{MainNetwork, Parameters, TestNetwork};
 use zcash_protocol::constants::{mainnet, testnet};
 use zip32::AccountId;
@@ -246,6 +247,54 @@ pub fn derive_scope_address(
 fn sapling_payment_address_hrp(_network: WalletNetwork) -> &'static str {
     // Parity policy: use zs-addresses on both mainnet and testnet.
     mainnet::HRP_SAPLING_PAYMENT_ADDRESS
+}
+
+fn sapling_extsk_hrp(network: WalletNetwork) -> &'static str {
+    match network {
+        WalletNetwork::Mainnet => mainnet::HRP_SAPLING_EXTENDED_SPENDING_KEY,
+        WalletNetwork::Testnet => testnet::HRP_SAPLING_EXTENDED_SPENDING_KEY,
+    }
+}
+
+pub fn derive_spending_key(
+    seed_or_spending_key: &str,
+    network: WalletNetwork,
+) -> Result<String, WalletError> {
+    let normalized = seed_or_spending_key.trim();
+    if normalized.is_empty() {
+        return Err(WalletError::InvalidSeedPhrase);
+    }
+
+    let hrp = sapling_extsk_hrp(network);
+    if is_dlight_spending_key(normalized) {
+        let extsk = decode_extended_spending_key(hrp, normalized)
+            .map_err(|_| WalletError::InvalidImportText)?;
+        return Ok(encode_extended_spending_key(hrp, &extsk));
+    }
+
+    let mnemonic =
+        bip39::Mnemonic::parse(normalized).map_err(|_| WalletError::InvalidSeedPhrase)?;
+    let seed_bytes = mnemonic.to_seed_normalized("").to_vec();
+    let extsk = match network {
+        WalletNetwork::Mainnet => UnifiedSpendingKey::from_seed(
+            &MainNetwork,
+            seed_bytes.as_slice(),
+            AccountId::ZERO,
+        )
+        .map_err(|_| WalletError::InvalidSeedPhrase)?
+        .sapling()
+        .clone(),
+        WalletNetwork::Testnet => UnifiedSpendingKey::from_seed(
+            &TestNetwork,
+            seed_bytes.as_slice(),
+            AccountId::ZERO,
+        )
+        .map_err(|_| WalletError::InvalidSeedPhrase)?
+        .sapling()
+        .clone(),
+    };
+
+    Ok(encode_extended_spending_key(hrp, &extsk))
 }
 
 pub fn normalize_endpoint_url(endpoint: &str) -> Result<String, WalletError> {

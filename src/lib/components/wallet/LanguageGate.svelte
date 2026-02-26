@@ -6,23 +6,11 @@
 
 <script lang="ts">
   import { Button } from '$lib/components/ui/button';
-  import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-  import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
-  import { i18nStore, setLocale, type Locale } from '$lib/i18n';
+  import LocaleSelector from '$lib/components/common/LocaleSelector.svelte';
+  import { i18nStore } from '$lib/i18n';
 
   const { onContinue = () => {} }: { onContinue?: () => void } = $props();
   const i18n = $derived($i18nStore);
-  const localeOptions = $derived([
-    { value: 'en' as const, flag: '🇺🇸', label: i18n.t('languageGate.option.en') },
-    { value: 'nl' as const, flag: '🇳🇱', label: i18n.t('languageGate.option.nl') }
-  ]);
-  const selectedOption = $derived(
-    localeOptions.find((option) => option.value === i18n.locale) ?? localeOptions[0]
-  );
-
-  function chooseLocale(locale: Locale) {
-    setLocale(locale);
-  }
 </script>
 
 <main class="bg-background relative flex min-h-screen overflow-hidden">
@@ -62,40 +50,10 @@
           </div>
 
           <div class="w-full">
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger id="language-trigger" aria-label={i18n.t('languageGate.title')}>
-                {#snippet child({ props })}
-                  <Button
-                    {...props}
-                    variant="outline"
-                    class="w-full justify-between border-input bg-background px-3 py-2 text-left text-sm font-normal"
-                  >
-                    <span class="flex items-center gap-2">
-                      <span aria-hidden="true">{selectedOption.flag}</span>
-                      <span>{selectedOption.label}</span>
-                    </span>
-                    <ChevronDownIcon class="size-4 opacity-70" />
-                  </Button>
-                {/snippet}
-              </DropdownMenu.Trigger>
-
-              <DropdownMenu.Content
-                align="start"
-                class="w-[var(--bits-dropdown-menu-anchor-width)] overflow-y-auto"
-                style="max-height: min(16rem, var(--bits-dropdown-menu-content-available-height));"
-              >
-                <DropdownMenu.RadioGroup value={i18n.locale}>
-                  {#each localeOptions as option (option.value)}
-                    <DropdownMenu.RadioItem value={option.value} onclick={() => chooseLocale(option.value)}>
-                      <span class="flex min-w-0 items-center gap-2">
-                        <span aria-hidden="true">{option.flag}</span>
-                        <span>{option.label}</span>
-                      </span>
-                    </DropdownMenu.RadioItem>
-                  {/each}
-                </DropdownMenu.RadioGroup>
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
+            <LocaleSelector
+              triggerId="language-trigger"
+              triggerAriaLabel={i18n.t('languageGate.title')}
+            />
           </div>
         </div>
       </div>

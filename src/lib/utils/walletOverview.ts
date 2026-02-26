@@ -3,9 +3,9 @@ import type { CoinRatesSnapshot } from '$lib/stores/rates.js';
 import type { BalanceResult, CoinDefinition, WalletNetwork } from '$lib/types/wallet.js';
 import { resolveCoinPresentation } from '$lib/coins/presentation.js';
 import { parseVrpcChannelId } from '$lib/utils/channelId.js';
+import { formatFiatAmount, formatFiatAmountParts, getRateForCurrency, normalizeDisplayCurrency } from '$lib/utils/fiatDisplay.js';
 
 export const OVERVIEW_UNAVAILABLE_DISPLAY = '—';
-export const OVERVIEW_FIAT_CODE = 'USD';
 
 export interface WalletOverviewRowViewModel {
   key: string;
@@ -44,44 +44,8 @@ export interface BuildWalletOverviewParams {
   scopeChannelIdsByCoinId?: Record<string, string[]>;
   rates: Record<string, CoinRatesSnapshot>;
   intlLocale: string;
+  displayCurrency: string;
   network?: WalletNetwork;
-}
-
-export function formatUsdAmount(value: number, intlLocale: string): string {
-  return new Intl.NumberFormat(intlLocale, {
-    style: 'currency',
-    currency: OVERVIEW_FIAT_CODE,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value);
-}
-
-export function formatUsdAmountParts(value: number, intlLocale: string): {
-  symbol: string;
-  value: string;
-} {
-  const formatter = new Intl.NumberFormat(intlLocale, {
-    style: 'currency',
-    currency: OVERVIEW_FIAT_CODE,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-  const parts = formatter.formatToParts(value);
-  const symbol = parts
-    .filter((part) => part.type === 'currency')
-    .map((part) => part.value)
-    .join('')
-    .trim();
-  const numericValue = parts
-    .filter((part) => part.type !== 'currency')
-    .map((part) => part.value)
-    .join('')
-    .trim();
-
-  return {
-    symbol,
-    value: numericValue || formatter.format(value)
-  };
 }
 
 export function formatCryptoAmount(
@@ -110,15 +74,6 @@ function toFiniteNumber(value: unknown): number | null {
   }
 
   return null;
-}
-
-function getUsdRate(rateMap?: Record<string, number>): number | null {
-  if (!rateMap) return null;
-  const candidate = rateMap.USD ?? rateMap.usd;
-  if (typeof candidate !== 'number' || !Number.isFinite(candidate)) {
-    return null;
-  }
-  return candidate;
 }
 
 function getChangeDirection(changePct: number | null): WalletOverviewRowViewModel['change24hDirection'] {
@@ -251,8 +206,10 @@ export function buildWalletOverviewViewModel({
   scopeChannelIdsByCoinId,
   rates,
   intlLocale,
+  displayCurrency,
   network
 }: BuildWalletOverviewParams): WalletOverviewViewModel {
+  const activeDisplayCurrency = normalizeDisplayCurrency(displayCurrency);
   const primaryCoin = resolvePrimaryCoin(coins, walletChannels, network);
   const primaryPresentation = primaryCoin ? resolveCoinPresentation(primaryCoin) : null;
   const fallbackPrimaryTicker = network === 'testnet' ? 'VRSCTEST' : 'VRSC';
@@ -275,15 +232,17 @@ export function buildWalletOverviewViewModel({
     );
     const hasBalance = hasSnapshot && amountValue > 0;
     const rateSnapshot = rates[coin.id];
-    const usdRate = getUsdRate(rateSnapshot?.rates);
+    const fiatRate = getRateForCurrency(rateSnapshot?.rates, activeDisplayCurrency);
     const rawChange = rateSnapshot?.usdChange24hPct;
     const change24hPct =
       typeof rawChange === 'number' && Number.isFinite(rawChange) ? rawChange : null;
     const change24hDirection = getChangeDirection(change24hPct);
-    const fiatValue = hasSnapshot && usdRate !== null ? amountValue * usdRate : null;
+    const fiatValue = hasSnapshot && fiatRate !== null ? amountValue * fiatRate : null;
     const rowFractionDigits = Math.max(0, Math.min(4, coin.decimals));
     const marketPriceDisplay =
-      usdRate === null ? OVERVIEW_UNAVAILABLE_DISPLAY : formatUsdAmount(usdRate, intlLocale);
+      fiatRate === null
+        ? OVERVIEW_UNAVAILABLE_DISPLAY
+        : formatFiatAmount(fiatRate, intlLocale, activeDisplayCurrency);
     const change24hDisplay =
       change24hDirection === 'none' || change24hPct === null
         ? OVERVIEW_UNAVAILABLE_DISPLAY
@@ -301,11 +260,14 @@ export function buildWalletOverviewViewModel({
         ? formatCryptoAmount(amountValue, displayTicker, intlLocale, rowFractionDigits, rowFractionDigits)
         : `${OVERVIEW_UNAVAILABLE_DISPLAY} ${displayTicker}`,
       fiatValueDisplay:
-        fiatValue === null ? OVERVIEW_UNAVAILABLE_DISPLAY : formatUsdAmount(fiatValue, intlLocale),
+        fiatValue === null
+          ? OVERVIEW_UNAVAILABLE_DISPLAY
+          : formatFiatAmount(fiatValue, intlLocale, activeDisplayCurrency),
       marketPriceDisplay,
       change24hDisplay,
       change24hDirection,
-      unitRateDisplay: usdRate === null ? null : formatUsdAmount(usdRate, intlLocale),
+      unitRateDisplay:
+        fiatRate === null ? null : formatFiatAmount(fiatRate, intlLocale, activeDisplayCurrency),
       fiatSortValue: hasBalance && fiatValue !== null ? fiatValue : Number.NEGATIVE_INFINITY
     };
   });
@@ -328,10 +290,10 @@ export function buildWalletOverviewViewModel({
   const heroFiatIsUnavailable = !hasAnySnapshot || (hasHoldings && !hasAnyFiatForHoldings);
   const heroFiatDisplay = heroFiatIsUnavailable
     ? OVERVIEW_UNAVAILABLE_DISPLAY
-    : formatUsdAmount(totalFiat, intlLocale);
+    : formatFiatAmount(totalFiat, intlLocale, activeDisplayCurrency);
   const heroFiatParts = heroFiatIsUnavailable
     ? null
-    : formatUsdAmountParts(totalFiat, intlLocale);
+    : formatFiatAmountParts(totalFiat, intlLocale, activeDisplayCurrency);
 
   return {
     heroFiatDisplay,

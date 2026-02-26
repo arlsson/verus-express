@@ -15,7 +15,8 @@ import type {
   SetupDlightSeedResult,
   Transaction,
   TransactionHistoryPage,
-  WalletNetwork
+  WalletNetwork,
+  WalletRecoverySecretsResult
 } from '$lib/types/wallet.js';
 
 export interface UnlockWalletPayload {
@@ -112,6 +113,14 @@ export async function setupDlightSeed(
       mode: request.mode,
       import_text: request.importText ?? null
     }
+  });
+}
+
+export async function getWalletRecoverySecrets(
+  password: string
+): Promise<WalletRecoverySecretsResult> {
+  return invoke<WalletRecoverySecretsResult>('get_wallet_recovery_secrets', {
+    password
   });
 }
 

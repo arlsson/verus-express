@@ -43,6 +43,7 @@
 
   const { walletData }: { walletData: WalletData } = $props();
   let activeSection = $state<SectionId>('overview');
+  let settingsResetSignal = $state(0);
   let activeAssetDetailsEntry = $state<WalletEntrySelection | null>(null);
   let transferEntryContext = $state<TransferEntryContext | null>(null);
   const walletErrors = $derived($walletErrorsStore);
@@ -69,6 +70,9 @@
           activeAssetDetailsEntry = null;
           transferEntryContext = null;
           activeSection = 'overview';
+        }}
+        onSelectSettings={() => {
+          settingsResetSignal += 1;
         }}
       />
     {/if}
@@ -156,7 +160,7 @@
         {:else if activeSection === 'address-book'}
           <AddressBook />
         {:else if activeSection === 'settings'}
-          <Settings walletNetwork={walletData.network ?? 'mainnet'} />
+          <Settings walletNetwork={walletData.network ?? 'mainnet'} resetSignal={settingsResetSignal} />
         {/if}
       </main>
     </Sidebar.Inset>

@@ -3,6 +3,7 @@ import { en } from './locales/en';
 import { nl } from './locales/nl';
 
 export type Locale = 'en' | 'nl';
+export const SUPPORTED_LOCALES: Locale[] = ['en', 'nl'];
 
 export type TranslationParams = Record<string, string | number>;
 

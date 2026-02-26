@@ -162,6 +162,7 @@ pub fn run() {
             wallet::set_active_assets,
             wallet::get_dlight_seed_status,
             wallet::setup_dlight_seed,
+            wallet::get_wallet_recovery_secrets,
             wallet::get_dlight_runtime_status,
             wallet::get_dlight_prover_status,
             wallet::get_watched_vrpc_addresses,

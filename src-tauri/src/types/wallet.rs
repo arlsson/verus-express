@@ -214,6 +214,38 @@ pub struct DlightSeedStatusResult {
     pub shielded_address: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum RecoverySecretKind {
+    SeedText,
+    Wif,
+    PrivateKeyHex,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum DlightRecoverySecretKind {
+    Mnemonic,
+    SpendingKey,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WalletRecoverySecretsResult {
+    pub primary_secret_kind: RecoverySecretKind,
+    pub primary_secret: String,
+    pub verus_wif: String,
+    pub btc_wif: String,
+    pub eth_private_key: String,
+    pub verus_address: String,
+    pub btc_address: String,
+    pub eth_address: String,
+    pub dlight_secret: Option<String>,
+    pub dlight_secret_kind: Option<DlightRecoverySecretKind>,
+    pub dlight_shielded_address: Option<String>,
+    pub dlight_derived_spending_key: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DlightRuntimeStatusResult {

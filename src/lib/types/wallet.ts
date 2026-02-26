@@ -494,6 +494,24 @@ export interface DlightSeedStatusResult {
   shieldedAddress?: string | null;
 }
 
+export type RecoverySecretKind = 'seed_text' | 'wif' | 'private_key_hex';
+export type DlightRecoverySecretKind = 'mnemonic' | 'spending_key';
+
+export interface WalletRecoverySecretsResult {
+  primarySecretKind: RecoverySecretKind;
+  primarySecret: string;
+  verusWif: string;
+  btcWif: string;
+  ethPrivateKey: string;
+  verusAddress: string;
+  btcAddress: string;
+  ethAddress: string;
+  dlightSecret?: string | null;
+  dlightSecretKind?: DlightRecoverySecretKind | null;
+  dlightShieldedAddress?: string | null;
+  dlightDerivedSpendingKey?: string | null;
+}
+
 export interface DlightRuntimeStatusResult {
   channelId: string;
   runtimeKey: string;

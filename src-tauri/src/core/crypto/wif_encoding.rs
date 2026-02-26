@@ -9,6 +9,9 @@ use ripemd::Ripemd160;
 use secp256k1::PublicKey;
 use sha2::{Digest, Sha256};
 
+const BITCOIN_WIF_VERSION_MAINNET: u8 = 0x80;
+const BITCOIN_WIF_VERSION_TESTNET: u8 = 0xEF;
+
 /// Network type for Verus (mainnet or testnet)
 #[derive(Debug, Clone, Copy)]
 pub enum Network {
@@ -39,12 +42,29 @@ impl Network {
 /// Encode a 32-byte private key as WIF (Wallet Import Format)
 /// Format: [version byte][32-byte key][0x01 compression flag] + checksum → base58check
 pub fn encode_wif(priv_key: &[u8; 32], network: Network) -> Result<String, WalletError> {
+    encode_wif_with_version(priv_key, network.wif_version())
+}
+
+/// Encode a 32-byte private key as WIF with an explicit version byte.
+pub fn encode_wif_with_version(
+    priv_key: &[u8; 32],
+    version_byte: u8,
+) -> Result<String, WalletError> {
     let mut data = Vec::with_capacity(34);
-    data.push(network.wif_version());
+    data.push(version_byte);
     data.extend_from_slice(priv_key);
     data.push(0x01); // compressed flag
 
     Ok(bs58::encode(data).with_check().into_string())
+}
+
+/// Encode a Bitcoin network-matched WIF from a secp256k1 private key.
+pub fn encode_btc_wif(priv_key: &[u8; 32], network: Network) -> Result<String, WalletError> {
+    let version = match network {
+        Network::Mainnet => BITCOIN_WIF_VERSION_MAINNET,
+        Network::Testnet => BITCOIN_WIF_VERSION_TESTNET,
+    };
+    encode_wif_with_version(priv_key, version)
 }
 
 /// Decode a WIF string to extract the 32-byte private key
@@ -127,4 +147,37 @@ fn hash160(data: &[u8]) -> [u8; 20] {
     let mut result = [0u8; 20];
     result.copy_from_slice(&ripemd[..]);
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{encode_btc_wif, Network, BITCOIN_WIF_VERSION_MAINNET, BITCOIN_WIF_VERSION_TESTNET};
+
+    #[test]
+    fn encode_btc_wif_mainnet_uses_expected_version_byte() {
+        let private_key = [1u8; 32];
+        let encoded = encode_btc_wif(&private_key, Network::Mainnet).expect("mainnet wif");
+        let decoded = bs58::decode(encoded)
+            .with_check(None)
+            .into_vec()
+            .expect("decode mainnet wif");
+
+        assert_eq!(decoded[0], BITCOIN_WIF_VERSION_MAINNET);
+        assert_eq!(decoded.len(), 34);
+        assert_eq!(decoded[33], 0x01);
+    }
+
+    #[test]
+    fn encode_btc_wif_testnet_uses_expected_version_byte() {
+        let private_key = [2u8; 32];
+        let encoded = encode_btc_wif(&private_key, Network::Testnet).expect("testnet wif");
+        let decoded = bs58::decode(encoded)
+            .with_check(None)
+            .into_vec()
+            .expect("decode testnet wif");
+
+        assert_eq!(decoded[0], BITCOIN_WIF_VERSION_TESTNET);
+        assert_eq!(decoded.len(), 34);
+        assert_eq!(decoded[33], 0x01);
+    }
 }

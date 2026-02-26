@@ -1,193 +1,211 @@
 <!--
   Component: Settings
-  Purpose: Wallet settings surface with private Verus setup controls.
+  Purpose: Wallet settings hub with category drill-down detail pages.
 -->
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Button } from '$lib/components/ui/button';
+  import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+  import GlobeIcon from '@lucide/svelte/icons/globe';
+  import InfoIcon from '@lucide/svelte/icons/info';
+  import KeyIcon from '@lucide/svelte/icons/key';
+  import ShieldIcon from '@lucide/svelte/icons/shield';
   import { i18nStore } from '$lib/i18n';
-  import * as walletService from '$lib/services/walletService';
   import type { WalletNetwork } from '$lib/types/wallet';
+  import { settingsStore } from '$lib/stores/settings.js';
+  import { buildLocaleOptions } from '$lib/utils/localeOptions.js';
+  import { loadRuntimeAppInfo } from '$lib/utils/appInfo.js';
+  import * as walletService from '$lib/services/walletService';
+  import DisplayLanguageSettings from '$lib/components/wallet/settings/DisplayLanguageSettings.svelte';
+  import PrivateVerusSettings from '$lib/components/wallet/settings/PrivateVerusSettings.svelte';
+  import RecoveryKeysSettings from '$lib/components/wallet/settings/RecoveryKeysSettings.svelte';
+  import AboutSupportSettings from '$lib/components/wallet/settings/AboutSupportSettings.svelte';
 
   type SettingsProps = {
     walletNetwork: WalletNetwork;
+    resetSignal?: number;
   };
 
-  const { walletNetwork }: SettingsProps = $props();
+  type SettingsView =
+    | 'home'
+    | 'display-language'
+    | 'private-verus'
+    | 'recovery-keys'
+    | 'about-support';
+
+  const { walletNetwork, resetSignal = 0 }: SettingsProps = $props();
+
   const i18n = $derived($i18nStore);
+  const settings = $derived($settingsStore);
+  const localeOptions = $derived(buildLocaleOptions(i18n.t));
+  const selectedLocaleLabel = $derived(
+    localeOptions.find((option) => option.value === i18n.locale)?.label ?? localeOptions[0]?.label ?? '—'
+  );
 
-  let loadingStatus = $state(true);
-  let configured = $state(false);
-  let shieldedAddress = $state('');
-  let errorMessage = $state('');
-  let successMessage = $state('');
-  let generatedSeedPhrase = $state('');
-  let importText = $state('');
-  let submittingMode = $state<'reuse_primary' | 'create_new' | 'import_text' | null>(null);
+  let activeView = $state<SettingsView>('home');
+  let lastResetSignal = $state(0);
+  let privateStatusLoading = $state(true);
+  let privateConfigured = $state(false);
+  let appVersion = $state<string | null>(null);
 
-  async function loadStatus(): Promise<void> {
-    loadingStatus = true;
-    errorMessage = '';
+  const displayLanguageSummary = $derived(
+    i18n.t('wallet.settings.home.summary.displayLanguage', {
+      currency: settings.displayCurrency,
+      language: selectedLocaleLabel
+    })
+  );
+  const profileSummary = $derived(i18n.t('wallet.settings.home.summary.profileSecurity'));
+  const privateSummary = $derived(
+    privateStatusLoading
+      ? i18n.t('common.loading')
+      : privateConfigured
+        ? i18n.t('wallet.settings.home.summary.privateConfigured')
+        : i18n.t('wallet.settings.home.summary.privateNotConfigured')
+  );
+  const aboutSummary = $derived(
+    appVersion
+      ? i18n.t('wallet.settings.home.summary.version', { version: appVersion })
+      : i18n.t('common.loading')
+  );
+
+  async function refreshPrivateStatus(): Promise<void> {
+    privateStatusLoading = true;
     try {
       const status = await walletService.getDlightSeedStatus();
-      configured = status.configured;
-      shieldedAddress = status.shieldedAddress ?? '';
-    } catch (error) {
-      console.error('[SETTINGS] Failed to load dlight seed status', error);
-      errorMessage = i18n.t('wallet.settings.privateVerus.statusLoadError');
-      configured = false;
-      shieldedAddress = '';
+      privateConfigured = status.configured;
+    } catch {
+      privateConfigured = false;
     } finally {
-      loadingStatus = false;
+      privateStatusLoading = false;
     }
   }
 
-  async function setup(mode: 'reuse_primary' | 'create_new' | 'import_text'): Promise<void> {
-    if (submittingMode) return;
-
-    successMessage = '';
-    errorMessage = '';
-    generatedSeedPhrase = '';
-    submittingMode = mode;
-
+  async function loadVersionSummary(): Promise<void> {
     try {
-      const result = await walletService.setupDlightSeed({
-        mode,
-        importText: mode === 'import_text' ? importText : undefined
-      });
-      configured = result.configured;
-      if (result.generatedSeedPhrase) {
-        generatedSeedPhrase = result.generatedSeedPhrase;
-      }
-      successMessage = result.requiresRelogin
-        ? i18n.t('wallet.settings.privateVerus.setupSuccessRelogin')
-        : i18n.t('wallet.settings.privateVerus.setupSuccess');
-      await loadStatus();
-    } catch (error) {
-      console.error('[SETTINGS] Failed to setup dlight seed', error);
-      errorMessage = i18n.t('wallet.settings.privateVerus.setupError');
-    } finally {
-      submittingMode = null;
+      const info = await loadRuntimeAppInfo();
+      appVersion = info.version;
+    } catch {
+      appVersion = null;
     }
   }
 
   onMount(() => {
-    void loadStatus();
+    void refreshPrivateStatus();
+    void loadVersionSummary();
   });
 
-  function truncateAddress(value: string): string {
-    if (!value) return '';
-    if (value.length <= 22) return value;
-    return `${value.slice(0, 11)}...${value.slice(-9)}`;
-  }
-
-  const privateLabel = $derived(
-    walletNetwork === 'testnet'
-      ? i18n.t('wallet.private.label.testnet')
-      : i18n.t('wallet.private.label.mainnet')
-  );
+  $effect(() => {
+    if (resetSignal === lastResetSignal) return;
+    lastResetSignal = resetSignal;
+    activeView = 'home';
+  });
 </script>
 
-<div class="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col px-6 pb-6 pt-0 sm:px-8">
-  <section class="flex min-h-0 flex-1 flex-col overflow-auto pt-3">
-    <div class="space-y-5">
-      <div class="space-y-1">
-        <h2 class="text-xl font-semibold">{i18n.t('wallet.settings.privateVerus.title')}</h2>
-        <p class="text-muted-foreground text-sm">
-          {i18n.t('wallet.settings.privateVerus.description', { label: privateLabel })}
-        </p>
-      </div>
-
-      {#if loadingStatus}
-        <p class="text-muted-foreground text-sm">{i18n.t('common.loading')}</p>
-      {:else}
-        <div class="rounded-lg border border-border/70 bg-muted/20 p-4">
-          <p class="text-sm font-medium">
-            {configured
-              ? i18n.t('wallet.settings.privateVerus.statusConfigured')
-              : i18n.t('wallet.settings.privateVerus.statusNotConfigured')}
-          </p>
-          {#if configured && shieldedAddress}
-            <p class="text-muted-foreground mt-1 text-xs">
-              {i18n.t('wallet.settings.privateVerus.statusAddress', {
-                address: truncateAddress(shieldedAddress)
-              })}
-            </p>
-          {/if}
+{#if activeView === 'home'}
+  <div class="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col px-6 pb-6 pt-0 sm:px-8">
+    <section class="flex min-h-0 flex-1 flex-col overflow-auto pt-3">
+      <div class="space-y-4">
+        <div class="space-y-1">
+          <h2 class="text-xl font-semibold">{i18n.t('wallet.settings.home.title')}</h2>
+          <p class="text-muted-foreground text-sm">{i18n.t('wallet.settings.home.description')}</p>
         </div>
-      {/if}
 
-      {#if errorMessage}
-        <div class="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {errorMessage}
-        </div>
-      {/if}
-
-      {#if successMessage}
-        <div class="rounded-md border border-emerald-300/70 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-500/35 dark:bg-emerald-500/12 dark:text-emerald-200">
-          {successMessage}
-        </div>
-      {/if}
-
-      {#if generatedSeedPhrase}
-        <div class="rounded-lg border border-border/70 bg-card p-4">
-          <p class="text-sm font-medium">{i18n.t('wallet.settings.privateVerus.generatedSeedTitle')}</p>
-          <p class="text-muted-foreground mt-2 text-sm leading-relaxed">{generatedSeedPhrase}</p>
-        </div>
-      {/if}
-
-      <div class="space-y-3">
-        <Button
-          variant="secondary"
-          class="justify-start"
-          disabled={loadingStatus || submittingMode !== null}
-          onclick={() => {
-            void setup('reuse_primary');
-          }}
-        >
-          {submittingMode === 'reuse_primary'
-            ? i18n.t('wallet.settings.privateVerus.settingUp')
-            : i18n.t('wallet.settings.privateVerus.reusePrimary')}
-        </Button>
-
-        <Button
-          variant="secondary"
-          class="justify-start"
-          disabled={loadingStatus || submittingMode !== null}
-          onclick={() => {
-            void setup('create_new');
-          }}
-        >
-          {submittingMode === 'create_new'
-            ? i18n.t('wallet.settings.privateVerus.settingUp')
-            : i18n.t('wallet.settings.privateVerus.createNew')}
-        </Button>
-
-        <div class="space-y-2 rounded-lg border border-border/70 bg-card p-3">
-          <label for="private-seed-import" class="text-sm font-medium">
-            {i18n.t('wallet.settings.privateVerus.importLabel')}
-          </label>
-          <textarea
-            id="private-seed-import"
-            class="border-input bg-background ring-offset-background focus-visible:ring-ring min-h-[90px] w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2"
-            placeholder={i18n.t('wallet.settings.privateVerus.importPlaceholder')}
-            bind:value={importText}
-          ></textarea>
-          <Button
-            variant="secondary"
-            class="justify-start"
-            disabled={loadingStatus || submittingMode !== null || !importText.trim()}
+        <div class="space-y-2">
+          <button
+            type="button"
+            class="hover:bg-muted/45 flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left"
             onclick={() => {
-              void setup('import_text');
+              activeView = 'display-language';
             }}
           >
-            {submittingMode === 'import_text'
-              ? i18n.t('wallet.settings.privateVerus.settingUp')
-              : i18n.t('wallet.settings.privateVerus.importAction')}
-          </Button>
+            <span class="min-w-0 flex flex-1 items-start gap-3">
+              <GlobeIcon class="text-muted-foreground mt-0.5 size-4 shrink-0" />
+              <span class="min-w-0">
+                <span class="block text-sm font-medium">{i18n.t('wallet.settings.home.category.displayLanguage')}</span>
+                <span class="text-muted-foreground mt-0.5 block truncate text-xs">{displayLanguageSummary}</span>
+              </span>
+            </span>
+            <ChevronRightIcon class="text-muted-foreground size-4 shrink-0" />
+          </button>
+
+          <button
+            type="button"
+            class="hover:bg-muted/45 flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left"
+            onclick={() => {
+              activeView = 'recovery-keys';
+            }}
+          >
+            <span class="min-w-0 flex flex-1 items-start gap-3">
+              <KeyIcon class="text-muted-foreground mt-0.5 size-4 shrink-0" />
+              <span class="min-w-0">
+                <span class="block text-sm font-medium">{i18n.t('wallet.settings.home.category.profileSecurity')}</span>
+                <span class="text-muted-foreground mt-0.5 block truncate text-xs">{profileSummary}</span>
+              </span>
+            </span>
+            <ChevronRightIcon class="text-muted-foreground size-4 shrink-0" />
+          </button>
+
+          <button
+            type="button"
+            class="hover:bg-muted/45 flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left"
+            onclick={() => {
+              activeView = 'private-verus';
+            }}
+          >
+            <span class="min-w-0 flex flex-1 items-start gap-3">
+              <ShieldIcon class="text-muted-foreground mt-0.5 size-4 shrink-0" />
+              <span class="min-w-0">
+                <span class="block text-sm font-medium">{i18n.t('wallet.settings.home.category.privateVerus')}</span>
+                <span class="text-muted-foreground mt-0.5 block truncate text-xs">{privateSummary}</span>
+              </span>
+            </span>
+            <ChevronRightIcon class="text-muted-foreground size-4 shrink-0" />
+          </button>
+
+          <button
+            type="button"
+            class="hover:bg-muted/45 flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left"
+            onclick={() => {
+              activeView = 'about-support';
+            }}
+          >
+            <span class="min-w-0 flex flex-1 items-start gap-3">
+              <InfoIcon class="text-muted-foreground mt-0.5 size-4 shrink-0" />
+              <span class="min-w-0">
+                <span class="block text-sm font-medium">{i18n.t('wallet.settings.home.category.aboutSupport')}</span>
+                <span class="text-muted-foreground mt-0.5 block truncate text-xs">{aboutSummary}</span>
+              </span>
+            </span>
+            <ChevronRightIcon class="text-muted-foreground size-4 shrink-0" />
+          </button>
         </div>
       </div>
-    </div>
-  </section>
-</div>
+    </section>
+  </div>
+{:else if activeView === 'display-language'}
+  <DisplayLanguageSettings
+    onBack={() => {
+      activeView = 'home';
+    }}
+  />
+{:else if activeView === 'private-verus'}
+  <PrivateVerusSettings
+    {walletNetwork}
+    onBack={() => {
+      activeView = 'home';
+      void refreshPrivateStatus();
+    }}
+  />
+{:else if activeView === 'recovery-keys'}
+  <RecoveryKeysSettings
+    onBack={() => {
+      activeView = 'home';
+    }}
+  />
+{:else if activeView === 'about-support'}
+  <AboutSupportSettings
+    onBack={() => {
+      activeView = 'home';
+    }}
+  />
+{/if}

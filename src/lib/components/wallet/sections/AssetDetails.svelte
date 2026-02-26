@@ -25,6 +25,7 @@
   import { balanceStore, getBalance } from '$lib/stores/balances.js';
   import { networkStore } from '$lib/stores/network.js';
   import { ratesStore } from '$lib/stores/rates.js';
+  import { settingsStore } from '$lib/stores/settings.js';
   import {
     scopesByCoinId,
     selectedAddressByCoinId,
@@ -33,7 +34,7 @@
     setSelectedScopeAddress,
     setSelectedScopeSystem
   } from '$lib/stores/coinScopes.js';
-  import { formatUsdAmount } from '$lib/utils/walletOverview.js';
+  import { formatFiatAmount, getRateForCurrency } from '$lib/utils/fiatDisplay.js';
   import { extractWalletErrorMessage, extractWalletErrorType } from '$lib/utils/walletErrors.js';
   import * as walletService from '$lib/services/walletService.js';
   import type {
@@ -83,6 +84,8 @@
   const balances = $derived($balanceStore);
   const chainInfo = $derived($networkStore);
   const rates = $derived($ratesStore);
+  const settings = $derived($settingsStore);
+  const displayCurrency = $derived(settings.displayCurrency);
   const allScopesByCoinId = $derived($scopesByCoinId);
   const selectedAddressMap = $derived($selectedAddressByCoinId);
   const selectedSystemMap = $derived($selectedSystemByCoinId);
@@ -207,14 +210,13 @@
       );
       for (const candidate of candidates) {
         const snapshot = rates[candidate];
-        const usd = snapshot?.rates?.USD ?? snapshot?.rates?.usd;
-        const usdRate = typeof usd === 'number' && Number.isFinite(usd) ? usd : null;
+        const fiatRate = getRateForCurrency(snapshot?.rates, displayCurrency);
         const rawChange = snapshot?.usdChange24hPct;
         const change24hPct =
           typeof rawChange === 'number' && Number.isFinite(rawChange) ? rawChange : null;
-        if (usdRate !== null || change24hPct !== null) {
+        if (fiatRate !== null || change24hPct !== null) {
           return {
-            usdRate,
+            fiatRate,
             change24hPct
           };
         }
@@ -223,7 +225,7 @@
     })()
   );
 
-  const selectedUsdRate = $derived(selectedRateMetrics?.usdRate ?? null);
+  const selectedFiatRate = $derived(selectedRateMetrics?.fiatRate ?? null);
 
   const selectedChange24hPct = $derived(selectedRateMetrics?.change24hPct ?? null);
 
@@ -236,13 +238,15 @@
   );
 
   const selectedUnitRateDisplay = $derived(
-    selectedUsdRate === null ? '—' : formatUsdAmount(selectedUsdRate, i18n.intlLocale)
+    selectedFiatRate === null
+      ? '—'
+      : formatFiatAmount(selectedFiatRate, i18n.intlLocale, displayCurrency)
   );
 
   const selectedFiatDisplay = $derived(
-    selectedUsdRate === null
+    selectedFiatRate === null
       ? '—'
-      : formatUsdAmount(selectedAmountValue * selectedUsdRate, i18n.intlLocale)
+      : formatFiatAmount(selectedAmountValue * selectedFiatRate, i18n.intlLocale, displayCurrency)
   );
 
   const selectedCryptoAmountDisplay = $derived(
@@ -267,9 +271,9 @@
     })()
   );
   const totalFiatDisplay = $derived(
-    selectedUsdRate === null
+    selectedFiatRate === null
       ? '—'
-      : formatUsdAmount(totalAmountValue * selectedUsdRate, i18n.intlLocale)
+      : formatFiatAmount(totalAmountValue * selectedFiatRate, i18n.intlLocale, displayCurrency)
   );
   const totalCryptoAmountDisplay = $derived(
     formatCryptoValue(totalAmountValue, coin?.decimals ?? 8)
@@ -990,8 +994,8 @@
 
   function scopeFiatAmountDisplay(scope: CoinScope): string {
     const value = scopeAmountValue(scope);
-    if (value === null || selectedUsdRate === null) return '—';
-    return formatUsdAmount(value * selectedUsdRate, i18n.intlLocale);
+    if (value === null || selectedFiatRate === null) return '—';
+    return formatFiatAmount(value * selectedFiatRate, i18n.intlLocale, displayCurrency);
   }
 
   function mapWalletError(error: unknown): string {

@@ -33,9 +33,10 @@
   import { balanceStore, getBalance } from '$lib/stores/balances.js';
   import { networkStore } from '$lib/stores/network.js';
   import { ratesStore } from '$lib/stores/rates.js';
+  import { settingsStore } from '$lib/stores/settings.js';
   import { transactionStore } from '$lib/stores/transactions.js';
   import { addressBookStore, upsertAddressBookContact } from '$lib/stores/addressBook.js';
-  import { formatUsdAmount } from '$lib/utils/walletOverview.js';
+  import { formatFiatAmount, getRateForCurrency } from '$lib/utils/fiatDisplay.js';
   import * as addressBookService from '$lib/services/addressBookService.js';
   import {
     findMatchingSavedEndpoint,
@@ -77,8 +78,8 @@
     BridgeExportFeeEstimateResult,
     BridgeTransferPreflightResult,
     DlightRuntimeStatusResult,
-    PreflightWarning,
     PreflightResult,
+    PreflightWarning,
     SendResult,
     TxSendProgressEventPayload,
     TxSendProgressStage
@@ -168,6 +169,8 @@
   const balances = $derived($balanceStore);
   const chainInfoByChannel = $derived($networkStore);
   const rates = $derived($ratesStore);
+  const settings = $derived($settingsStore);
+  const displayCurrency = $derived(settings.displayCurrency);
   const addressBookContacts = $derived($addressBookStore);
   const stepCopy = $derived(getTransferStepCopy(i18n.t));
   const stepLabels = $derived(getTransferStepLabels(i18n.t));
@@ -705,7 +708,7 @@
   const bridgeFeeFiatDisplay = $derived(
     formatFiatEstimate(
       bridgeFeeInfo.feeCoins ?? null,
-      getUsdRateForCurrencyLabel(bridgeFeeInfo.currencyTicker)
+      getDisplayCurrencyRateForCurrencyLabel(bridgeFeeInfo.currencyTicker)
     )
   );
   const bridgeFeeEstimateValue = $derived(
@@ -883,12 +886,12 @@
       : null
   );
 
-  const sourceUsdRate = $derived(
-    getUsdRateForCoinIds([selectedCoin?.id, selectedCoin?.currencyId, selectedCoin?.mappedTo])
+  const sourceFiatRate = $derived(
+    getDisplayCurrencyRateForCoinIds([selectedCoin?.id, selectedCoin?.currencyId, selectedCoin?.mappedTo])
   );
 
-  const receiveUsdRate = $derived(
-    getUsdRateForCoinIds([
+  const receiveFiatRate = $derived(
+    getDisplayCurrencyRateForCoinIds([
       selectedReceiveAssetOption?.destinationId,
       selectedReceiveAssetPresentation?.id,
       selectedReceiveAssetPresentation?.currencyId,
@@ -896,9 +899,9 @@
     ])
   );
 
-  const sourceAmountFiatDisplay = $derived(formatFiatEstimate(amount, sourceUsdRate));
+  const sourceAmountFiatDisplay = $derived(formatFiatEstimate(amount, sourceFiatRate));
   const receiveAmountFiatDisplay = $derived(
-    formatFiatEstimate(estimatedConversionValue ?? '0', receiveUsdRate)
+    formatFiatEstimate(estimatedConversionValue ?? '0', receiveFiatRate)
   );
 
   const effectiveSendAmount = $derived((activePreflight?.value ?? amount.trim()).trim());
@@ -933,9 +936,9 @@
       return (numericAmount * numericPrice).toFixed(8);
     })()
   );
-  const reviewSourceAmountFiatDisplay = $derived(formatFiatEstimate(effectiveSendAmount, sourceUsdRate));
+  const reviewSourceAmountFiatDisplay = $derived(formatFiatEstimate(effectiveSendAmount, sourceFiatRate));
   const reviewReceiveAmountFiatDisplay = $derived(
-    formatFiatEstimate(reviewEstimatedConversionValue ?? '0', receiveUsdRate)
+    formatFiatEstimate(reviewEstimatedConversionValue ?? '0', receiveFiatRate)
   );
 
   const activeConvertRouteRate = $derived(formatRouteRateValue(activeConvertRoute?.price));
@@ -1026,14 +1029,14 @@
         bridgeFeeParityEligible;
 
       const networkFeeAmount = parseNonNegativeAmount(activePreflight.fee);
-      const networkFeeRate = getUsdRateForCurrencyLabel(activePreflight.feeCurrency) ?? sourceUsdRate;
+      const networkFeeRate = getDisplayCurrencyRateForCurrencyLabel(activePreflight.feeCurrency) ?? sourceFiatRate;
       if (networkFeeAmount !== null && networkFeeRate !== null) {
         totalFiat += networkFeeAmount * networkFeeRate;
       }
 
       if (conversionEnabled && conversionFeeInfo) {
         const conversionAmount = parseNonNegativeAmount(conversionFeeInfo.amount);
-        const conversionRate = getUsdRateForCurrencyLabel(conversionFeeInfo.currency) ?? sourceUsdRate;
+        const conversionRate = getDisplayCurrencyRateForCurrencyLabel(conversionFeeInfo.currency) ?? sourceFiatRate;
         if (conversionAmount !== null && conversionRate !== null) {
           totalFiat += conversionAmount * conversionRate;
         }
@@ -1043,13 +1046,13 @@
         if (bridgeFeeInfo.loading || bridgeFeeInfo.error || !bridgeFeeInfo.feeCoins) return '≈ —';
 
         const bridgeAmount = parseNonNegativeAmount(bridgeFeeInfo.feeCoins);
-        const bridgeRate = getUsdRateForCurrencyLabel(bridgeFeeInfo.currencyTicker) ?? sourceUsdRate;
+        const bridgeRate = getDisplayCurrencyRateForCurrencyLabel(bridgeFeeInfo.currencyTicker) ?? sourceFiatRate;
         if (bridgeAmount === null || bridgeRate === null) return '≈ —';
         totalFiat += bridgeAmount * bridgeRate;
       }
 
       if (!Number.isFinite(totalFiat) || totalFiat <= 0) return '≈ —';
-      return `≈ ${formatUsdAmountDynamic(totalFiat)}`;
+      return `≈ ${formatDisplayFiatAmountDynamic(totalFiat)}`;
     })()
   );
   const showReviewTotalFeesFiat = $derived(
@@ -2712,16 +2715,15 @@
     return `0.${'0'.repeat(maxFractionDigits - 1)}1`;
   }
 
-  function getUsdRate(rateMap?: Record<string, number>): number | null {
-    if (!rateMap) return null;
-    const candidate = rateMap.USD ?? rateMap.usd;
-    if (typeof candidate !== 'number' || !Number.isFinite(candidate) || candidate <= 0) {
+  function getDisplayCurrencyRate(rateMap?: Record<string, number>): number | null {
+    const rate = getRateForCurrency(rateMap, displayCurrency);
+    if (rate === null || !Number.isFinite(rate) || rate <= 0) {
       return null;
     }
-    return candidate;
+    return rate;
   }
 
-  function getUsdRateForCoinIds(coinIds: Array<string | null | undefined>): number | null {
+  function getDisplayCurrencyRateForCoinIds(coinIds: Array<string | null | undefined>): number | null {
     const seen = new Set<string>();
 
     for (const rawCoinId of coinIds) {
@@ -2730,14 +2732,14 @@
       if (!coinId || seen.has(coinId)) continue;
       seen.add(coinId);
 
-      const usdRate = getUsdRate(rates[coinId]?.rates);
-      if (usdRate !== null) return usdRate;
+      const fiatRate = getDisplayCurrencyRate(rates[coinId]?.rates);
+      if (fiatRate !== null) return fiatRate;
     }
 
     return null;
   }
 
-  function getUsdRateForCurrencyLabel(label?: string | null): number | null {
+  function getDisplayCurrencyRateForCurrencyLabel(label?: string | null): number | null {
     if (typeof label !== 'string') return null;
     const normalizedLabel = label.trim().toLowerCase();
     if (!normalizedLabel) return null;
@@ -2751,7 +2753,7 @@
         presentation.displayTicker.toLowerCase() === normalizedLabel ||
         presentation.displayName.toLowerCase() === normalizedLabel
       ) {
-        return getUsdRateForCoinIds([coin.id, coin.currencyId, coin.mappedTo]);
+        return getDisplayCurrencyRateForCoinIds([coin.id, coin.currencyId, coin.mappedTo]);
       }
     }
 
@@ -2780,23 +2782,21 @@
     return trimmedLabel;
   }
 
-  function formatFiatEstimate(amountValue: string | null | undefined, usdRate: number | null): string {
+  function formatFiatEstimate(amountValue: string | null | undefined, fiatRate: number | null): string {
     const numericAmount = parseNonNegativeAmount(amountValue);
-    if (numericAmount === null || usdRate === null) return '≈ —';
-    return `≈ ${formatUsdAmount(numericAmount * usdRate, i18n.intlLocale)}`;
+    if (numericAmount === null || fiatRate === null) return '≈ —';
+    return `≈ ${formatFiatAmount(numericAmount * fiatRate, i18n.intlLocale, displayCurrency)}`;
   }
 
-  function formatUsdAmountDynamic(value: number): string {
+  function formatDisplayFiatAmountDynamic(value: number): string {
     const absoluteValue = Math.abs(value);
     const maximumFractionDigits =
       absoluteValue < 0.0001 ? 8 : absoluteValue < 0.001 ? 7 : absoluteValue < 0.01 ? 6 : absoluteValue < 0.1 ? 4 : 2;
 
-    return new Intl.NumberFormat(i18n.intlLocale, {
-      style: 'currency',
-      currency: 'USD',
+    return formatFiatAmount(value, i18n.intlLocale, displayCurrency, {
       minimumFractionDigits: 2,
       maximumFractionDigits
-    }).format(value);
+    });
   }
 
   function parsePrice(value?: string | null): number | null {
