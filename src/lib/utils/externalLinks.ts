@@ -1,6 +1,6 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
 
-export const COMMUNITY_HANGOUT_URL = 'https://discord.gg/VRSC';
+export const COMMUNITY_HANGOUT_URL = 'https://verus.io/discord';
 
 export async function openExternalUrl(url: string): Promise<void> {
   try {
