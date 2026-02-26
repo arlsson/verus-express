@@ -11,7 +11,9 @@ export interface LocaleOption {
 
 const localeMetadata: Record<Locale, { flag: string; labelKey: string }> = {
   en: { flag: '🇺🇸', labelKey: 'languageGate.option.en' },
-  nl: { flag: '🇳🇱', labelKey: 'languageGate.option.nl' }
+  nl: { flag: '🇳🇱', labelKey: 'languageGate.option.nl' },
+  de: { flag: '🇩🇪', labelKey: 'languageGate.option.de' },
+  es: { flag: '🇪🇸', labelKey: 'languageGate.option.es' }
 };
 
 export function buildLocaleOptions(t: TranslateFn): LocaleOption[] {
