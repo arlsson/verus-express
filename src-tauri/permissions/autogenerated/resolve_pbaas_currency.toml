@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-resolve-pbaas-currency"
+description = "Enables the resolve_pbaas_currency command without any pre-configured scope."
+commands.allow = ["resolve_pbaas_currency"]
+
+[[permission]]
+identifier = "deny-resolve-pbaas-currency"
+description = "Denies the resolve_pbaas_currency command without any pre-configured scope."
+commands.deny = ["resolve_pbaas_currency"]

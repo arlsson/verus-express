@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-add-pbaas-currency"
+description = "Enables the add_pbaas_currency command without any pre-configured scope."
+commands.allow = ["add_pbaas_currency"]
+
+[[permission]]
+identifier = "deny-add-pbaas-currency"
+description = "Denies the add_pbaas_currency command without any pre-configured scope."
+commands.deny = ["add_pbaas_currency"]

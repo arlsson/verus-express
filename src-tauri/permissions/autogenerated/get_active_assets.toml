@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-active-assets"
+description = "Enables the get_active_assets command without any pre-configured scope."
+commands.allow = ["get_active_assets"]
+
+[[permission]]
+identifier = "deny-get-active-assets"
+description = "Denies the get_active_assets command without any pre-configured scope."
+commands.deny = ["get_active_assets"]

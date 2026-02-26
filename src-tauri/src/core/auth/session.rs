@@ -12,6 +12,17 @@ use std::time::{Duration, Instant};
 use tauri::AppHandle;
 use zeroize::Zeroizing;
 
+pub const ALLOWED_SESSION_TIMEOUT_MINUTES: [u64; 4] = [5, 15, 30, 60];
+pub const DEFAULT_SESSION_TIMEOUT_MINUTES: u64 = 15;
+
+pub fn normalize_session_timeout_minutes(minutes: u64) -> u64 {
+    if ALLOWED_SESSION_TIMEOUT_MINUTES.contains(&minutes) {
+        minutes
+    } else {
+        DEFAULT_SESSION_TIMEOUT_MINUTES
+    }
+}
+
 pub struct SessionManager {
     is_unlocked: bool,
     active_account_id: Option<String>,
@@ -27,12 +38,12 @@ pub struct SessionManager {
 impl SessionManager {
     /// Create a new session manager
     pub fn new(stronghold_store: StrongholdStore) -> Self {
+        let default_timeout_minutes = normalize_session_timeout_minutes(DEFAULT_SESSION_TIMEOUT_MINUTES);
         Self {
             is_unlocked: false,
             active_account_id: None,
             unlocked_at: None,
-            // Parity default: no auto-expiry. Session ends on explicit lock.
-            timeout_duration: Duration::from_secs(0),
+            timeout_duration: Duration::from_secs(default_timeout_minutes * 60),
             derived_keys: HashMap::new(),
             active_network: None,
             active_seed_material: None,
@@ -111,11 +122,6 @@ impl SessionManager {
             return true;
         }
 
-        // Disabled timeout by default. Keep configurable for future optional auto-lock.
-        if self.timeout_duration.as_secs() == 0 {
-            return false;
-        }
-
         if let Some(unlocked_at) = self.unlocked_at {
             unlocked_at.elapsed() > self.timeout_duration
         } else {
@@ -180,6 +186,19 @@ impl SessionManager {
         self.timeout_duration = duration;
     }
 
+    /// Set timeout from minute granularity with strict allowlist normalization.
+    pub fn set_timeout_minutes(&mut self, minutes: u64) -> u64 {
+        let normalized_minutes = normalize_session_timeout_minutes(minutes);
+        self.set_timeout(Duration::from_secs(normalized_minutes * 60));
+        normalized_minutes
+    }
+
+    /// Returns the active timeout in minutes.
+    pub fn timeout_minutes(&self) -> u64 {
+        let minutes = self.timeout_duration.as_secs() / 60;
+        normalize_session_timeout_minutes(minutes)
+    }
+
     /// Get reference to StrongholdStore (for use in commands)
     pub fn stronghold_store(&self) -> &StrongholdStore {
         &self.stronghold_store
@@ -231,5 +250,36 @@ impl SessionManager {
             .get(account_id)
             .ok_or(WalletError::WalletLocked)?;
         Ok(keys.eth_private_key.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        normalize_session_timeout_minutes, ALLOWED_SESSION_TIMEOUT_MINUTES,
+        DEFAULT_SESSION_TIMEOUT_MINUTES,
+    };
+
+    #[test]
+    fn normalize_session_timeout_accepts_allowlisted_values() {
+        for value in ALLOWED_SESSION_TIMEOUT_MINUTES {
+            assert_eq!(normalize_session_timeout_minutes(value), value);
+        }
+    }
+
+    #[test]
+    fn normalize_session_timeout_rejects_invalid_values() {
+        assert_eq!(
+            normalize_session_timeout_minutes(0),
+            DEFAULT_SESSION_TIMEOUT_MINUTES
+        );
+        assert_eq!(
+            normalize_session_timeout_minutes(10),
+            DEFAULT_SESSION_TIMEOUT_MINUTES
+        );
+        assert_eq!(
+            normalize_session_timeout_minutes(90),
+            DEFAULT_SESSION_TIMEOUT_MINUTES
+        );
     }
 }

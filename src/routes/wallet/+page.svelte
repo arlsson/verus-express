@@ -23,7 +23,9 @@
   import { clearCoinScopes } from '$lib/stores/coinScopes.js';
   import { clearWalletErrors, pushWalletError } from '$lib/stores/walletErrors.js';
   import { setAddressBookContacts } from '$lib/stores/addressBook.js';
+  import { settingsStore } from '$lib/stores/settings.js';
   import { isWalletSupportedAsset } from '$lib/coins/supportedAssets.js';
+  import { normalizeAutoLockMinutes } from '$lib/security/sessionTimeout.js';
   import { i18nStore } from '$lib/i18n';
   import type { CoinDefinition, WalletNetwork } from '$lib/types/wallet.js';
 
@@ -51,6 +53,7 @@
   let loading = $state(true);
   let walletData = $state<{ name: string; emoji: string; color: string; network: WalletNetwork } | null>(null);
   let teardownEventBridge: (() => void) | null = null;
+  let handlingSessionExpiry = $state(false);
   const i18n = $derived($i18nStore);
 
   onMount(async () => {
@@ -67,6 +70,11 @@
         await goto('/');
         return;
       }
+
+      const resolvedAutoLockMinutes = normalizeAutoLockMinutes(get(settingsStore).autoLockMinutes);
+      await walletService.setSessionTimeoutMinutes(resolvedAutoLockMinutes).catch((error) => {
+        console.error('[WALLET_ROUTE] Failed to apply session timeout', error);
+      });
 
       const active = await walletService.getActiveWallet().catch((error) => {
         console.error('[WALLET_ROUTE] Failed to resolve active wallet', error);
@@ -122,7 +130,16 @@
       });
       setAddressBookContacts(contacts);
 
-      teardownEventBridge = await setupWalletEventBridge().catch((error) => {
+      teardownEventBridge = await setupWalletEventBridge({
+        onSessionExpired: async () => {
+          if (handlingSessionExpiry) return;
+          handlingSessionExpiry = true;
+          walletBootstrapStore.set(false);
+          pushWalletError(i18n.t('wallet.session.expired'));
+          await walletService.lockWallet().catch(() => {});
+          await goto('/');
+        }
+      }).catch((error) => {
         console.error('[WALLET_ROUTE] Failed to setup wallet event bridge', error);
         walletBootstrapStore.set(false);
         pushWalletError(error instanceof Error ? error.message : i18n.t('common.unknownError'));

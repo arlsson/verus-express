@@ -2,7 +2,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 
 export const COMMUNITY_HANGOUT_URL = 'https://verus.io/discord';
 
-export async function openExternalUrl(url: string): Promise<void> {
+async function openTrustedExternalUrl(url: string): Promise<void> {
   try {
     await openUrl(url);
     return;
@@ -16,5 +16,5 @@ export async function openExternalUrl(url: string): Promise<void> {
 }
 
 export async function openCommunityHangout(): Promise<void> {
-  await openExternalUrl(COMMUNITY_HANGOUT_URL);
+  await openTrustedExternalUrl(COMMUNITY_HANGOUT_URL);
 }

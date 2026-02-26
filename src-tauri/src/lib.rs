@@ -23,12 +23,7 @@ use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::Mutex;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
+#[cfg(debug_assertions)]
 fn load_runtime_env_files() {
     // Load local env files for desktop dev/runtime convenience without committing secrets.
     // Existing process environment variables keep precedence.
@@ -53,6 +48,9 @@ fn load_runtime_env_files() {
         }
     }
 }
+
+#[cfg(not(debug_assertions))]
+fn load_runtime_env_files() {}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -143,7 +141,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            greet,
             // Wallet creation commands
             wallet::generate_mnemonic,
             wallet::validate_mnemonic,
@@ -165,6 +162,8 @@ pub fn run() {
             wallet::get_wallet_recovery_secrets,
             wallet::get_dlight_runtime_status,
             wallet::get_dlight_prover_status,
+            wallet::get_session_timeout_minutes,
+            wallet::set_session_timeout_minutes,
             wallet::get_watched_vrpc_addresses,
             wallet::set_watched_vrpc_addresses,
             wallet::is_unlocked,

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-begin-guard-session"
+description = "Enables the begin_guard_session command without any pre-configured scope."
+commands.allow = ["begin_guard_session"]
+
+[[permission]]
+identifier = "deny-begin-guard-session"
+description = "Denies the begin_guard_session command without any pre-configured scope."
+commands.deny = ["begin_guard_session"]

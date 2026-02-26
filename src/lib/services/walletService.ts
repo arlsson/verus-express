@@ -73,6 +73,14 @@ export async function isUnlocked(): Promise<boolean> {
   return invoke<boolean>('is_unlocked');
 }
 
+export async function getSessionTimeoutMinutes(): Promise<number> {
+  return invoke<number>('get_session_timeout_minutes');
+}
+
+export async function setSessionTimeoutMinutes(minutes: number): Promise<number> {
+  return invoke<number>('set_session_timeout_minutes', { minutes });
+}
+
 export async function getActiveWallet(): Promise<ActiveWalletResponse | null> {
   return invoke<ActiveWalletResponse | null>('get_active_wallet');
 }

@@ -21,6 +21,7 @@ const TRANSACTIONS_UPDATED = 'wallet://transactions-updated';
 const INFO_UPDATED = 'wallet://info-updated';
 const RATES_UPDATED = 'wallet://rates-updated';
 const BOOTSTRAP_UPDATED = 'wallet://bootstrap-updated';
+const SESSION_EXPIRED = 'wallet://session-expired';
 const ERROR = 'wallet://error';
 const DEFAULT_COIN_KEY = '__default__';
 
@@ -72,6 +73,10 @@ interface UpdateErrorPayload {
   message?: string;
 }
 
+interface SetupWalletEventBridgeOptions {
+  onSessionExpired?: () => void | Promise<void>;
+}
+
 function shouldSuppressWalletError(payload: UpdateErrorPayload): boolean {
   const channel = (payload.channel ?? '').toLowerCase();
   if (!channel.startsWith('dlight_private.')) return false;
@@ -114,7 +119,9 @@ function infoKey(p: InfoUpdatedPayload): string {
 /**
  * Registers all wallet event listeners and returns a cleanup function.
  */
-export async function setupWalletEventBridge(): Promise<() => void> {
+export async function setupWalletEventBridge(
+  options: SetupWalletEventBridgeOptions = {}
+): Promise<() => void> {
   const unsubs: (() => void)[] = [];
 
   const unBalances = await listen<BalancesUpdatedPayload>(BALANCES_UPDATED, (event) => {
@@ -201,6 +208,11 @@ export async function setupWalletEventBridge(): Promise<() => void> {
     pushWalletError(`${prefix}: ${message}`);
   });
   unsubs.push(() => unError());
+
+  const unSessionExpired = await listen(SESSION_EXPIRED, () => {
+    void options.onSessionExpired?.();
+  });
+  unsubs.push(() => unSessionExpired());
 
   return () => {
     unsubs.forEach((u) => u());

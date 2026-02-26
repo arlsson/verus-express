@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-end-guard-session"
+description = "Enables the end_guard_session command without any pre-configured scope."
+commands.allow = ["end_guard_session"]
+
+[[permission]]
+identifier = "deny-end-guard-session"
+description = "Denies the end_guard_session command without any pre-configured scope."
+commands.deny = ["end_guard_session"]

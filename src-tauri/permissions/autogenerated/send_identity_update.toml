@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-send-identity-update"
+description = "Enables the send_identity_update command without any pre-configured scope."
+commands.allow = ["send_identity_update"]
+
+[[permission]]
+identifier = "deny-send-identity-update"
+description = "Denies the send_identity_update command without any pre-configured scope."
+commands.deny = ["send_identity_update"]

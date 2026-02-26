@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preflight-vrpc-transfer"
+description = "Enables the preflight_vrpc_transfer command without any pre-configured scope."
+commands.allow = ["preflight_vrpc_transfer"]
+
+[[permission]]
+identifier = "deny-preflight-vrpc-transfer"
+description = "Denies the preflight_vrpc_transfer command without any pre-configured scope."
+commands.deny = ["preflight_vrpc_transfer"]

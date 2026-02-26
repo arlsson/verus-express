@@ -13,7 +13,9 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::core::address_book::manager as address_book_manager;
-use crate::core::auth::{stronghold_store::ACTIVE_ASSETS_PROFILE_VERSION, SessionManager};
+use crate::core::auth::{
+    stronghold_store::ACTIVE_ASSETS_PROFILE_VERSION, SessionManager,
+};
 use crate::core::channels::btc::BtcProviderPool;
 use crate::core::channels::dlight_private;
 use crate::core::channels::eth::EthProviderPool;
@@ -862,6 +864,26 @@ pub async fn is_unlocked(
 ) -> Result<bool, WalletError> {
     let session = session_manager.lock().await;
     Ok(session.is_unlocked())
+}
+
+/// Returns the active wallet session timeout in minutes.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_session_timeout_minutes(
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<u64, WalletError> {
+    let session = session_manager.lock().await;
+    Ok(session.timeout_minutes())
+}
+
+/// Sets the wallet session timeout in minutes, normalized to allowed values.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn set_session_timeout_minutes(
+    minutes: u64,
+    session_manager: State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<u64, WalletError> {
+    let mut session = session_manager.lock().await;
+    let normalized = session.set_timeout_minutes(minutes);
+    Ok(normalized)
 }
 
 /// Get active wallet display info for dashboard (when unlocked)

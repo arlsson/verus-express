@@ -16,7 +16,7 @@ Deliver desktop ETH and ERC20 core parity with `valu-mobile` for balances, histo
 ## Constraints
 
 - Runtime secrets come from environment variables (`INFURA_PROJECT_ID`, `ETHERSCAN_API_KEY`),
-  with desktop startup loading local `.env`/`.env.local` files into process env.
+  with desktop debug builds loading local `.env`/`.env.local` files into process env.
 - Keep frontend/backend trust boundary unchanged: frontend submits preflight params and later `preflight_id` only.
 - Preserve single-use, session-scoped preflight semantics.
 - Phase-1 excludes bridge convert/cross-chain and add-token persistence UX.
@@ -46,6 +46,7 @@ Deliver desktop ETH and ERC20 core parity with `valu-mobile` for balances, histo
   - `ETHERSCAN_TESTNET_URL`
 - Startup behavior:
   - If required env vars are missing or invalid, ETH providers are disabled.
+  - Release builds do not auto-load local `.env*` files.
   - ETH/ERC20 routes return deterministic `EthNotConfigured` errors without panics.
 
 ## Decisions

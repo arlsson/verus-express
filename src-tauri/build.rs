@@ -1,6 +1,7 @@
 use blake2b_simd::Params as Blake2bParams;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
+use tauri_build::{AppManifest, Attributes};
 
 const ENV_REQUIRE_PARAMS: &str = "LITE_WALLET_REQUIRE_ZCASH_PARAMS";
 const ENV_SPEND_SHA256: &str = "LITE_WALLET_SAPLING_SPEND_PARAMS_SHA256";
@@ -11,10 +12,74 @@ const SAPLING_OUTPUT_BLAKE2B_DEFAULT: &str = "657e3d38dbb5cb5e7dd2970e8b03d69b47
 
 const MIN_SPEND_PARAM_SIZE_BYTES: u64 = 40_000_000;
 const MIN_OUTPUT_PARAM_SIZE_BYTES: u64 = 3_000_000;
+const APP_COMMANDS: &[&str] = &[
+    "generate_mnemonic",
+    "validate_mnemonic",
+    "get_mnemonic_wordlist",
+    "create_wallet",
+    "import_wallet_text",
+    "list_wallets",
+    "get_active_wallet",
+    "unlock_wallet",
+    "start_update_engine",
+    "lock_wallet",
+    "get_addresses",
+    "get_coin_scopes",
+    "get_active_assets",
+    "set_active_assets",
+    "get_dlight_seed_status",
+    "setup_dlight_seed",
+    "get_wallet_recovery_secrets",
+    "get_dlight_runtime_status",
+    "get_dlight_prover_status",
+    "get_session_timeout_minutes",
+    "set_session_timeout_minutes",
+    "get_watched_vrpc_addresses",
+    "set_watched_vrpc_addresses",
+    "is_unlocked",
+    "read_clipboard_text",
+    "get_coin_registry",
+    "add_coin_definition",
+    "add_pbaas_currency",
+    "resolve_pbaas_currency",
+    "resolve_erc20_contract",
+    "preflight_send",
+    "send_transaction",
+    "get_balances",
+    "get_transaction_history",
+    "get_transaction_history_page",
+    "preflight_vrpc_transfer",
+    "get_bridge_capabilities",
+    "get_bridge_conversion_paths",
+    "estimate_bridge_conversion",
+    "estimate_bridge_export_fee",
+    "preflight_bridge_transfer",
+    "preflight_identity_update",
+    "send_identity_update",
+    "discover_linkable_identities",
+    "get_linked_identities",
+    "link_identity",
+    "unlink_identity",
+    "set_linked_identity_favorite",
+    "get_identity_details",
+    "begin_guard_session",
+    "end_guard_session",
+    "lookup_guard_target_identity",
+    "preflight_guard_identity_update",
+    "send_guard_identity_update",
+    "list_address_book_contacts",
+    "save_address_book_contact",
+    "delete_address_book_contact",
+    "mark_address_book_endpoint_used",
+    "validate_destination_address",
+];
 
 fn main() {
     enforce_params_bundle_contract();
-    tauri_build::build()
+    tauri_build::try_build(
+        Attributes::new().app_manifest(AppManifest::new().commands(APP_COMMANDS)),
+    )
+    .expect("failed to run tauri build helper")
 }
 
 fn enforce_params_bundle_contract() {

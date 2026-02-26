@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-address-book-contact"
+description = "Enables the delete_address_book_contact command without any pre-configured scope."
+commands.allow = ["delete_address_book_contact"]
+
+[[permission]]
+identifier = "deny-delete-address-book-contact"
+description = "Denies the delete_address_book_contact command without any pre-configured scope."
+commands.deny = ["delete_address_book_contact"]

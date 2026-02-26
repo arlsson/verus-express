@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-linked-identities"
+description = "Enables the get_linked_identities command without any pre-configured scope."
+commands.allow = ["get_linked_identities"]
+
+[[permission]]
+identifier = "deny-get-linked-identities"
+description = "Denies the get_linked_identities command without any pre-configured scope."
+commands.deny = ["get_linked_identities"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-watched-vrpc-addresses"
+description = "Enables the get_watched_vrpc_addresses command without any pre-configured scope."
+commands.allow = ["get_watched_vrpc_addresses"]
+
+[[permission]]
+identifier = "deny-get-watched-vrpc-addresses"
+description = "Denies the get_watched_vrpc_addresses command without any pre-configured scope."
+commands.deny = ["get_watched_vrpc_addresses"]

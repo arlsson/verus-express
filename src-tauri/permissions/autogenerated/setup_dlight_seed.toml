@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-setup-dlight-seed"
+description = "Enables the setup_dlight_seed command without any pre-configured scope."
+commands.allow = ["setup_dlight_seed"]
+
+[[permission]]
+identifier = "deny-setup-dlight-seed"
+description = "Denies the setup_dlight_seed command without any pre-configured scope."
+commands.deny = ["setup_dlight_seed"]

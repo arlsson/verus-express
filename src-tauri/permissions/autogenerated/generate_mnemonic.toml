@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-generate-mnemonic"
+description = "Enables the generate_mnemonic command without any pre-configured scope."
+commands.allow = ["generate_mnemonic"]
+
+[[permission]]
+identifier = "deny-generate-mnemonic"
+description = "Denies the generate_mnemonic command without any pre-configured scope."
+commands.deny = ["generate_mnemonic"]

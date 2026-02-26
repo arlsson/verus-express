@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-linked-identity-favorite"
+description = "Enables the set_linked_identity_favorite command without any pre-configured scope."
+commands.allow = ["set_linked_identity_favorite"]
+
+[[permission]]
+identifier = "deny-set-linked-identity-favorite"
+description = "Denies the set_linked_identity_favorite command without any pre-configured scope."
+commands.deny = ["set_linked_identity_favorite"]

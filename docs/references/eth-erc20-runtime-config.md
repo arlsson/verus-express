@@ -39,7 +39,8 @@ Optional ETH URL overrides:
 
 ## Startup validation behavior
 
-- Backend startup loads `.env` and `.env.local` from both workspace root and `src-tauri/`.
+- Debug builds load `.env`, `.env.local`, and `.env.zcash-params` candidates from workspace root and `src-tauri/`.
+- Release builds do not load local `.env*` files at runtime.
 - If required ETH key vars are missing or empty, ETH provider pool stays disabled.
 - If configured URLs are invalid, ETH provider pool stays disabled.
 - Disabled ETH provider pool does not panic app startup.

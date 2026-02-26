@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preflight-send"
+description = "Enables the preflight_send command without any pre-configured scope."
+commands.allow = ["preflight_send"]
+
+[[permission]]
+identifier = "deny-preflight-send"
+description = "Denies the preflight_send command without any pre-configured scope."
+commands.deny = ["preflight_send"]

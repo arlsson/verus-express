@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mark-address-book-endpoint-used"
+description = "Enables the mark_address_book_endpoint_used command without any pre-configured scope."
+commands.allow = ["mark_address_book_endpoint_used"]
+
+[[permission]]
+identifier = "deny-mark-address-book-endpoint-used"
+description = "Denies the mark_address_book_endpoint_used command without any pre-configured scope."
+commands.deny = ["mark_address_book_endpoint_used"]

@@ -12,12 +12,18 @@
   import ShieldIcon from '@lucide/svelte/icons/shield';
   import { i18nStore } from '$lib/i18n';
   import type { WalletNetwork } from '$lib/types/wallet';
-  import { settingsStore } from '$lib/stores/settings.js';
+  import { setAutoLockMinutes, settingsStore } from '$lib/stores/settings.js';
+  import {
+    ALLOWED_AUTO_LOCK_MINUTES,
+    type AutoLockMinutes,
+    normalizeAutoLockMinutes
+  } from '$lib/security/sessionTimeout.js';
   import { buildLocaleOptions } from '$lib/utils/localeOptions.js';
   import { loadRuntimeAppInfo } from '$lib/utils/appInfo.js';
   import * as walletService from '$lib/services/walletService';
   import DisplayLanguageSettings from '$lib/components/wallet/settings/DisplayLanguageSettings.svelte';
   import PrivateVerusSettings from '$lib/components/wallet/settings/PrivateVerusSettings.svelte';
+  import ProfileSecuritySettings from '$lib/components/wallet/settings/ProfileSecuritySettings.svelte';
   import RecoveryKeysSettings from '$lib/components/wallet/settings/RecoveryKeysSettings.svelte';
   import AboutSupportSettings from '$lib/components/wallet/settings/AboutSupportSettings.svelte';
 
@@ -29,6 +35,7 @@
   type SettingsView =
     | 'home'
     | 'display-language'
+    | 'profile-security'
     | 'private-verus'
     | 'recovery-keys'
     | 'about-support';
@@ -54,7 +61,10 @@
       language: selectedLocaleLabel
     })
   );
-  const profileSummary = $derived(i18n.t('wallet.settings.home.summary.profileSecurity'));
+  const autoLockMinutes = $derived(normalizeAutoLockMinutes(settings.autoLockMinutes));
+  const profileSummary = $derived(
+    i18n.t('wallet.settings.home.summary.profileSecurity', { minutes: autoLockMinutes })
+  );
   const privateSummary = $derived(
     privateStatusLoading
       ? i18n.t('common.loading')
@@ -94,6 +104,12 @@
     void loadVersionSummary();
   });
 
+  async function handleSetAutoLockMinutes(minutes: AutoLockMinutes): Promise<void> {
+    const normalized = normalizeAutoLockMinutes(minutes);
+    setAutoLockMinutes(normalized);
+    await walletService.setSessionTimeoutMinutes(normalized).catch(() => {});
+  }
+
   $effect(() => {
     if (resetSignal === lastResetSignal) return;
     lastResetSignal = resetSignal;
@@ -132,7 +148,7 @@
             type="button"
             class="hover:bg-muted/45 flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left"
             onclick={() => {
-              activeView = 'recovery-keys';
+              activeView = 'profile-security';
             }}
           >
             <span class="min-w-0 flex flex-1 items-start gap-3">
@@ -184,6 +200,18 @@
   </div>
 {:else if activeView === 'display-language'}
   <DisplayLanguageSettings
+    onBack={() => {
+      activeView = 'home';
+    }}
+  />
+{:else if activeView === 'profile-security'}
+  <ProfileSecuritySettings
+    autoLockMinutes={autoLockMinutes}
+    autoLockOptions={ALLOWED_AUTO_LOCK_MINUTES}
+    onSetAutoLockMinutes={handleSetAutoLockMinutes}
+    onOpenRecovery={() => {
+      activeView = 'recovery-keys';
+    }}
     onBack={() => {
       activeView = 'home';
     }}

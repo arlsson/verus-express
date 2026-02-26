@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-discover-linkable-identities"
+description = "Enables the discover_linkable_identities command without any pre-configured scope."
+commands.allow = ["discover_linkable_identities"]
+
+[[permission]]
+identifier = "deny-discover-linkable-identities"
+description = "Denies the discover_linkable_identities command without any pre-configured scope."
+commands.deny = ["discover_linkable_identities"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-bridge-conversion-paths"
+description = "Enables the get_bridge_conversion_paths command without any pre-configured scope."
+commands.allow = ["get_bridge_conversion_paths"]
+
+[[permission]]
+identifier = "deny-get-bridge-conversion-paths"
+description = "Denies the get_bridge_conversion_paths command without any pre-configured scope."
+commands.deny = ["get_bridge_conversion_paths"]

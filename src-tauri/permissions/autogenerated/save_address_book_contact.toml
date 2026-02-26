@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-address-book-contact"
+description = "Enables the save_address_book_contact command without any pre-configured scope."
+commands.allow = ["save_address_book_contact"]
+
+[[permission]]
+identifier = "deny-save-address-book-contact"
+description = "Denies the save_address_book_contact command without any pre-configured scope."
+commands.deny = ["save_address_book_contact"]

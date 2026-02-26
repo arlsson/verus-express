@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-dlight-runtime-status"
+description = "Enables the get_dlight_runtime_status command without any pre-configured scope."
+commands.allow = ["get_dlight_runtime_status"]
+
+[[permission]]
+identifier = "deny-get-dlight-runtime-status"
+description = "Denies the get_dlight_runtime_status command without any pre-configured scope."
+commands.deny = ["get_dlight_runtime_status"]
