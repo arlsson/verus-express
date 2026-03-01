@@ -102,7 +102,7 @@ impl VrpcProvider {
             .no_proxy()
             .http1_only()
             .connect_timeout(Duration::from_secs(4))
-            .timeout(Duration::from_secs(60))
+            .timeout(Duration::from_secs(600))
             .build()
             .unwrap_or_else(|_| Client::new())
     }
