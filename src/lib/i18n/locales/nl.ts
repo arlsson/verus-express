@@ -136,6 +136,7 @@ export const nl: Record<string, string> = {
   'languageGate.option.nl': 'Nederlands',
   'languageGate.option.de': 'Deutsch',
   'languageGate.option.es': 'Español',
+  'languageGate.option.sv': 'Zweeds',
 
   'wallet.layout.dismiss': 'Sluiten',
   'wallet.sidebar.wallet': 'Wallet',
