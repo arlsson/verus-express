@@ -58,6 +58,7 @@ export const es: Record<string, string> = {
   'languageGate.option.nl': 'Nederlands',
   'languageGate.option.de': 'Deutsch',
   'languageGate.option.es': 'Español',
+  'languageGate.option.sv': 'Sueco',
 
   'wallet.layout.dismiss': 'Cerrar',
   'wallet.sidebar.wallet': 'Cartera',

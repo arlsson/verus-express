@@ -3,9 +3,10 @@ import { en } from './locales/en';
 import { de } from './locales/de';
 import { nl } from './locales/nl';
 import { es } from './locales/es';
+import { sv } from './locales/sv';
 
-export type Locale = 'en' | 'nl' | 'de' | 'es';
-export const SUPPORTED_LOCALES: Locale[] = ['en', 'nl', 'de', 'es'];
+export type Locale = 'en' | 'nl' | 'de' | 'es' | 'sv';
+export const SUPPORTED_LOCALES: Locale[] = ['en', 'nl', 'de', 'es', 'sv'];
 
 export type TranslationParams = Record<string, string | number>;
 
@@ -17,14 +18,16 @@ const dictionaries: Record<Locale, Dictionary> = {
   en,
   nl,
   de,
-  es
+  es,
+  sv
 };
 
 const INTL_LOCALE_BY_LOCALE: Record<Locale, string> = {
   en: 'en-US',
   nl: 'nl-NL',
   de: 'de-DE',
-  es: 'es-ES'
+  es: 'es-ES',
+  sv: 'sv-SE' 
 };
 
 function toSupportedLocale(input?: string | null): Locale {
@@ -33,6 +36,7 @@ function toSupportedLocale(input?: string | null): Locale {
   if (normalized.startsWith('nl')) return 'nl';
   if (normalized.startsWith('de')) return 'de';
   if (normalized.startsWith('es')) return 'es';
+  if (normalized.startsWith('sv')) return 'sv';
   return 'en';
 }
 
