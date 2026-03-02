@@ -717,7 +717,7 @@ export const sv: Record<string, string> = {
   "walletCreation.password.level.excellent": "Starkt",
   "walletCreation.password.confirm": "Bekräfta lösenord",
   "walletCreation.password.confirmPlaceholder": "Bekräfta lösenord",
-  "walletCreation.password.mismatch": "Lösenorden matchar inte"
+  "walletCreation.password.mismatch": "Lösenorden matchar inte",
 
   "walletCreation.complete.statusCreated": "Plånbok skapad",
   "walletCreation.complete.statusSecured": "Data säkrad",
