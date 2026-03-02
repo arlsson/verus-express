@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error as _;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use std::env;
 
 use reqwest::Client;
 use serde_json::Value;
@@ -34,6 +35,13 @@ const TTL_CURRENCY_CONVERSION_PATHS: u64 = 15;
 const READ_RETRY_ATTEMPTS: u8 = 3;
 const READ_RETRY_BASE_DELAY_MS: u64 = 250;
 const STALE_CACHE_MAX_AGE_SECS: u64 = 120;
+
+fn read_u16_env(key: &str, default: u16) -> u16 {
+    env::var(key)
+        .ok()
+        .and_then(|v| v.parse::<u16>().ok())
+        .unwrap_or(default)
+}
 
 fn params_getaddressbalance(addresses: &[String]) -> Result<Value, WalletError> {
     if addresses.is_empty() {
@@ -102,7 +110,7 @@ impl VrpcProvider {
             .no_proxy()
             .http1_only()
             .connect_timeout(Duration::from_secs(4))
-            .timeout(Duration::from_secs(60))
+            .timeout(Duration::from_secs(read_u16_env("VRPC_TIMEOUT", 12)))
             .build()
             .unwrap_or_else(|_| Client::new())
     }
